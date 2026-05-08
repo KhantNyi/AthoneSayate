@@ -200,6 +200,7 @@ export default function ExpenseTrackerPage() {
   const [language, setLanguage] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [dataNotice, setDataNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savingBudgetId, setSavingBudgetId] = useState("");
   const [savingGoalId, setSavingGoalId] = useState("");
@@ -217,6 +218,8 @@ export default function ExpenseTrackerPage() {
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
   const [newSubcategoryCategoryId, setNewSubcategoryCategoryId] = useState("");
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+  const [budgetCategoryId, setBudgetCategoryId] = useState("");
+  const [budgetAmount, setBudgetAmount] = useState("");
   const [recurringType, setRecurringType] = useState<TransactionType>("expense");
   const [recurringAccountId, setRecurringAccountId] = useState("");
   const [recurringCategoryId, setRecurringCategoryId] = useState("");
@@ -254,6 +257,8 @@ export default function ExpenseTrackerPage() {
         setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setBudgetDrafts(Object.fromEntries(data.categories.filter((category) => category.kind === "expense").map((category) => [category.id, String(category.monthlyBudget ?? "")])));
+        setBudgetCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
+        setBudgetAmount(String(data.categories.find((category) => category.kind === "expense")?.monthlyBudget ?? ""));
         setRecurringAccountId(data.accounts[0]?.id ?? "");
         setRecurringCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, String(goal.currentAmount)])));
@@ -298,6 +303,11 @@ export default function ExpenseTrackerPage() {
       setRecurringCategoryId(categories.find((category) => category.kind === recurringType)?.id ?? "");
     }
   }, [categories, recurringCategoryId, recurringType]);
+
+  useEffect(() => {
+    const selectedBudgetCategory = categories.find((category) => category.id === budgetCategoryId);
+    setBudgetAmount(String(selectedBudgetCategory?.monthlyBudget ?? ""));
+  }, [budgetCategoryId, categories]);
 
   const monthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const monthTotals = useMemo(() => totals(monthTx), [monthTx]);
@@ -416,6 +426,7 @@ export default function ExpenseTrackerPage() {
     event.preventDefault();
     try {
       setDataError("");
+      setDataNotice("");
       setSavingBudgetId(categoryIdToUpdate);
       const draft = budgetDrafts[categoryIdToUpdate]?.trim();
       const parsedBudget = draft ? Number(draft) : null;
@@ -428,6 +439,42 @@ export default function ExpenseTrackerPage() {
       const updated = await updateCategoryBudget(categoryIdToUpdate, parsedBudget);
       setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
       setBudgetDrafts((current) => ({ ...current, [updated.id]: String(updated.monthlyBudget ?? "") }));
+      if (updated.id === budgetCategoryId) {
+        setBudgetAmount(String(updated.monthlyBudget ?? ""));
+      }
+      setDataNotice(`Budget saved for ${updated.name}.`);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update budget.");
+    } finally {
+      setSavingBudgetId("");
+    }
+  }
+
+  async function handleSetBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!budgetCategoryId) {
+      setDataError("Choose a category first.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      setDataNotice("");
+      setSavingBudgetId(budgetCategoryId);
+      const draft = budgetAmount.trim();
+      const parsedBudget = draft ? Number(draft) : null;
+
+      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+        setDataError("Budget must be a positive number.");
+        return;
+      }
+
+      const updated = await updateCategoryBudget(budgetCategoryId, parsedBudget);
+      setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+      setBudgetDrafts((current) => ({ ...current, [updated.id]: String(updated.monthlyBudget ?? "") }));
+      setBudgetAmount(String(updated.monthlyBudget ?? ""));
+      setDataNotice(`Budget saved for ${updated.name}.`);
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update budget.");
     } finally {
@@ -565,9 +612,11 @@ export default function ExpenseTrackerPage() {
           </div>
         </header>
 
-        {(isLoading || dataError) && (
-          <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${dataError ? "border-coral/25 bg-coral/10 text-coral" : "border-river/20 bg-river/10 text-river"}`}>
-            {dataError || "Loading Supabase data..."}
+        {(isLoading || dataError || dataNotice) && (
+          <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            dataError ? "border-coral/25 bg-coral/10 text-coral" : "border-river/20 bg-river/10 text-river"
+          }`}>
+            {dataError || dataNotice || "Loading Supabase data..."}
           </div>
         )}
 
@@ -751,6 +800,30 @@ export default function ExpenseTrackerPage() {
           {(activeTab === "budgets" || activeTab === "recurring") && <div className="grid gap-4">
             {activeTab === "budgets" && (
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
+              <form onSubmit={handleSetBudget} className="mb-4 max-w-xl rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Set monthly budget</h3>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+                  <select
+                    value={budgetCategoryId}
+                    onChange={(event) => setBudgetCategoryId(event.target.value)}
+                    className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  >
+                    {categories.filter((category) => category.kind === "expense").map((category) => (
+                      <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={budgetAmount}
+                    onChange={(event) => setBudgetAmount(event.target.value)}
+                    className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                    inputMode="decimal"
+                    placeholder="Amount"
+                  />
+                  <button className="inline-flex h-11 items-center justify-center rounded-lg bg-ink px-4 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === budgetCategoryId}>
+                    {savingBudgetId === budgetCategoryId ? "Saving" : "Save"}
+                  </button>
+                </div>
+              </form>
               <div className="space-y-4">
                 {budgetRows.map((row) => (
                   <form key={row.id} onSubmit={(event) => handleSaveBudget(event, row.id)} className="rounded-lg border border-ink/10 bg-white p-3">
@@ -785,39 +858,42 @@ export default function ExpenseTrackerPage() {
 
             {activeTab === "recurring" && (
             <Panel id="recurring" title={t.recurring} action={`${upcoming.length} ${t.rules}`}>
-              <form onSubmit={handleCreateRecurring} className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[110px_120px_1fr_150px_145px_145px_auto]">
-                <select value={recurringType} onChange={(event) => setRecurringType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  <option value="expense">{t.expense}</option>
-                  <option value="income">{t.income}</option>
-                </select>
-                <input value={recurringAmount} onChange={(event) => setRecurringAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-                <input value={recurringName} onChange={(event) => setRecurringName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name, e.g. Electricity bill" />
-                <select value={recurringCategoryId} onChange={(event) => setRecurringCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  {categories.filter((category) => category.kind === recurringType).map((category) => (
-                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
-                  ))}
-                </select>
-                <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-                <select value={recurringFrequency} onChange={(event) => setRecurringFrequency(event.target.value as RecurringRule["frequency"])} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Biweekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-                <input type="date" value={recurringNextDueOn} onChange={(event) => setRecurringNextDueOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                <label className="flex h-11 items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 text-sm xl:col-span-2">
-                  <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
-                  Auto-create transactions
-                </label>
-                <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper xl:col-span-full">
-                  <Plus size={17} />
-                  Add recurring item
-                </button>
+              <form onSubmit={handleCreateRecurring} className="mb-4 max-w-3xl rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Add recurring item</h3>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <select value={recurringType} onChange={(event) => setRecurringType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <option value="expense">{t.expense}</option>
+                    <option value="income">{t.income}</option>
+                  </select>
+                  <input value={recurringAmount} onChange={(event) => setRecurringAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+                  <input value={recurringName} onChange={(event) => setRecurringName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-1" placeholder="Name, e.g. Electricity bill" />
+                  <select value={recurringCategoryId} onChange={(event) => setRecurringCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    {categories.filter((category) => category.kind === recurringType).map((category) => (
+                      <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                    ))}
+                  </select>
+                  <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                  <select value={recurringFrequency} onChange={(event) => setRecurringFrequency(event.target.value as RecurringRule["frequency"])} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Biweekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                  <input type="date" value={recurringNextDueOn} onChange={(event) => setRecurringNextDueOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                  <label className="flex h-11 items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
+                    Auto-create
+                  </label>
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-1">
+                    <Plus size={17} />
+                    Add
+                  </button>
+                </div>
               </form>
               <div className="space-y-3">
                 {upcoming.map((rule) => {
@@ -841,15 +917,18 @@ export default function ExpenseTrackerPage() {
         <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4" : "hidden"}>
           {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
-            <form onSubmit={handleCreateGoal} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_minmax(110px,140px)_minmax(110px,140px)_minmax(135px,145px)]">
-              <input value={goalName} onChange={(event) => setGoalName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Goal name" />
-              <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
-              <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
-              <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-              <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-full">
-                <Plus size={17} />
-                Add goal
-              </button>
+            <form onSubmit={handleCreateGoal} className="mb-4 max-w-3xl rounded-lg border border-ink/10 bg-white p-3">
+              <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Add savings goal</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_130px_130px_145px]">
+                <input value={goalName} onChange={(event) => setGoalName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Goal name" />
+                <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
+                <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
+                <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-full">
+                  <Plus size={17} />
+                  Add goal
+                </button>
+              </div>
             </form>
             <div className="space-y-4">
               {goals.map((goal) => (
