@@ -21,6 +21,34 @@ insert into public.categories (id, user_id, name, kind, icon, color, monthly_bud
 ('20000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000001', 'Savings', 'expense', 'piggy-bank', '#7d536d', 800)
 on conflict (id) do nothing;
 
+insert into public.subcategories (user_id, category_id, name)
+select c.user_id, c.id, v.name
+from public.categories c
+join (values
+  ('Bills', 'Electricity'),
+  ('Bills', 'Water'),
+  ('Bills', 'Internet'),
+  ('Bills', 'Phone'),
+  ('Food', 'Meal'),
+  ('Food', 'Drink'),
+  ('Food', 'Snack'),
+  ('Food', 'Groceries'),
+  ('Transport', 'Fuel'),
+  ('Transport', 'Taxi'),
+  ('Transport', 'Bus'),
+  ('Transport', 'Parking'),
+  ('Housing', 'Rent'),
+  ('Housing', 'Maintenance'),
+  ('Entertainment', 'Movie'),
+  ('Entertainment', 'Game'),
+  ('Health', 'Medicine'),
+  ('Health', 'Clinic'),
+  ('Savings', 'Emergency Fund'),
+  ('Savings', 'Travel Fund')
+) as v(category_name, name) on v.category_name = c.name
+where c.user_id = '00000000-0000-0000-0000-000000000001'
+on conflict (user_id, category_id, name) do nothing;
+
 insert into public.transactions (user_id, account_id, category_id, type, amount, occurred_on, merchant, notes, is_recurring) values
 ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'income', 5200, date_trunc('month', current_date)::date + 0, 'Acme Payroll', 'Monthly salary', true),
 ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'expense', 1480, date_trunc('month', current_date)::date + 1, 'Oak Street Apartments', 'Rent', true),

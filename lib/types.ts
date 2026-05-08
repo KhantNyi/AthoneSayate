@@ -17,6 +17,12 @@ export type Category = {
   monthlyBudget?: number;
 };
 
+export type Subcategory = {
+  id: string;
+  categoryId: string;
+  name: string;
+};
+
 export type Account = {
   id: string;
   name: string;
@@ -29,10 +35,11 @@ export type Transaction = {
   id: string;
   accountId: string;
   categoryId?: string;
+  subcategoryId?: string;
   type: TransactionType;
   amount: number;
   occurredOn: string;
-  merchant: string;
+  merchant?: string;
   notes?: string;
   isRecurring?: boolean;
 };

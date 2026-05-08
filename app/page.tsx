@@ -7,7 +7,6 @@ import {
   Banknote,
   CalendarClock,
   CircleDollarSign,
-  Home,
   Languages,
   LayoutDashboard,
   LineChart,
@@ -36,7 +35,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createTransaction, fetchExpenseData, removeTransaction } from "@/lib/supabase-data";
+import { createCategory, createSubcategory, createTransaction, fetchExpenseData, removeTransaction } from "@/lib/supabase-data";
 import {
   accountBalances,
   categorySpend,
@@ -50,7 +49,7 @@ import {
   upcomingRules,
   weekdaySpend
 } from "@/lib/metrics";
-import type { Account, Category, Goal, RecurringRule, Transaction, TransactionType } from "@/lib/types";
+import type { Account, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
 
 type Language = "en" | "my";
 
@@ -93,7 +92,7 @@ const translations = {
     safeToSpendDay: "safe to spend/day",
     savingsProgress: "Savings progress",
     savingsRate: "savings rate",
-    searchPlaceholder: "Search merchant, note, category, account",
+    searchPlaceholder: "Search note, category, subcategory, account",
     settings: "Settings",
     snapshot: "May 2026 snapshot",
     spendingPace: "Spending pace",
@@ -175,15 +174,19 @@ const navItems = [
   { key: "recurring", label: "recurring", icon: CalendarClock },
   { key: "goals", label: "goals", icon: Target },
   { key: "reports", label: "reports", icon: LineChart },
-  { key: "settings", label: "settings", icon: Settings }
+  { key: "settings", label: "category", icon: Settings }
 ] as const;
+
+type TabKey = (typeof navItems)[number]["key"];
 
 export default function ExpenseTrackerPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [language, setLanguage] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -192,10 +195,15 @@ export default function ExpenseTrackerPage() {
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
   const [accountId, setAccountId] = useState("");
-  const [merchant, setMerchant] = useState("");
   const [occurredOn, setOccurredOn] = useState(format(new Date(), "yyyy-MM-dd"));
   const [notes, setNotes] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryKind, setNewCategoryKind] = useState<TransactionType>("expense");
+  const [newCategoryBudget, setNewCategoryBudget] = useState("");
+  const [newSubcategoryName, setNewSubcategoryName] = useState("");
+  const [newSubcategoryCategoryId, setNewSubcategoryCategoryId] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -212,11 +220,13 @@ export default function ExpenseTrackerPage() {
 
         setAccounts(data.accounts);
         setCategories(data.categories);
+        setSubcategories(data.subcategories);
         setGoals(data.goals);
         setRecurringRules(data.recurringRules);
         setTransactions(data.transactions);
         setAccountId(data.accounts[0]?.id ?? "");
         setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
+        setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
       } catch (error) {
         if (!ignore) {
           setDataError(error instanceof Error ? error.message : "Unable to load Supabase data.");
@@ -243,6 +253,14 @@ export default function ExpenseTrackerPage() {
     }
   }, [categories, categoryId, type]);
 
+  useEffect(() => {
+    const categorySubcategories = subcategories.filter((item) => item.categoryId === categoryId);
+
+    if (!categorySubcategories.some((item) => item.id === subcategoryId)) {
+      setSubcategoryId(categorySubcategories[0]?.id ?? "");
+    }
+  }, [categoryId, subcategories, subcategoryId]);
+
   const monthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const monthTotals = useMemo(() => totals(monthTx), [monthTx]);
   const allTotals = useMemo(() => totals(transactions), [transactions]);
@@ -257,13 +275,16 @@ export default function ExpenseTrackerPage() {
   const t = translations[language];
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
-  const canAddTransaction = Boolean(accountId && merchant.trim() && Number(amount) > 0 && !isSaving);
+  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
+  const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
 
   const filteredTransactions = transactions
     .filter((tx) => {
       const category = categories.find((item) => item.id === tx.categoryId);
+      const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
       const account = accounts.find((item) => item.id === tx.accountId);
-      const haystack = `${tx.merchant} ${tx.notes ?? ""} ${category?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
+      const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
       return haystack.includes(query.toLowerCase());
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
@@ -271,7 +292,7 @@ export default function ExpenseTrackerPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(amount);
-    if (!parsedAmount || !merchant.trim() || !accountId) {
+    if (!parsedAmount || !categoryId || !accountId) {
       return;
     }
 
@@ -281,16 +302,16 @@ export default function ExpenseTrackerPage() {
       const transaction = await createTransaction({
         accountId,
         categoryId: categoryId || undefined,
+        subcategoryId: subcategoryId || undefined,
         type,
         amount: parsedAmount,
         occurredOn,
-        merchant: merchant.trim(),
+        merchant: selectedSubcategory?.name ?? selectedCategory?.name ?? "",
         notes: notes.trim()
       });
 
       setTransactions((current) => [transaction, ...current]);
       setAmount("");
-      setMerchant("");
       setNotes("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to save transaction.");
@@ -312,6 +333,47 @@ export default function ExpenseTrackerPage() {
     }
   }
 
+  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newCategoryName.trim()) {
+      return;
+    }
+
+    try {
+      setDataError("");
+      const category = await createCategory({
+        name: newCategoryName.trim(),
+        kind: newCategoryKind,
+        monthlyBudget: Number(newCategoryBudget) || undefined
+      });
+      setCategories((current) => [...current, category].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewCategoryName("");
+      setNewCategoryBudget("");
+      setNewSubcategoryCategoryId(category.id);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to create category.");
+    }
+  }
+
+  async function handleCreateSubcategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newSubcategoryName.trim() || !newSubcategoryCategoryId) {
+      return;
+    }
+
+    try {
+      setDataError("");
+      const subcategory = await createSubcategory({
+        categoryId: newSubcategoryCategoryId,
+        name: newSubcategoryName.trim()
+      });
+      setSubcategories((current) => [...current, subcategory].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewSubcategoryName("");
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to create subcategory.");
+    }
+  }
+
   return (
     <main className="min-h-screen pb-20 text-ink xl:pb-0" lang={language === "my" ? "my" : "en"}>
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur xl:block">
@@ -326,29 +388,35 @@ export default function ExpenseTrackerPage() {
         </div>
         <nav className="space-y-1">
           {navItems.map((item) => (
-            <a
+            <button
               key={item.key}
-              href={`#${item.key}`}
-              className="flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-ink/70 transition hover:bg-white hover:text-ink"
+              type="button"
+              onClick={() => setActiveTab(item.key)}
+              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition ${
+                activeTab === item.key ? "bg-ink text-paper" : "text-ink/70 hover:bg-white hover:text-ink"
+              }`}
             >
               <item.icon size={18} />
               {t[item.label]}
-            </a>
+            </button>
           ))}
         </nav>
       </aside>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-paper/94 px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] backdrop-blur xl:hidden">
         <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">
-          {navItems.slice(0, 5).map((item) => (
-            <a
+          {navItems.filter((item) => ["dashboard", "transactions", "budgets", "recurring", "settings"].includes(item.key)).map((item) => (
+            <button
               key={item.key}
-              href={`#${item.key}`}
-              className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium text-ink/65"
+              type="button"
+              onClick={() => setActiveTab(item.key)}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
+                activeTab === item.key ? "bg-ink text-paper" : "text-ink/65"
+              }`}
             >
               <item.icon size={18} />
               <span className="max-w-full truncate">{t[item.label]}</span>
-            </a>
+            </button>
           ))}
         </div>
       </nav>
@@ -372,7 +440,7 @@ export default function ExpenseTrackerPage() {
           </div>
         )}
 
-        <section id="dashboard" className="grid gap-4">
+        <section id="dashboard" className={activeTab === "dashboard" ? "grid gap-4" : "hidden"}>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={currency.format(monthTotals.income)} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
             <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={currency.format(monthTotals.expenses)} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
@@ -430,7 +498,8 @@ export default function ExpenseTrackerPage() {
           </div>
         </section>
 
-        <section className="mt-4 grid gap-4 2xl:grid-cols-[1fr_0.95fr]">
+        <section className={activeTab === "transactions" || activeTab === "budgets" || activeTab === "recurring" ? "mt-4 grid gap-4 2xl:grid-cols-[1fr_0.95fr]" : "hidden"}>
+          {activeTab === "transactions" && (
           <Panel id="transactions" title={t.transactions} action={`${filteredTransactions.length} ${t.entries}`}>
             <div className="mb-4 grid gap-3">
               <label className="relative block">
@@ -453,12 +522,17 @@ export default function ExpenseTrackerPage() {
                     <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
                   ))}
                 </select>
+                <select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                  <option value="">Subcategory</option>
+                  {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => (
+                    <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                  ))}
+                </select>
                 <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>{account.name}</option>
                   ))}
                 </select>
-                <input value={merchant} onChange={(event) => setMerchant(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder={t.merchant} />
                 <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
                 <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper transition hover:bg-ink/85 disabled:cursor-not-allowed disabled:opacity-45">
                   <Plus size={17} />
@@ -471,12 +545,13 @@ export default function ExpenseTrackerPage() {
             <div className="grid gap-3 lg:hidden">
               {filteredTransactions.slice(0, 14).map((tx) => {
                 const category = categories.find((item) => item.id === tx.categoryId);
+                const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                 const account = accounts.find((item) => item.id === tx.accountId);
                 return (
                   <article key={tx.id} className="rounded-lg border border-ink/10 bg-white p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold">{tx.merchant}</p>
+                        <p className="truncate font-semibold">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</p>
                         <p className="mt-1 text-sm text-ink/55">{format(parseISO(tx.occurredOn), "MMM d")} - {account?.name}</p>
                       </div>
                       <strong className={`shrink-0 text-right ${tx.type === "income" ? "text-moss" : "text-coral"}`}>
@@ -486,7 +561,7 @@ export default function ExpenseTrackerPage() {
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="inline-flex min-w-0 items-center gap-2 text-sm">
                         <span className="size-2.5 shrink-0 rounded-full" style={{ background: category?.color }} />
-                        <span className="truncate">{categoryLabel(category?.name)}</span>
+                        <span className="truncate">{subcategory?.name ?? categoryLabel(category?.name)}</span>
                       </span>
                       <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 shrink-0 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
                         <Trash2 size={16} />
@@ -502,8 +577,8 @@ export default function ExpenseTrackerPage() {
                 <thead>
                   <tr className="text-left text-xs uppercase text-ink/50">
                     <th className="border-b border-ink/10 py-3 font-semibold">{t.date}</th>
-                    <th className="border-b border-ink/10 py-3 font-semibold">{t.merchant}</th>
                     <th className="border-b border-ink/10 py-3 font-semibold">{t.category}</th>
+                    <th className="border-b border-ink/10 py-3 font-semibold">Subcategory</th>
                     <th className="border-b border-ink/10 py-3 font-semibold">{t.account}</th>
                     <th className="border-b border-ink/10 py-3 text-right font-semibold">{t.amount}</th>
                     <th className="border-b border-ink/10 py-3 text-right font-semibold">{t.action}</th>
@@ -512,17 +587,18 @@ export default function ExpenseTrackerPage() {
                 <tbody>
                   {filteredTransactions.slice(0, 14).map((tx) => {
                     const category = categories.find((item) => item.id === tx.categoryId);
+                    const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                     const account = accounts.find((item) => item.id === tx.accountId);
                     return (
                       <tr key={tx.id} className="group">
                         <td className="border-b border-ink/5 py-3 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
-                        <td className="border-b border-ink/5 py-3 font-medium">{tx.merchant}</td>
                         <td className="border-b border-ink/5 py-3">
                           <span className="inline-flex items-center gap-2">
                             <span className="size-2.5 rounded-full" style={{ background: category?.color }} />
                             {categoryLabel(category?.name)}
                           </span>
                         </td>
+                        <td className="border-b border-ink/5 py-3 font-medium">{subcategory?.name ?? "-"}</td>
                         <td className="border-b border-ink/5 py-3 text-ink/65">{account?.name}</td>
                         <td className={`border-b border-ink/5 py-3 text-right font-semibold ${tx.type === "income" ? "text-moss" : "text-coral"}`}>
                           {tx.type === "income" ? "+" : "-"}{preciseCurrency.format(tx.amount)}
@@ -539,8 +615,10 @@ export default function ExpenseTrackerPage() {
               </table>
             </div>
           </Panel>
+          )}
 
-          <div className="grid gap-4">
+          {(activeTab === "budgets" || activeTab === "recurring") && <div className="grid gap-4">
+            {activeTab === "budgets" && (
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
               <div className="space-y-4">
                 {budgetRows.map((row) => (
@@ -558,7 +636,9 @@ export default function ExpenseTrackerPage() {
                 ))}
               </div>
             </Panel>
+            )}
 
+            {activeTab === "recurring" && (
             <Panel id="recurring" title={t.recurring} action={`${upcoming.length} ${t.rules}`}>
               <div className="space-y-3">
                 {upcoming.map((rule) => {
@@ -575,10 +655,12 @@ export default function ExpenseTrackerPage() {
                 })}
               </div>
             </Panel>
-          </div>
+            )}
+          </div>}
         </section>
 
-        <section className="mt-4 grid gap-4 xl:grid-cols-3">
+        <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4 xl:grid-cols-3" : "hidden"}>
+          {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
             <div className="space-y-4">
               {goals.map((goal) => (
@@ -594,7 +676,9 @@ export default function ExpenseTrackerPage() {
               ))}
             </div>
           </Panel>
+          )}
 
+          {activeTab === "reports" && (
           <Panel id="reports" title={t.reports} action={t.weekdayPattern}>
             <div className="h-52 sm:h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -608,25 +692,29 @@ export default function ExpenseTrackerPage() {
               </ResponsiveContainer>
             </div>
           </Panel>
+          )}
 
-          <Panel id="settings" title={t.accounts} action={t.balances}>
-            <div className="space-y-3">
-              {balances.map((account) => (
-                <div key={account.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white px-3 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-lg text-white" style={{ background: account.color }}>
-                      <Home size={17} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{account.name}</p>
-                      <p className="text-xs uppercase text-ink/45">{account.type.replace("_", " ")}</p>
-                    </div>
-                  </div>
-                  <strong className="shrink-0">{currency.format(account.balance)}</strong>
-                </div>
-              ))}
-            </div>
+          {activeTab === "settings" && (
+          <Panel id="settings" title="Categories" action="Manage categories and subcategories">
+            <CategoryManager
+              categories={categories}
+              subcategories={subcategories}
+              newCategoryName={newCategoryName}
+              newCategoryKind={newCategoryKind}
+              newCategoryBudget={newCategoryBudget}
+              newSubcategoryName={newSubcategoryName}
+              newSubcategoryCategoryId={newSubcategoryCategoryId}
+              onCategoryNameChange={setNewCategoryName}
+              onCategoryKindChange={setNewCategoryKind}
+              onCategoryBudgetChange={setNewCategoryBudget}
+              onSubcategoryNameChange={setNewSubcategoryName}
+              onSubcategoryCategoryChange={setNewSubcategoryCategoryId}
+              onCreateCategory={handleCreateCategory}
+              onCreateSubcategory={handleCreateSubcategory}
+            />
           </Panel>
+          )}
+
         </section>
       </section>
     </main>
@@ -686,6 +774,125 @@ function MetricCard({
       <p className="text-xl font-semibold sm:text-2xl">{value}</p>
       <p className="mt-1 text-sm text-ink/55">{sub}</p>
     </article>
+  );
+}
+
+function CategoryManager({
+  categories,
+  subcategories,
+  newCategoryName,
+  newCategoryKind,
+  newCategoryBudget,
+  newSubcategoryName,
+  newSubcategoryCategoryId,
+  onCategoryNameChange,
+  onCategoryKindChange,
+  onCategoryBudgetChange,
+  onSubcategoryNameChange,
+  onSubcategoryCategoryChange,
+  onCreateCategory,
+  onCreateSubcategory
+}: {
+  categories: Category[];
+  subcategories: Subcategory[];
+  newCategoryName: string;
+  newCategoryKind: TransactionType;
+  newCategoryBudget: string;
+  newSubcategoryName: string;
+  newSubcategoryCategoryId: string;
+  onCategoryNameChange: (value: string) => void;
+  onCategoryKindChange: (value: TransactionType) => void;
+  onCategoryBudgetChange: (value: string) => void;
+  onSubcategoryNameChange: (value: string) => void;
+  onSubcategoryCategoryChange: (value: string) => void;
+  onCreateCategory: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateSubcategory: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-4">
+        <form onSubmit={onCreateCategory} className="rounded-lg border border-ink/10 bg-white p-3">
+          <h3 className="mb-3 font-semibold">Create category</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              value={newCategoryName}
+              onChange={(event) => onCategoryNameChange(event.target.value)}
+              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              placeholder="Category name"
+            />
+            <select
+              value={newCategoryKind}
+              onChange={(event) => onCategoryKindChange(event.target.value as TransactionType)}
+              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+            >
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+            <input
+              value={newCategoryBudget}
+              onChange={(event) => onCategoryBudgetChange(event.target.value)}
+              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2"
+              inputMode="decimal"
+              placeholder="Monthly budget, optional"
+            />
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2">
+              <Plus size={17} />
+              Create category
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={onCreateSubcategory} className="rounded-lg border border-ink/10 bg-white p-3">
+          <h3 className="mb-3 font-semibold">Create subcategory</h3>
+          <div className="grid gap-2">
+            <select
+              value={newSubcategoryCategoryId}
+              onChange={(event) => onSubcategoryCategoryChange(event.target.value)}
+              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+            >
+              <option value="">Choose category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+            <input
+              value={newSubcategoryName}
+              onChange={(event) => onSubcategoryNameChange(event.target.value)}
+              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              placeholder="Subcategory name, e.g. Electricity"
+            />
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper">
+              <Plus size={17} />
+              Create subcategory
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="space-y-3">
+        {categories.map((category) => {
+          const children = subcategories.filter((subcategory) => subcategory.categoryId === category.id);
+          return (
+            <div key={category.id} className="rounded-lg border border-ink/10 bg-white p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="size-3 rounded-full" style={{ background: category.color }} />
+                  <h3 className="font-semibold">{category.name}</h3>
+                </div>
+                <span className="rounded-md bg-ink/5 px-2 py-1 text-xs uppercase text-ink/55">{category.kind}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {children.length > 0 ? children.map((subcategory) => (
+                  <span key={subcategory.id} className="rounded-md border border-ink/10 px-2 py-1 text-sm text-ink/70">{subcategory.name}</span>
+                )) : (
+                  <span className="text-sm text-ink/45">No subcategories yet</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
