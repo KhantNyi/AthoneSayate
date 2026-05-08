@@ -35,7 +35,17 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createCategory, createSubcategory, createTransaction, fetchExpenseData, removeTransaction } from "@/lib/supabase-data";
+import {
+  createCategory,
+  createGoal,
+  createRecurringRule,
+  createSubcategory,
+  createTransaction,
+  fetchExpenseData,
+  removeTransaction,
+  updateCategoryBudget,
+  updateGoalProgress
+} from "@/lib/supabase-data";
 import {
   accountBalances,
   categorySpend,
@@ -204,6 +214,20 @@ export default function ExpenseTrackerPage() {
   const [newCategoryBudget, setNewCategoryBudget] = useState("");
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
   const [newSubcategoryCategoryId, setNewSubcategoryCategoryId] = useState("");
+  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+  const [recurringType, setRecurringType] = useState<TransactionType>("expense");
+  const [recurringAccountId, setRecurringAccountId] = useState("");
+  const [recurringCategoryId, setRecurringCategoryId] = useState("");
+  const [recurringAmount, setRecurringAmount] = useState("");
+  const [recurringName, setRecurringName] = useState("");
+  const [recurringFrequency, setRecurringFrequency] = useState<RecurringRule["frequency"]>("monthly");
+  const [recurringNextDueOn, setRecurringNextDueOn] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [recurringAutoCreate, setRecurringAutoCreate] = useState(false);
+  const [goalName, setGoalName] = useState("");
+  const [goalTargetAmount, setGoalTargetAmount] = useState("");
+  const [goalCurrentAmount, setGoalCurrentAmount] = useState("");
+  const [goalTargetDate, setGoalTargetDate] = useState("");
+  const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let ignore = false;
@@ -227,6 +251,10 @@ export default function ExpenseTrackerPage() {
         setAccountId(data.accounts[0]?.id ?? "");
         setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
+        setBudgetDrafts(Object.fromEntries(data.categories.filter((category) => category.kind === "expense").map((category) => [category.id, String(category.monthlyBudget ?? "")])));
+        setRecurringAccountId(data.accounts[0]?.id ?? "");
+        setRecurringCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
+        setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, String(goal.currentAmount)])));
       } catch (error) {
         if (!ignore) {
           setDataError(error instanceof Error ? error.message : "Unable to load Supabase data.");
@@ -260,6 +288,14 @@ export default function ExpenseTrackerPage() {
       setSubcategoryId(categorySubcategories[0]?.id ?? "");
     }
   }, [categoryId, subcategories, subcategoryId]);
+
+  useEffect(() => {
+    const currentCategory = categories.find((category) => category.id === recurringCategoryId);
+
+    if (currentCategory?.kind !== recurringType) {
+      setRecurringCategoryId(categories.find((category) => category.kind === recurringType)?.id ?? "");
+    }
+  }, [categories, recurringCategoryId, recurringType]);
 
   const monthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const monthTotals = useMemo(() => totals(monthTx), [monthTx]);
@@ -371,6 +407,82 @@ export default function ExpenseTrackerPage() {
       setNewSubcategoryName("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to create subcategory.");
+    }
+  }
+
+  async function handleSaveBudget(categoryIdToUpdate: string) {
+    try {
+      setDataError("");
+      const draft = budgetDrafts[categoryIdToUpdate]?.trim();
+      const updated = await updateCategoryBudget(categoryIdToUpdate, draft ? Number(draft) : null);
+      setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update budget.");
+    }
+  }
+
+  async function handleCreateRecurring(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsedAmount = Number(recurringAmount);
+    if (!recurringAccountId || !recurringCategoryId || !recurringName.trim() || !parsedAmount || !recurringNextDueOn) {
+      return;
+    }
+
+    try {
+      setDataError("");
+      const rule = await createRecurringRule({
+        accountId: recurringAccountId,
+        categoryId: recurringCategoryId,
+        type: recurringType,
+        amount: parsedAmount,
+        merchant: recurringName.trim(),
+        frequency: recurringFrequency,
+        nextDueOn: recurringNextDueOn,
+        autoCreate: recurringAutoCreate
+      });
+      setRecurringRules((current) => [...current, rule]);
+      setRecurringAmount("");
+      setRecurringName("");
+      setRecurringAutoCreate(false);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to create recurring item.");
+    }
+  }
+
+  async function handleCreateGoal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsedTarget = Number(goalTargetAmount);
+    const parsedCurrent = Number(goalCurrentAmount) || 0;
+    if (!goalName.trim() || !parsedTarget) {
+      return;
+    }
+
+    try {
+      setDataError("");
+      const goal = await createGoal({
+        name: goalName.trim(),
+        targetAmount: parsedTarget,
+        currentAmount: parsedCurrent,
+        targetDate: goalTargetDate || undefined
+      });
+      setGoals((current) => [...current, goal]);
+      setGoalDrafts((current) => ({ ...current, [goal.id]: String(goal.currentAmount) }));
+      setGoalName("");
+      setGoalTargetAmount("");
+      setGoalCurrentAmount("");
+      setGoalTargetDate("");
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to create goal.");
+    }
+  }
+
+  async function handleUpdateGoal(goalId: string) {
+    try {
+      setDataError("");
+      const updated = await updateGoalProgress(goalId, Number(goalDrafts[goalId]) || 0);
+      setGoals((current) => current.map((goal) => (goal.id === updated.id ? updated : goal)));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update goal.");
     }
   }
 
@@ -622,12 +734,26 @@ export default function ExpenseTrackerPage() {
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
               <div className="space-y-4">
                 {budgetRows.map((row) => (
-                  <div key={row.id}>
-                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-                      <span className="font-medium">{categoryLabel(row.name)}</span>
-                      <span className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
-                        {currency.format(row.spent)} / {currency.format(row.monthlyBudget ?? 0)}
-                      </span>
+                  <div key={row.id} className="rounded-lg border border-ink/10 bg-white p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <div>
+                        <p className="font-medium">{categoryLabel(row.name)}</p>
+                        <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
+                          {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          value={budgetDrafts[row.id] ?? ""}
+                          onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
+                          className="h-10 w-32 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                          inputMode="decimal"
+                          placeholder="Budget"
+                        />
+                        <button type="button" onClick={() => handleSaveBudget(row.id)} className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">
+                          Save
+                        </button>
+                      </div>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#bd5b4b" : row.color }} />
@@ -640,6 +766,40 @@ export default function ExpenseTrackerPage() {
 
             {activeTab === "recurring" && (
             <Panel id="recurring" title={t.recurring} action={`${upcoming.length} ${t.rules}`}>
+              <form onSubmit={handleCreateRecurring} className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[110px_120px_1fr_150px_145px_145px_auto]">
+                <select value={recurringType} onChange={(event) => setRecurringType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                  <option value="expense">{t.expense}</option>
+                  <option value="income">{t.income}</option>
+                </select>
+                <input value={recurringAmount} onChange={(event) => setRecurringAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+                <input value={recurringName} onChange={(event) => setRecurringName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name, e.g. Electricity bill" />
+                <select value={recurringCategoryId} onChange={(event) => setRecurringCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                  {categories.filter((category) => category.kind === recurringType).map((category) => (
+                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                  ))}
+                </select>
+                <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>{account.name}</option>
+                  ))}
+                </select>
+                <select value={recurringFrequency} onChange={(event) => setRecurringFrequency(event.target.value as RecurringRule["frequency"])} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Biweekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+                <input type="date" value={recurringNextDueOn} onChange={(event) => setRecurringNextDueOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                <label className="flex h-11 items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 text-sm xl:col-span-2">
+                  <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
+                  Auto-create transactions
+                </label>
+                <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper xl:col-span-full">
+                  <Plus size={17} />
+                  Add recurring item
+                </button>
+              </form>
               <div className="space-y-3">
                 {upcoming.map((rule) => {
                   const category = categories.find((item) => item.id === rule.categoryId);
@@ -662,12 +822,36 @@ export default function ExpenseTrackerPage() {
         <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4 xl:grid-cols-3" : "hidden"}>
           {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
+            <form onSubmit={handleCreateGoal} className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_140px_140px_145px_auto]">
+              <input value={goalName} onChange={(event) => setGoalName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Goal name" />
+              <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
+              <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
+              <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+              <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper">
+                <Plus size={17} />
+                Add goal
+              </button>
+            </form>
             <div className="space-y-4">
               {goals.map((goal) => (
-                <div key={goal.id}>
+                <div key={goal.id} className="rounded-lg border border-ink/10 bg-white p-3">
                   <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm">
-                    <span className="font-medium">{goal.name}</span>
-                    <span className="text-ink/60">{currency.format(goal.currentAmount)} / {currency.format(goal.targetAmount)}</span>
+                    <div>
+                      <p className="font-medium">{goal.name}</p>
+                      <p className="text-ink/60">{currency.format(goal.currentAmount)} / {currency.format(goal.targetAmount)}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={goalDrafts[goal.id] ?? ""}
+                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: event.target.value }))}
+                        className="h-10 w-32 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        inputMode="decimal"
+                        placeholder="Saved"
+                      />
+                      <button type="button" onClick={() => handleUpdateGoal(goal.id)} className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">
+                        Save
+                      </button>
+                    </div>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
                     <div className="h-full rounded-full" style={{ width: `${(goal.currentAmount / goal.targetAmount) * 100}%`, background: goal.color }} />
