@@ -17,6 +17,13 @@ export type Category = {
   monthlyBudget?: number;
 };
 
+export type Budget = {
+  id: string;
+  categoryId: string;
+  month: string;
+  amount: number;
+};
+
 export type Subcategory = {
   id: string;
   categoryId: string;

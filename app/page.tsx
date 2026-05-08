@@ -43,7 +43,7 @@ import {
   createTransaction,
   fetchExpenseData,
   removeTransaction,
-  updateCategoryBudget,
+  upsertMonthlyBudget,
   updateGoalProgress
 } from "@/lib/supabase-data";
 import {
@@ -59,7 +59,7 @@ import {
   upcomingRules,
   weekdaySpend
 } from "@/lib/metrics";
-import type { Account, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
+import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
 
 type Language = "en" | "my";
 
@@ -191,6 +191,7 @@ type TabKey = (typeof navItems)[number]["key"];
 
 export default function ExpenseTrackerPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -220,6 +221,7 @@ export default function ExpenseTrackerPage() {
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
   const [budgetCategoryId, setBudgetCategoryId] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetMonth, setBudgetMonth] = useState(format(new Date(), "yyyy-MM"));
   const [recurringType, setRecurringType] = useState<TransactionType>("expense");
   const [recurringAccountId, setRecurringAccountId] = useState("");
   const [recurringCategoryId, setRecurringCategoryId] = useState("");
@@ -248,6 +250,7 @@ export default function ExpenseTrackerPage() {
         }
 
         setAccounts(data.accounts);
+        setBudgets(data.budgets);
         setCategories(data.categories);
         setSubcategories(data.subcategories);
         setGoals(data.goals);
@@ -256,9 +259,13 @@ export default function ExpenseTrackerPage() {
         setAccountId(data.accounts[0]?.id ?? "");
         setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
-        setBudgetDrafts(Object.fromEntries(data.categories.filter((category) => category.kind === "expense").map((category) => [category.id, String(category.monthlyBudget ?? "")])));
+        setBudgetDrafts(Object.fromEntries(data.categories.filter((category) => category.kind === "expense").map((category) => {
+          const month = format(new Date(), "yyyy-MM");
+          const budget = data.budgets.find((item) => item.categoryId === category.id && item.month.startsWith(month));
+          return [category.id, String(budget?.amount ?? category.monthlyBudget ?? "")];
+        })));
         setBudgetCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
-        setBudgetAmount(String(data.categories.find((category) => category.kind === "expense")?.monthlyBudget ?? ""));
+        setBudgetAmount(String(data.budgets.find((budget) => budget.categoryId === data.categories.find((category) => category.kind === "expense")?.id && budget.month.startsWith(format(new Date(), "yyyy-MM")))?.amount ?? data.categories.find((category) => category.kind === "expense")?.monthlyBudget ?? ""));
         setRecurringAccountId(data.accounts[0]?.id ?? "");
         setRecurringCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, String(goal.currentAmount)])));
@@ -306,14 +313,26 @@ export default function ExpenseTrackerPage() {
 
   useEffect(() => {
     const selectedBudgetCategory = categories.find((category) => category.id === budgetCategoryId);
-    setBudgetAmount(String(selectedBudgetCategory?.monthlyBudget ?? ""));
-  }, [budgetCategoryId, categories]);
+    const selectedBudget = budgets.find((budget) => budget.categoryId === budgetCategoryId && budget.month.startsWith(budgetMonth));
+    setBudgetAmount(String(selectedBudget?.amount ?? selectedBudgetCategory?.monthlyBudget ?? ""));
+  }, [budgetCategoryId, budgetMonth, budgets, categories]);
+
+  useEffect(() => {
+    setBudgetDrafts(Object.fromEntries(categories.filter((category) => category.kind === "expense").map((category) => {
+      const budget = budgets.find((item) => item.categoryId === category.id && item.month.startsWith(budgetMonth));
+      return [category.id, String(budget?.amount ?? category.monthlyBudget ?? "")];
+    })));
+  }, [budgetMonth, budgets, categories]);
 
   const monthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const monthTotals = useMemo(() => totals(monthTx), [monthTx]);
   const allTotals = useMemo(() => totals(transactions), [transactions]);
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions]);
-  const budgetRows = useMemo(() => categorySpend(categories, monthTx), [categories, monthTx]);
+  const currentBudgetMonth = format(new Date(), "yyyy-MM");
+  const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, currentBudgetMonth), [categories, budgets, currentBudgetMonth]);
+  const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, budgetMonth), [categories, budgets, budgetMonth]);
+  const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, monthTx), [categoriesForCurrentMonth, monthTx]);
+  const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, monthTx), [categoriesForBudgetMonth, monthTx]);
   const comparison = useMemo(() => monthlyComparison(transactions), [transactions]);
   const daily = useMemo(() => dailySeries(monthTx), [monthTx]);
   const weekday = useMemo(() => weekdaySpend(monthTx), [monthTx]);
@@ -429,20 +448,25 @@ export default function ExpenseTrackerPage() {
       setDataNotice("");
       setSavingBudgetId(categoryIdToUpdate);
       const draft = budgetDrafts[categoryIdToUpdate]?.trim();
-      const parsedBudget = draft ? Number(draft) : null;
+      const parsedBudget = Number(draft);
 
-      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+      if (!draft || !Number.isFinite(parsedBudget) || parsedBudget < 0) {
         setDataError("Budget must be a positive number.");
         return;
       }
 
-      const updated = await updateCategoryBudget(categoryIdToUpdate, parsedBudget);
-      setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
-      setBudgetDrafts((current) => ({ ...current, [updated.id]: String(updated.monthlyBudget ?? "") }));
-      if (updated.id === budgetCategoryId) {
-        setBudgetAmount(String(updated.monthlyBudget ?? ""));
+      const updated = await upsertMonthlyBudget({
+        categoryId: categoryIdToUpdate,
+        month: `${budgetMonth}-01`,
+        amount: parsedBudget
+      });
+      const category = categories.find((item) => item.id === categoryIdToUpdate);
+      setBudgets((current) => upsertBudgetInState(current, updated));
+      setBudgetDrafts((current) => ({ ...current, [updated.categoryId]: String(updated.amount) }));
+      if (updated.categoryId === budgetCategoryId) {
+        setBudgetAmount(String(updated.amount));
       }
-      setDataNotice(`Budget saved for ${updated.name}.`);
+      setDataNotice(`Budget saved for ${category?.name ?? "category"} in ${budgetMonth}.`);
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update budget.");
     } finally {
@@ -463,18 +487,23 @@ export default function ExpenseTrackerPage() {
       setDataNotice("");
       setSavingBudgetId(budgetCategoryId);
       const draft = budgetAmount.trim();
-      const parsedBudget = draft ? Number(draft) : null;
+      const parsedBudget = Number(draft);
 
-      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+      if (!draft || !Number.isFinite(parsedBudget) || parsedBudget < 0) {
         setDataError("Budget must be a positive number.");
         return;
       }
 
-      const updated = await updateCategoryBudget(budgetCategoryId, parsedBudget);
-      setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
-      setBudgetDrafts((current) => ({ ...current, [updated.id]: String(updated.monthlyBudget ?? "") }));
-      setBudgetAmount(String(updated.monthlyBudget ?? ""));
-      setDataNotice(`Budget saved for ${updated.name}.`);
+      const updated = await upsertMonthlyBudget({
+        categoryId: budgetCategoryId,
+        month: `${budgetMonth}-01`,
+        amount: parsedBudget
+      });
+      const category = categories.find((item) => item.id === budgetCategoryId);
+      setBudgets((current) => upsertBudgetInState(current, updated));
+      setBudgetDrafts((current) => ({ ...current, [updated.categoryId]: String(updated.amount) }));
+      setBudgetAmount(String(updated.amount));
+      setDataNotice(`Budget saved for ${category?.name ?? "category"} in ${budgetMonth}.`);
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update budget.");
     } finally {
@@ -641,7 +670,7 @@ export default function ExpenseTrackerPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
                     <XAxis dataKey="day" tickLine={false} axisLine={false} />
-                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} width={48} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={48} />
                     <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
                     <Area type="monotone" dataKey="spent" stroke="#3d7485" fill="url(#spentGradient)" strokeWidth={2} />
                   </AreaChart>
@@ -800,9 +829,15 @@ export default function ExpenseTrackerPage() {
           {(activeTab === "budgets" || activeTab === "recurring") && <div className="grid gap-4">
             {activeTab === "budgets" && (
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
-              <form onSubmit={handleSetBudget} className="mb-4 max-w-xl rounded-lg border border-ink/10 bg-white p-3">
+              <form onSubmit={handleSetBudget} className="mb-4 max-w-2xl rounded-lg border border-ink/10 bg-white p-3">
                 <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Set monthly budget</h3>
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[150px_minmax(0,1fr)_150px]">
+                  <input
+                    type="month"
+                    value={budgetMonth}
+                    onChange={(event) => setBudgetMonth(event.target.value)}
+                    className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  />
                   <select
                     value={budgetCategoryId}
                     onChange={(event) => setBudgetCategoryId(event.target.value)}
@@ -819,19 +854,20 @@ export default function ExpenseTrackerPage() {
                     inputMode="decimal"
                     placeholder="Amount"
                   />
-                  <button className="inline-flex h-11 items-center justify-center rounded-lg bg-ink px-4 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === budgetCategoryId}>
-                    {savingBudgetId === budgetCategoryId ? "Saving" : "Save"}
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper disabled:opacity-50 sm:col-span-2 lg:col-span-3" disabled={savingBudgetId === budgetCategoryId}>
+                    <Plus size={17} />
+                    {savingBudgetId === budgetCategoryId ? "Saving budget" : "Save monthly budget"}
                   </button>
                 </div>
               </form>
               <div className="space-y-4">
-                {budgetRows.map((row) => (
+                {budgetTabRows.map((row) => (
                   <form key={row.id} onSubmit={(event) => handleSaveBudget(event, row.id)} className="rounded-lg border border-ink/10 bg-white p-3">
                     <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                       <div className="min-w-0">
                         <p className="font-medium">{categoryLabel(row.name)}</p>
                         <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
-                          {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget
+                          {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget for {budgetMonth}
                         </p>
                       </div>
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:w-56">
@@ -967,7 +1003,7 @@ export default function ExpenseTrackerPage() {
                 <BarChart data={weekday}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
                   <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} width={44} />
+                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={44} />
                   <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
                   <Bar dataKey="spent" fill="#c3833d" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -1023,6 +1059,26 @@ function Panel({
       {children}
     </section>
   );
+}
+
+function applyMonthlyBudgets(categories: Category[], budgets: Budget[], month: string) {
+  return categories.map((category) => {
+    const budget = budgets.find((item) => item.categoryId === category.id && item.month.startsWith(month));
+    return {
+      ...category,
+      monthlyBudget: budget?.amount ?? category.monthlyBudget
+    };
+  });
+}
+
+function upsertBudgetInState(budgets: Budget[], updated: Budget) {
+  const exists = budgets.some((budget) => budget.id === updated.id);
+
+  if (exists) {
+    return budgets.map((budget) => (budget.id === updated.id ? updated : budget));
+  }
+
+  return [updated, ...budgets];
 }
 
 function MetricCard({

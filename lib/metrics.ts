@@ -10,15 +10,15 @@ import {
 } from "date-fns";
 import type { Account, Category, RecurringRule, Transaction } from "./types";
 
-export const currency = new Intl.NumberFormat("en-US", {
+export const currency = new Intl.NumberFormat("th-TH", {
   style: "currency",
-  currency: "USD",
+  currency: "THB",
   maximumFractionDigits: 0
 });
 
-export const preciseCurrency = new Intl.NumberFormat("en-US", {
+export const preciseCurrency = new Intl.NumberFormat("th-TH", {
   style: "currency",
-  currency: "USD"
+  currency: "THB"
 });
 
 export function inMonth(tx: Transaction, date = new Date()) {

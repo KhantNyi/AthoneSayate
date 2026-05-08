@@ -1,10 +1,11 @@
 import { createSupabaseBrowserClient } from "./supabase";
-import type { Account, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
+import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
 
 export const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 
 export type ExpenseData = {
   accounts: Account[];
+  budgets: Budget[];
   categories: Category[];
   subcategories: Subcategory[];
   transactions: Transaction[];
@@ -52,6 +53,12 @@ export type NewGoalInput = {
   targetDate?: string;
 };
 
+export type MonthlyBudgetInput = {
+  categoryId: string;
+  month: string;
+  amount: number;
+};
+
 export async function fetchExpenseData(): Promise<ExpenseData> {
   const supabase = createSupabaseBrowserClient();
 
@@ -59,8 +66,9 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
   }
 
-  const [accountsResult, categoriesResult, subcategoriesResult, transactionsResult, recurringResult, goalsResult] = await Promise.all([
+  const [accountsResult, budgetsResult, categoriesResult, subcategoriesResult, transactionsResult, recurringResult, goalsResult] = await Promise.all([
     supabase.from("accounts").select("*").eq("archived", false).order("created_at", { ascending: true }),
+    supabase.from("budgets").select("*").order("month", { ascending: false }),
     supabase.from("categories").select("*").eq("archived", false).order("name", { ascending: true }),
     supabase.from("subcategories").select("*").eq("archived", false).order("name", { ascending: true }),
     supabase.from("transactions").select("*").order("occurred_on", { ascending: false }),
@@ -70,6 +78,7 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
 
   const firstError =
     accountsResult.error ??
+    budgetsResult.error ??
     categoriesResult.error ??
     subcategoriesResult.error ??
     transactionsResult.error ??
@@ -87,6 +96,12 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
       type: row.type,
       openingBalance: Number(row.opening_balance),
       color: row.color
+    })),
+    budgets: (budgetsResult.data ?? []).map((row) => ({
+      id: row.id,
+      categoryId: row.category_id,
+      month: row.month,
+      amount: Number(row.amount)
     })),
     categories: (categoriesResult.data ?? []).map((row) => ({
       id: row.id,
@@ -261,6 +276,39 @@ export async function updateCategoryBudget(categoryId: string, monthlyBudget: nu
     icon: data.icon,
     color: data.color,
     monthlyBudget: data.monthly_budget === null ? undefined : Number(data.monthly_budget)
+  };
+}
+
+export async function upsertMonthlyBudget(input: MonthlyBudgetInput): Promise<Budget> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("budgets")
+    .upsert(
+      {
+        user_id: DEMO_USER_ID,
+        category_id: input.categoryId,
+        month: input.month,
+        amount: input.amount
+      },
+      { onConflict: "user_id,category_id,month" }
+    )
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    categoryId: data.category_id,
+    month: data.month,
+    amount: Number(data.amount)
   };
 }
 
