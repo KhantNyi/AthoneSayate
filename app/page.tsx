@@ -36,15 +36,23 @@ import {
 import { format, parseISO } from "date-fns";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  archiveCategory,
+  archiveGoal,
+  archiveRecurringRule,
+  archiveSubcategory,
   createCategory,
   createGoal,
   createRecurringRule,
   createSubcategory,
   createTransaction,
   fetchExpenseData,
+  removeMonthlyBudget,
   removeTransaction,
+  updateCategory,
+  updateGoal,
   upsertMonthlyBudget,
-  updateGoalProgress
+  updateRecurringRule,
+  updateSubcategory
 } from "@/lib/supabase-data";
 import {
   accountBalances,
@@ -189,6 +197,24 @@ const navItems = [
 
 type TabKey = (typeof navItems)[number]["key"];
 
+type RecurringDraft = {
+  accountId: string;
+  categoryId: string;
+  type: TransactionType;
+  amount: string;
+  merchant: string;
+  frequency: RecurringRule["frequency"];
+  nextDueOn: string;
+  autoCreate: boolean;
+};
+
+type GoalDraft = {
+  name: string;
+  targetAmount: string;
+  currentAmount: string;
+  targetDate: string;
+};
+
 export default function ExpenseTrackerPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -205,6 +231,7 @@ export default function ExpenseTrackerPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [savingBudgetId, setSavingBudgetId] = useState("");
   const [savingGoalId, setSavingGoalId] = useState("");
+  const [savingRecurringId, setSavingRecurringId] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -230,11 +257,12 @@ export default function ExpenseTrackerPage() {
   const [recurringFrequency, setRecurringFrequency] = useState<RecurringRule["frequency"]>("monthly");
   const [recurringNextDueOn, setRecurringNextDueOn] = useState(format(new Date(), "yyyy-MM-dd"));
   const [recurringAutoCreate, setRecurringAutoCreate] = useState(false);
+  const [recurringDrafts, setRecurringDrafts] = useState<Record<string, RecurringDraft>>({});
   const [goalName, setGoalName] = useState("");
   const [goalTargetAmount, setGoalTargetAmount] = useState("");
   const [goalCurrentAmount, setGoalCurrentAmount] = useState("");
   const [goalTargetDate, setGoalTargetDate] = useState("");
-  const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
+  const [goalDrafts, setGoalDrafts] = useState<Record<string, GoalDraft>>({});
 
   useEffect(() => {
     let ignore = false;
@@ -268,7 +296,8 @@ export default function ExpenseTrackerPage() {
         setBudgetAmount(String(data.budgets.find((budget) => budget.categoryId === data.categories.find((category) => category.kind === "expense")?.id && budget.month.startsWith(format(new Date(), "yyyy-MM")))?.amount ?? data.categories.find((category) => category.kind === "expense")?.monthlyBudget ?? ""));
         setRecurringAccountId(data.accounts[0]?.id ?? "");
         setRecurringCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
-        setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, String(goal.currentAmount)])));
+        setRecurringDrafts(Object.fromEntries(data.recurringRules.map((rule) => [rule.id, recurringRuleToDraft(rule)])));
+        setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, goalToDraft(goal)])));
       } catch (error) {
         if (!ignore) {
           setDataError(error instanceof Error ? error.message : "Unable to load Supabase data.");
@@ -531,6 +560,7 @@ export default function ExpenseTrackerPage() {
         autoCreate: recurringAutoCreate
       });
       setRecurringRules((current) => [...current, rule]);
+      setRecurringDrafts((current) => ({ ...current, [rule.id]: recurringRuleToDraft(rule) }));
       setRecurringAmount("");
       setRecurringName("");
       setRecurringAutoCreate(false);
@@ -556,7 +586,7 @@ export default function ExpenseTrackerPage() {
         targetDate: goalTargetDate || undefined
       });
       setGoals((current) => [...current, goal]);
-      setGoalDrafts((current) => ({ ...current, [goal.id]: String(goal.currentAmount) }));
+      setGoalDrafts((current) => ({ ...current, [goal.id]: goalToDraft(goal) }));
       setGoalName("");
       setGoalTargetAmount("");
       setGoalCurrentAmount("");
@@ -568,16 +598,181 @@ export default function ExpenseTrackerPage() {
 
   async function handleUpdateGoal(event: FormEvent<HTMLFormElement>, goalId: string) {
     event.preventDefault();
+    const draft = goalDrafts[goalId];
+    const parsedTarget = Number(draft?.targetAmount);
+    const parsedCurrent = Number(draft?.currentAmount) || 0;
+
+    if (!draft?.name.trim() || !parsedTarget) {
+      setDataError("Goal needs a name and target amount.");
+      return;
+    }
+
     try {
       setDataError("");
       setSavingGoalId(goalId);
-      const updated = await updateGoalProgress(goalId, Number(goalDrafts[goalId]) || 0);
+      const updated = await updateGoal(goalId, {
+        name: draft.name.trim(),
+        targetAmount: parsedTarget,
+        currentAmount: parsedCurrent,
+        targetDate: draft.targetDate || undefined
+      });
       setGoals((current) => current.map((goal) => (goal.id === updated.id ? updated : goal)));
-      setGoalDrafts((current) => ({ ...current, [updated.id]: String(updated.currentAmount) }));
+      setGoalDrafts((current) => ({ ...current, [updated.id]: goalToDraft(updated) }));
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update goal.");
     } finally {
       setSavingGoalId("");
+    }
+  }
+
+  async function handleDeleteBudget(categoryIdToDelete: string) {
+    const budget = budgets.find((item) => item.categoryId === categoryIdToDelete && item.month.startsWith(budgetMonth));
+
+    if (!budget) {
+      setBudgetDrafts((current) => ({ ...current, [categoryIdToDelete]: "" }));
+      return;
+    }
+
+    try {
+      setDataError("");
+      setSavingBudgetId(categoryIdToDelete);
+      await removeMonthlyBudget(budget.id);
+      setBudgets((current) => current.filter((item) => item.id !== budget.id));
+      setBudgetDrafts((current) => ({ ...current, [categoryIdToDelete]: "" }));
+      if (budgetCategoryId === categoryIdToDelete) {
+        setBudgetAmount("");
+      }
+      setDataNotice(`Budget removed for ${budgetMonth}.`);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to delete budget.");
+    } finally {
+      setSavingBudgetId("");
+    }
+  }
+
+  async function handleUpdateRecurring(event: FormEvent<HTMLFormElement>, ruleId: string) {
+    event.preventDefault();
+    const draft = recurringDrafts[ruleId];
+    const parsedAmount = Number(draft?.amount);
+
+    if (!draft?.accountId || !draft.categoryId || !draft.merchant.trim() || !parsedAmount || !draft.nextDueOn) {
+      setDataError("Recurring item needs account, category, name, amount, and next due date.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      setSavingRecurringId(ruleId);
+      const updated = await updateRecurringRule(ruleId, {
+        accountId: draft.accountId,
+        categoryId: draft.categoryId,
+        type: draft.type,
+        amount: parsedAmount,
+        merchant: draft.merchant.trim(),
+        frequency: draft.frequency,
+        nextDueOn: draft.nextDueOn,
+        autoCreate: draft.autoCreate
+      });
+      setRecurringRules((current) => current.map((rule) => (rule.id === updated.id ? updated : rule)));
+      setRecurringDrafts((current) => ({ ...current, [updated.id]: recurringRuleToDraft(updated) }));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update recurring item.");
+    } finally {
+      setSavingRecurringId("");
+    }
+  }
+
+  async function handleDeleteRecurring(ruleId: string) {
+    const previous = recurringRules;
+    setRecurringRules((current) => current.filter((rule) => rule.id !== ruleId));
+
+    try {
+      setDataError("");
+      await archiveRecurringRule(ruleId);
+    } catch (error) {
+      setRecurringRules(previous);
+      setDataError(error instanceof Error ? error.message : "Unable to delete recurring item.");
+    }
+  }
+
+  async function handleDeleteGoal(goalId: string) {
+    const previous = goals;
+    setGoals((current) => current.filter((goal) => goal.id !== goalId));
+
+    try {
+      setDataError("");
+      await archiveGoal(goalId);
+    } catch (error) {
+      setGoals(previous);
+      setDataError(error instanceof Error ? error.message : "Unable to delete goal.");
+    }
+  }
+
+  async function handleUpdateCategory(categoryIdToUpdate: string, input: { name: string; kind: TransactionType; monthlyBudget: string }) {
+    const parsedBudget = Number(input.monthlyBudget);
+
+    if (!input.name.trim()) {
+      setDataError("Category needs a name.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      const updated = await updateCategory(categoryIdToUpdate, {
+        name: input.name.trim(),
+        kind: input.kind,
+        monthlyBudget: input.monthlyBudget.trim() ? parsedBudget : undefined
+      });
+      setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update category.");
+    }
+  }
+
+  async function handleDeleteCategory(categoryIdToDelete: string) {
+    const previousCategories = categories;
+    const previousSubcategories = subcategories;
+    setCategories((current) => current.filter((category) => category.id !== categoryIdToDelete));
+    setSubcategories((current) => current.filter((subcategory) => subcategory.categoryId !== categoryIdToDelete));
+
+    try {
+      setDataError("");
+      await archiveCategory(categoryIdToDelete);
+    } catch (error) {
+      setCategories(previousCategories);
+      setSubcategories(previousSubcategories);
+      setDataError(error instanceof Error ? error.message : "Unable to delete category.");
+    }
+  }
+
+  async function handleUpdateSubcategory(subcategoryIdToUpdate: string, input: { categoryId: string; name: string }) {
+    if (!input.categoryId || !input.name.trim()) {
+      setDataError("Subcategory needs a category and name.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      const updated = await updateSubcategory(subcategoryIdToUpdate, {
+        categoryId: input.categoryId,
+        name: input.name.trim()
+      });
+      setSubcategories((current) => current.map((subcategory) => (subcategory.id === updated.id ? updated : subcategory)).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update subcategory.");
+    }
+  }
+
+  async function handleDeleteSubcategory(subcategoryIdToDelete: string) {
+    const previous = subcategories;
+    setSubcategories((current) => current.filter((subcategory) => subcategory.id !== subcategoryIdToDelete));
+
+    try {
+      setDataError("");
+      await archiveSubcategory(subcategoryIdToDelete);
+    } catch (error) {
+      setSubcategories(previous);
+      setDataError(error instanceof Error ? error.message : "Unable to delete subcategory.");
     }
   }
 
@@ -870,7 +1065,7 @@ export default function ExpenseTrackerPage() {
                           {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget for {budgetMonth}
                         </p>
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:w-56">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-72">
                         <input
                           value={budgetDrafts[row.id] ?? ""}
                           onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
@@ -880,6 +1075,9 @@ export default function ExpenseTrackerPage() {
                         />
                         <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === row.id}>
                           {savingBudgetId === row.id ? "Saving" : "Save"}
+                        </button>
+                        <button type="button" aria-label="Delete budget" onClick={() => handleDeleteBudget(row.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral" disabled={savingBudgetId === row.id}>
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>
@@ -933,15 +1131,61 @@ export default function ExpenseTrackerPage() {
               </form>
               <div className="space-y-3">
                 {upcoming.map((rule) => {
-                  const category = categories.find((item) => item.id === rule.categoryId);
+                  const draft = recurringDrafts[rule.id] ?? recurringRuleToDraft(rule);
                   return (
-                    <div key={rule.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink/10 bg-white px-3 py-3">
-                      <div className="min-w-0">
+                    <form key={rule.id} onSubmit={(event) => handleUpdateRecurring(event, rule.id)} className="rounded-lg border border-ink/10 bg-white p-3">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium">{rule.merchant}</p>
-                        <p className="break-words text-sm text-ink/55">{categoryLabel(category?.name)} - {frequencyLabel(rule.frequency)} - {t.dueIn} {rule.daysUntilDue}</p>
+                        <strong className={`shrink-0 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{currency.format(rule.amount)}</strong>
                       </div>
-                      <strong className={`shrink-0 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{currency.format(rule.amount)}</strong>
-                    </div>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_130px_130px_auto_auto]">
+                        <select
+                          value={draft.type}
+                          onChange={(event) => {
+                            const nextType = event.target.value as TransactionType;
+                            const nextCategoryId = categories.find((category) => category.kind === nextType)?.id ?? "";
+                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, type: nextType, categoryId: nextCategoryId } }));
+                          }}
+                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        >
+                          <option value="expense">{t.expense}</option>
+                          <option value="income">{t.income}</option>
+                        </select>
+                        <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+                        <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
+                        <select value={draft.categoryId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                          {categories.filter((category) => category.kind === draft.type).map((category) => (
+                            <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                          ))}
+                        </select>
+                        <select value={draft.frequency} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, frequency: event.target.value as RecurringRule["frequency"] } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                          <option value="weekly">Weekly</option>
+                          <option value="biweekly">Biweekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                        <input type="date" value={draft.nextDueOn} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, nextDueOn: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingRecurringId === rule.id}>
+                          {savingRecurringId === rule.id ? "Saving" : "Save"}
+                        </button>
+                        <button type="button" aria-label="Delete recurring item" onClick={() => handleDeleteRecurring(rule.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ink/55">
+                        <select value={draft.accountId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, accountId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>{account.name}</option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={draft.autoCreate} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, autoCreate: event.target.checked } }))} />
+                          Auto-create
+                        </label>
+                        <span>{frequencyLabel(rule.frequency)} - {t.dueIn} {rule.daysUntilDue}</span>
+                      </div>
+                    </form>
                   );
                 })}
               </div>
@@ -967,23 +1211,43 @@ export default function ExpenseTrackerPage() {
               </div>
             </form>
             <div className="space-y-4">
-              {goals.map((goal) => (
+              {goals.map((goal) => {
+                const draft = goalDrafts[goal.id] ?? goalToDraft(goal);
+
+                return (
                 <div key={goal.id} className="rounded-lg border border-ink/10 bg-white p-3">
                   <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                     <div className="min-w-0">
                       <p className="font-medium">{goal.name}</p>
                       <p className="text-ink/60">{currency.format(goal.currentAmount)} / {currency.format(goal.targetAmount)}</p>
                     </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:w-56">
+                    <div className="grid gap-2 sm:grid-cols-2 md:w-[520px] md:grid-cols-[minmax(0,1fr)_110px_110px_132px_auto_auto]">
                       <input
-                        value={goalDrafts[goal.id] ?? ""}
-                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: event.target.value }))}
+                        value={draft.name}
+                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, name: event.target.value } }))}
+                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        placeholder="Name"
+                      />
+                      <input
+                        value={draft.targetAmount}
+                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetAmount: event.target.value } }))}
+                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        inputMode="decimal"
+                        placeholder="Target"
+                      />
+                      <input
+                        value={draft.currentAmount}
+                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, currentAmount: event.target.value } }))}
                         className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                         inputMode="decimal"
                         placeholder="Saved"
                       />
+                      <input type="date" value={draft.targetDate} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetDate: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
                       <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingGoalId === goal.id}>
                         {savingGoalId === goal.id ? "Saving" : "Save"}
+                      </button>
+                      <button type="button" aria-label="Delete goal" onClick={() => handleDeleteGoal(goal.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </form>
@@ -991,7 +1255,8 @@ export default function ExpenseTrackerPage() {
                     <div className="h-full rounded-full" style={{ width: `${(goal.currentAmount / goal.targetAmount) * 100}%`, background: goal.color }} />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Panel>
           )}
@@ -1029,6 +1294,10 @@ export default function ExpenseTrackerPage() {
               onSubcategoryCategoryChange={setNewSubcategoryCategoryId}
               onCreateCategory={handleCreateCategory}
               onCreateSubcategory={handleCreateSubcategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onUpdateSubcategory={handleUpdateSubcategory}
+              onDeleteSubcategory={handleDeleteSubcategory}
             />
           </Panel>
           )}
@@ -1081,6 +1350,28 @@ function upsertBudgetInState(budgets: Budget[], updated: Budget) {
   return [updated, ...budgets];
 }
 
+function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {
+  return {
+    accountId: rule.accountId,
+    categoryId: rule.categoryId ?? "",
+    type: rule.type,
+    amount: String(rule.amount),
+    merchant: rule.merchant,
+    frequency: rule.frequency,
+    nextDueOn: rule.nextDueOn,
+    autoCreate: rule.autoCreate
+  };
+}
+
+function goalToDraft(goal: Goal): GoalDraft {
+  return {
+    name: goal.name,
+    targetAmount: String(goal.targetAmount),
+    currentAmount: String(goal.currentAmount),
+    targetDate: goal.targetDate ?? ""
+  };
+}
+
 function MetricCard({
   icon: Icon,
   label,
@@ -1129,7 +1420,11 @@ function CategoryManager({
   onSubcategoryNameChange,
   onSubcategoryCategoryChange,
   onCreateCategory,
-  onCreateSubcategory
+  onCreateSubcategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  onUpdateSubcategory,
+  onDeleteSubcategory
 }: {
   categories: Category[];
   subcategories: Subcategory[];
@@ -1145,7 +1440,29 @@ function CategoryManager({
   onSubcategoryCategoryChange: (value: string) => void;
   onCreateCategory: (event: FormEvent<HTMLFormElement>) => void;
   onCreateSubcategory: (event: FormEvent<HTMLFormElement>) => void;
+  onUpdateCategory: (id: string, input: { name: string; kind: TransactionType; monthlyBudget: string }) => void;
+  onDeleteCategory: (id: string) => void;
+  onUpdateSubcategory: (id: string, input: { categoryId: string; name: string }) => void;
+  onDeleteSubcategory: (id: string) => void;
 }) {
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; kind: TransactionType; monthlyBudget: string }>>({});
+  const [subcategoryDrafts, setSubcategoryDrafts] = useState<Record<string, { categoryId: string; name: string }>>({});
+
+  useEffect(() => {
+    setCategoryDrafts(Object.fromEntries(categories.map((category) => [category.id, {
+      name: category.name,
+      kind: category.kind,
+      monthlyBudget: String(category.monthlyBudget ?? "")
+    }])));
+  }, [categories]);
+
+  useEffect(() => {
+    setSubcategoryDrafts(Object.fromEntries(subcategories.map((subcategory) => [subcategory.id, {
+      categoryId: subcategory.categoryId,
+      name: subcategory.name
+    }])));
+  }, [subcategories]);
+
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="grid gap-4">
@@ -1210,18 +1527,72 @@ function CategoryManager({
       <div className="space-y-3">
         {categories.map((category) => {
           const children = subcategories.filter((subcategory) => subcategory.categoryId === category.id);
+          const categoryDraft = categoryDrafts[category.id] ?? {
+            name: category.name,
+            kind: category.kind,
+            monthlyBudget: String(category.monthlyBudget ?? "")
+          };
           return (
             <div key={category.id} className="rounded-lg border border-ink/10 bg-white p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+              <form onSubmit={(event) => {
+                event.preventDefault();
+                onUpdateCategory(category.id, categoryDraft);
+              }} className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_120px_120px_auto_auto]">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="size-3 rounded-full" style={{ background: category.color }} />
-                  <h3 className="font-semibold">{category.name}</h3>
+                  <input
+                    value={categoryDraft.name}
+                    onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, name: event.target.value } }))}
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold"
+                    placeholder="Category name"
+                  />
                 </div>
-                <span className="rounded-md bg-ink/5 px-2 py-1 text-xs uppercase text-ink/55">{category.kind}</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
+                <select
+                  value={categoryDraft.kind}
+                  onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, kind: event.target.value as TransactionType } }))}
+                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                >
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </select>
+                <input
+                  value={categoryDraft.monthlyBudget}
+                  onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, monthlyBudget: event.target.value } }))}
+                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  inputMode="decimal"
+                  placeholder="Budget"
+                />
+                <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">Save</button>
+                <button type="button" aria-label="Delete category" onClick={() => onDeleteCategory(category.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                  <Trash2 size={16} />
+                </button>
+              </form>
+              <div className="grid gap-2">
                 {children.length > 0 ? children.map((subcategory) => (
-                  <span key={subcategory.id} className="rounded-md border border-ink/10 px-2 py-1 text-sm text-ink/70">{subcategory.name}</span>
+                  <form key={subcategory.id} onSubmit={(event) => {
+                    event.preventDefault();
+                    onUpdateSubcategory(subcategory.id, subcategoryDrafts[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name });
+                  }} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(150px,0.6fr)_auto_auto]">
+                    <input
+                      value={subcategoryDrafts[subcategory.id]?.name ?? subcategory.name}
+                      onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...(current[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name }), name: event.target.value } }))}
+                      className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                      placeholder="Subcategory"
+                    />
+                    <select
+                      value={subcategoryDrafts[subcategory.id]?.categoryId ?? subcategory.categoryId}
+                      onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...(current[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name }), categoryId: event.target.value } }))}
+                      className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                    >
+                      {categories.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                    <button className="h-9 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">Save</button>
+                    <button type="button" aria-label="Delete subcategory" onClick={() => onDeleteSubcategory(subcategory.id)} className="grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                      <Trash2 size={15} />
+                    </button>
+                  </form>
                 )) : (
                   <span className="text-sm text-ink/45">No subcategories yet</span>
                 )}

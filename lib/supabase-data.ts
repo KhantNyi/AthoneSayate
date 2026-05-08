@@ -30,6 +30,8 @@ export type NewCategoryInput = {
   monthlyBudget?: number;
 };
 
+export type UpdateCategoryInput = NewCategoryInput;
+
 export type NewSubcategoryInput = {
   categoryId: string;
   name: string;
@@ -46,12 +48,16 @@ export type NewRecurringRuleInput = {
   autoCreate: boolean;
 };
 
+export type UpdateRecurringRuleInput = NewRecurringRuleInput;
+
 export type NewGoalInput = {
   name: string;
   targetAmount: number;
   currentAmount: number;
   targetDate?: string;
 };
+
+export type UpdateGoalInput = NewGoalInput;
 
 export type MonthlyBudgetInput = {
   categoryId: string;
@@ -223,6 +229,52 @@ export async function createCategory(input: NewCategoryInput): Promise<Category>
   };
 }
 
+export async function updateCategory(id: string, input: UpdateCategoryInput): Promise<Category> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("categories")
+    .update({
+      name: input.name,
+      kind: input.kind,
+      monthly_budget: input.kind === "expense" ? input.monthlyBudget ?? null : null
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    kind: data.kind,
+    icon: data.icon,
+    color: data.color,
+    monthlyBudget: data.monthly_budget === null ? undefined : Number(data.monthly_budget)
+  };
+}
+
+export async function archiveCategory(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("categories").update({ archived: true }).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function createSubcategory(input: NewSubcategoryInput): Promise<Subcategory> {
   const supabase = createSupabaseBrowserClient();
 
@@ -249,6 +301,48 @@ export async function createSubcategory(input: NewSubcategoryInput): Promise<Sub
     categoryId: data.category_id,
     name: data.name
   };
+}
+
+export async function updateSubcategory(id: string, input: NewSubcategoryInput): Promise<Subcategory> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("subcategories")
+    .update({
+      category_id: input.categoryId,
+      name: input.name
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    categoryId: data.category_id,
+    name: data.name
+  };
+}
+
+export async function archiveSubcategory(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("subcategories").update({ archived: true }).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function updateCategoryBudget(categoryId: string, monthlyBudget: number | null): Promise<Category> {
@@ -312,6 +406,20 @@ export async function upsertMonthlyBudget(input: MonthlyBudgetInput): Promise<Bu
   };
 }
 
+export async function removeMonthlyBudget(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("budgets").delete().eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function createRecurringRule(input: NewRecurringRuleInput): Promise<RecurringRule> {
   const supabase = createSupabaseBrowserClient();
 
@@ -352,6 +460,60 @@ export async function createRecurringRule(input: NewRecurringRuleInput): Promise
   };
 }
 
+export async function updateRecurringRule(id: string, input: UpdateRecurringRuleInput): Promise<RecurringRule> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("recurring_rules")
+    .update({
+      account_id: input.accountId,
+      category_id: input.categoryId,
+      type: input.type,
+      amount: input.amount,
+      merchant: input.merchant,
+      frequency: input.frequency,
+      next_due_on: input.nextDueOn,
+      auto_create: input.autoCreate
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    accountId: data.account_id,
+    categoryId: data.category_id ?? undefined,
+    type: data.type,
+    amount: Number(data.amount),
+    merchant: data.merchant,
+    frequency: data.frequency,
+    nextDueOn: data.next_due_on,
+    autoCreate: data.auto_create
+  };
+}
+
+export async function archiveRecurringRule(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("recurring_rules").update({ active: false }).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function createGoal(input: NewGoalInput): Promise<Goal> {
   const supabase = createSupabaseBrowserClient();
 
@@ -368,6 +530,39 @@ export async function createGoal(input: NewGoalInput): Promise<Goal> {
       current_amount: input.currentAmount,
       target_date: input.targetDate || null
     })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    targetAmount: Number(data.target_amount),
+    currentAmount: Number(data.current_amount),
+    targetDate: data.target_date,
+    color: data.color
+  };
+}
+
+export async function updateGoal(id: string, input: UpdateGoalInput): Promise<Goal> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("goals")
+    .update({
+      name: input.name,
+      target_amount: input.targetAmount,
+      current_amount: input.currentAmount,
+      target_date: input.targetDate || null
+    })
+    .eq("id", id)
     .select("*")
     .single();
 
@@ -411,6 +606,20 @@ export async function updateGoalProgress(goalId: string, currentAmount: number):
     targetDate: data.target_date,
     color: data.color
   };
+}
+
+export async function archiveGoal(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("goals").update({ archived: true }).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function removeTransaction(id: string) {
