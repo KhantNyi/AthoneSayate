@@ -201,6 +201,8 @@ export default function ExpenseTrackerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [savingBudgetId, setSavingBudgetId] = useState("");
+  const [savingGoalId, setSavingGoalId] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -410,14 +412,26 @@ export default function ExpenseTrackerPage() {
     }
   }
 
-  async function handleSaveBudget(categoryIdToUpdate: string) {
+  async function handleSaveBudget(event: FormEvent<HTMLFormElement>, categoryIdToUpdate: string) {
+    event.preventDefault();
     try {
       setDataError("");
+      setSavingBudgetId(categoryIdToUpdate);
       const draft = budgetDrafts[categoryIdToUpdate]?.trim();
-      const updated = await updateCategoryBudget(categoryIdToUpdate, draft ? Number(draft) : null);
+      const parsedBudget = draft ? Number(draft) : null;
+
+      if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
+        setDataError("Budget must be a positive number.");
+        return;
+      }
+
+      const updated = await updateCategoryBudget(categoryIdToUpdate, parsedBudget);
       setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+      setBudgetDrafts((current) => ({ ...current, [updated.id]: String(updated.monthlyBudget ?? "") }));
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update budget.");
+    } finally {
+      setSavingBudgetId("");
     }
   }
 
@@ -476,13 +490,18 @@ export default function ExpenseTrackerPage() {
     }
   }
 
-  async function handleUpdateGoal(goalId: string) {
+  async function handleUpdateGoal(event: FormEvent<HTMLFormElement>, goalId: string) {
+    event.preventDefault();
     try {
       setDataError("");
+      setSavingGoalId(goalId);
       const updated = await updateGoalProgress(goalId, Number(goalDrafts[goalId]) || 0);
       setGoals((current) => current.map((goal) => (goal.id === updated.id ? updated : goal)));
+      setGoalDrafts((current) => ({ ...current, [updated.id]: String(updated.currentAmount) }));
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update goal.");
+    } finally {
+      setSavingGoalId("");
     }
   }
 
@@ -734,31 +753,31 @@ export default function ExpenseTrackerPage() {
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
               <div className="space-y-4">
                 {budgetRows.map((row) => (
-                  <div key={row.id} className="rounded-lg border border-ink/10 bg-white p-3">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <div>
+                  <form key={row.id} onSubmit={(event) => handleSaveBudget(event, row.id)} className="rounded-lg border border-ink/10 bg-white p-3">
+                    <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                      <div className="min-w-0">
                         <p className="font-medium">{categoryLabel(row.name)}</p>
                         <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
                           {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:w-56">
                         <input
                           value={budgetDrafts[row.id] ?? ""}
                           onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
-                          className="h-10 w-32 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                          className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                           inputMode="decimal"
                           placeholder="Budget"
                         />
-                        <button type="button" onClick={() => handleSaveBudget(row.id)} className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">
-                          Save
+                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === row.id}>
+                          {savingBudgetId === row.id ? "Saving" : "Save"}
                         </button>
                       </div>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#bd5b4b" : row.color }} />
                     </div>
-                  </div>
+                  </form>
                 ))}
               </div>
             </Panel>
@@ -819,15 +838,15 @@ export default function ExpenseTrackerPage() {
           </div>}
         </section>
 
-        <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4 xl:grid-cols-3" : "hidden"}>
+        <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4" : "hidden"}>
           {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
-            <form onSubmit={handleCreateGoal} className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_140px_140px_145px_auto]">
+            <form onSubmit={handleCreateGoal} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_minmax(110px,140px)_minmax(110px,140px)_minmax(135px,145px)]">
               <input value={goalName} onChange={(event) => setGoalName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Goal name" />
               <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
               <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
               <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-              <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper">
+              <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-full">
                 <Plus size={17} />
                 Add goal
               </button>
@@ -835,24 +854,24 @@ export default function ExpenseTrackerPage() {
             <div className="space-y-4">
               {goals.map((goal) => (
                 <div key={goal.id} className="rounded-lg border border-ink/10 bg-white p-3">
-                  <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm">
-                    <div>
+                  <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                    <div className="min-w-0">
                       <p className="font-medium">{goal.name}</p>
                       <p className="text-ink/60">{currency.format(goal.currentAmount)} / {currency.format(goal.targetAmount)}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:w-56">
                       <input
                         value={goalDrafts[goal.id] ?? ""}
                         onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: event.target.value }))}
-                        className="h-10 w-32 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                         inputMode="decimal"
                         placeholder="Saved"
                       />
-                      <button type="button" onClick={() => handleUpdateGoal(goal.id)} className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">
-                        Save
+                      <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingGoalId === goal.id}>
+                        {savingGoalId === goal.id ? "Saving" : "Save"}
                       </button>
                     </div>
-                  </div>
+                  </form>
                   <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
                     <div className="h-full rounded-full" style={{ width: `${(goal.currentAmount / goal.targetAmount) * 100}%`, background: goal.color }} />
                   </div>
