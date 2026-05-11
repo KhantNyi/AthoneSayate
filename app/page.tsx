@@ -36,6 +36,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  archiveAccount,
   archiveCategory,
   archiveGoal,
   archiveRecurringRule,
@@ -48,7 +49,9 @@ import {
   fetchExpenseData,
   removeMonthlyBudget,
   removeTransaction,
+  updateAccount,
   updateCategory,
+  updateCategoryBudget,
   updateGoal,
   upsertMonthlyBudget,
   updateRecurringRule,
@@ -67,7 +70,7 @@ import {
   upcomingRules,
   weekdaySpend
 } from "@/lib/metrics";
-import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
+import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
 
 type Language = "en" | "my";
 
@@ -215,6 +218,13 @@ type GoalDraft = {
   targetDate: string;
 };
 
+type AccountDraft = {
+  name: string;
+  type: AccountType;
+  openingBalance: string;
+  color: string;
+};
+
 export default function ExpenseTrackerPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -232,6 +242,7 @@ export default function ExpenseTrackerPage() {
   const [savingBudgetId, setSavingBudgetId] = useState("");
   const [savingGoalId, setSavingGoalId] = useState("");
   const [savingRecurringId, setSavingRecurringId] = useState("");
+  const [savingAccountId, setSavingAccountId] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -263,6 +274,7 @@ export default function ExpenseTrackerPage() {
   const [goalCurrentAmount, setGoalCurrentAmount] = useState("");
   const [goalTargetDate, setGoalTargetDate] = useState("");
   const [goalDrafts, setGoalDrafts] = useState<Record<string, GoalDraft>>({});
+  const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
 
   useEffect(() => {
     let ignore = false;
@@ -278,6 +290,7 @@ export default function ExpenseTrackerPage() {
         }
 
         setAccounts(data.accounts);
+        setAccountDrafts(Object.fromEntries(data.accounts.map((account) => [account.id, accountToDraft(account)])));
         setBudgets(data.budgets);
         setCategories(data.categories);
         setSubcategories(data.subcategories);
@@ -361,7 +374,7 @@ export default function ExpenseTrackerPage() {
   const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, currentBudgetMonth), [categories, budgets, currentBudgetMonth]);
   const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, budgetMonth), [categories, budgets, budgetMonth]);
   const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, monthTx), [categoriesForCurrentMonth, monthTx]);
-  const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, monthTx), [categoriesForBudgetMonth, monthTx]);
+  const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, monthTx).filter((row) => row.monthlyBudget !== undefined), [categoriesForBudgetMonth, monthTx]);
   const comparison = useMemo(() => monthlyComparison(transactions), [transactions]);
   const daily = useMemo(() => dailySeries(monthTx), [monthTx]);
   const weekday = useMemo(() => weekdaySpend(monthTx), [monthTx]);
@@ -626,25 +639,42 @@ export default function ExpenseTrackerPage() {
   }
 
   async function handleDeleteBudget(categoryIdToDelete: string) {
-    const budget = budgets.find((item) => item.categoryId === categoryIdToDelete && item.month.startsWith(budgetMonth));
+    const category = categories.find((item) => item.id === categoryIdToDelete);
+    const categoryBudgets = budgets.filter((item) => item.categoryId === categoryIdToDelete);
 
-    if (!budget) {
-      setBudgetDrafts((current) => ({ ...current, [categoryIdToDelete]: "" }));
+    if (!category) {
       return;
+    }
+
+    const previousCategories = categories;
+    const previousBudgets = budgets;
+
+    setCategories((current) => current.map((item) => item.id === categoryIdToDelete ? { ...item, monthlyBudget: undefined } : item));
+    setBudgets((current) => current.filter((item) => item.categoryId !== categoryIdToDelete));
+    setBudgetDrafts((current) => {
+      const next = { ...current };
+      delete next[categoryIdToDelete];
+      return next;
+    });
+
+    if (budgetCategoryId === categoryIdToDelete) {
+      const nextCategory = categories.find((item) => item.kind === "expense" && item.id !== categoryIdToDelete);
+      setBudgetCategoryId(nextCategory?.id ?? "");
+      setBudgetAmount("");
     }
 
     try {
       setDataError("");
       setSavingBudgetId(categoryIdToDelete);
-      await removeMonthlyBudget(budget.id);
-      setBudgets((current) => current.filter((item) => item.id !== budget.id));
-      setBudgetDrafts((current) => ({ ...current, [categoryIdToDelete]: "" }));
-      if (budgetCategoryId === categoryIdToDelete) {
-        setBudgetAmount("");
-      }
-      setDataNotice(`Budget removed for ${budgetMonth}.`);
+      await Promise.all([
+        category.monthlyBudget !== undefined ? updateCategoryBudget(categoryIdToDelete, null) : Promise.resolve(),
+        ...categoryBudgets.map((budget) => removeMonthlyBudget(budget.id))
+      ]);
+      setDataNotice(`${category.name} removed from budgets.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to delete budget.");
+      setCategories(previousCategories);
+      setBudgets(previousBudgets);
+      setDataError(error instanceof Error ? error.message : "Unable to remove budget category.");
     } finally {
       setSavingBudgetId("");
     }
@@ -773,6 +803,56 @@ export default function ExpenseTrackerPage() {
     } catch (error) {
       setSubcategories(previous);
       setDataError(error instanceof Error ? error.message : "Unable to delete subcategory.");
+    }
+  }
+
+  async function handleUpdateAccount(event: FormEvent<HTMLFormElement>, accountIdToUpdate: string) {
+    event.preventDefault();
+    const draft = accountDrafts[accountIdToUpdate];
+    const parsedOpeningBalance = Number(draft?.openingBalance);
+
+    if (!draft?.name.trim() || !Number.isFinite(parsedOpeningBalance)) {
+      setDataError("Account needs a name and valid opening balance.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      setSavingAccountId(accountIdToUpdate);
+      const updated = await updateAccount(accountIdToUpdate, {
+        name: draft.name.trim(),
+        type: draft.type,
+        openingBalance: parsedOpeningBalance,
+        color: draft.color || "#3d7485"
+      });
+      setAccounts((current) => current.map((account) => account.id === updated.id ? updated : account));
+      setAccountDrafts((current) => ({ ...current, [updated.id]: accountToDraft(updated) }));
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update account.");
+    } finally {
+      setSavingAccountId("");
+    }
+  }
+
+  async function handleDeleteAccount(accountIdToDelete: string) {
+    const previous = accounts;
+    const nextAccounts = accounts.filter((account) => account.id !== accountIdToDelete);
+    setAccounts(nextAccounts);
+
+    if (accountId === accountIdToDelete) {
+      setAccountId(nextAccounts[0]?.id ?? "");
+    }
+
+    if (recurringAccountId === accountIdToDelete) {
+      setRecurringAccountId(nextAccounts[0]?.id ?? "");
+    }
+
+    try {
+      setDataError("");
+      await archiveAccount(accountIdToDelete);
+    } catch (error) {
+      setAccounts(previous);
+      setDataError(error instanceof Error ? error.message : "Unable to delete account.");
     }
   }
 
@@ -1076,7 +1156,7 @@ export default function ExpenseTrackerPage() {
                         <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === row.id}>
                           {savingBudgetId === row.id ? "Saving" : "Save"}
                         </button>
-                        <button type="button" aria-label="Delete budget" onClick={() => handleDeleteBudget(row.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral" disabled={savingBudgetId === row.id}>
+                        <button type="button" aria-label="Delete budget category" onClick={() => handleDeleteBudget(row.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral" disabled={savingBudgetId === row.id}>
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -1278,27 +1358,84 @@ export default function ExpenseTrackerPage() {
           )}
 
           {activeTab === "settings" && (
-          <Panel id="settings" title="Categories" action="Manage categories and subcategories">
-            <CategoryManager
-              categories={categories}
-              subcategories={subcategories}
-              newCategoryName={newCategoryName}
-              newCategoryKind={newCategoryKind}
-              newCategoryBudget={newCategoryBudget}
-              newSubcategoryName={newSubcategoryName}
-              newSubcategoryCategoryId={newSubcategoryCategoryId}
-              onCategoryNameChange={setNewCategoryName}
-              onCategoryKindChange={setNewCategoryKind}
-              onCategoryBudgetChange={setNewCategoryBudget}
-              onSubcategoryNameChange={setNewSubcategoryName}
-              onSubcategoryCategoryChange={setNewSubcategoryCategoryId}
-              onCreateCategory={handleCreateCategory}
-              onCreateSubcategory={handleCreateSubcategory}
-              onUpdateCategory={handleUpdateCategory}
-              onDeleteCategory={handleDeleteCategory}
-              onUpdateSubcategory={handleUpdateSubcategory}
-              onDeleteSubcategory={handleDeleteSubcategory}
-            />
+          <Panel id="settings" title="Settings" action="Manage accounts, categories and subcategories">
+            <div className="grid gap-4">
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 font-semibold">Banking accounts</h3>
+                <div className="grid gap-2">
+                  {balances.map((account) => {
+                    const draft = accountDrafts[account.id] ?? accountToDraft(account);
+
+                    return (
+                      <form key={account.id} onSubmit={(event) => handleUpdateAccount(event, account.id)} className="grid gap-2 rounded-lg border border-ink/10 p-2 md:grid-cols-[minmax(0,1fr)_140px_130px_92px_110px_auto] md:items-center">
+                        <div className="min-w-0">
+                          <input
+                            value={draft.name}
+                            onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))}
+                            className="h-10 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold"
+                            placeholder="Account name"
+                          />
+                          <p className="mt-1 text-xs text-ink/55">Current balance: {currency.format(account.balance)}</p>
+                        </div>
+                        <select
+                          value={draft.type}
+                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, type: event.target.value as AccountType } }))}
+                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="checking">Checking</option>
+                          <option value="savings">Savings</option>
+                          <option value="credit_card">Credit card</option>
+                          <option value="wallet">Wallet</option>
+                          <option value="investment">Investment</option>
+                        </select>
+                        <input
+                          value={draft.openingBalance}
+                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))}
+                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                          inputMode="decimal"
+                          placeholder="Opening"
+                        />
+                        <input
+                          type="color"
+                          value={draft.color}
+                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, color: event.target.value } }))}
+                          className="h-10 w-full rounded-lg border border-ink/10 bg-white px-2"
+                          aria-label="Account color"
+                        />
+                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingAccountId === account.id}>
+                          {savingAccountId === account.id ? "Saving" : "Save"}
+                        </button>
+                        <button type="button" aria-label="Delete account" onClick={() => handleDeleteAccount(account.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                          <Trash2 size={16} />
+                        </button>
+                      </form>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <CategoryManager
+                categories={categories}
+                subcategories={subcategories}
+                newCategoryName={newCategoryName}
+                newCategoryKind={newCategoryKind}
+                newCategoryBudget={newCategoryBudget}
+                newSubcategoryName={newSubcategoryName}
+                newSubcategoryCategoryId={newSubcategoryCategoryId}
+                onCategoryNameChange={setNewCategoryName}
+                onCategoryKindChange={setNewCategoryKind}
+                onCategoryBudgetChange={setNewCategoryBudget}
+                onSubcategoryNameChange={setNewSubcategoryName}
+                onSubcategoryCategoryChange={setNewSubcategoryCategoryId}
+                onCreateCategory={handleCreateCategory}
+                onCreateSubcategory={handleCreateSubcategory}
+                onUpdateCategory={handleUpdateCategory}
+                onDeleteCategory={handleDeleteCategory}
+                onUpdateSubcategory={handleUpdateSubcategory}
+                onDeleteSubcategory={handleDeleteSubcategory}
+              />
+            </div>
           </Panel>
           )}
 
@@ -1369,6 +1506,15 @@ function goalToDraft(goal: Goal): GoalDraft {
     targetAmount: String(goal.targetAmount),
     currentAmount: String(goal.currentAmount),
     targetDate: goal.targetDate ?? ""
+  };
+}
+
+function accountToDraft(account: Account): AccountDraft {
+  return {
+    name: account.name,
+    type: account.type,
+    openingBalance: String(account.openingBalance),
+    color: account.color
   };
 }
 

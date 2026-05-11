@@ -1,5 +1,5 @@
 import { createSupabaseBrowserClient } from "./supabase";
-import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
+import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
 
 export const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -11,6 +11,13 @@ export type ExpenseData = {
   transactions: Transaction[];
   recurringRules: RecurringRule[];
   goals: Goal[];
+};
+
+export type UpdateAccountInput = {
+  name: string;
+  type: AccountType;
+  openingBalance: number;
+  color: string;
 };
 
 export type NewTransactionInput = {
@@ -195,6 +202,52 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
     notes: data.notes,
     isRecurring: data.is_recurring
   };
+}
+
+export async function updateAccount(id: string, input: UpdateAccountInput): Promise<Account> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .update({
+      name: input.name,
+      type: input.type,
+      opening_balance: input.openingBalance,
+      color: input.color
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    type: data.type,
+    openingBalance: Number(data.opening_balance),
+    color: data.color
+  };
+}
+
+export async function archiveAccount(id: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("accounts").update({ archived: true }).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function createCategory(input: NewCategoryInput): Promise<Category> {
