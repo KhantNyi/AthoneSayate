@@ -203,6 +203,7 @@ type TabKey = (typeof navItems)[number]["key"];
 type RecurringDraft = {
   accountId: string;
   categoryId: string;
+  subcategoryId: string;
   type: TransactionType;
   amount: string;
   merchant: string;
@@ -263,6 +264,7 @@ export default function ExpenseTrackerPage() {
   const [recurringType, setRecurringType] = useState<TransactionType>("expense");
   const [recurringAccountId, setRecurringAccountId] = useState("");
   const [recurringCategoryId, setRecurringCategoryId] = useState("");
+  const [recurringSubcategoryId, setRecurringSubcategoryId] = useState("");
   const [recurringAmount, setRecurringAmount] = useState("");
   const [recurringName, setRecurringName] = useState("");
   const [recurringFrequency, setRecurringFrequency] = useState<RecurringRule["frequency"]>("monthly");
@@ -352,6 +354,14 @@ export default function ExpenseTrackerPage() {
       setRecurringCategoryId(categories.find((category) => category.kind === recurringType)?.id ?? "");
     }
   }, [categories, recurringCategoryId, recurringType]);
+
+  useEffect(() => {
+    const categorySubcategories = subcategories.filter((item) => item.categoryId === recurringCategoryId);
+
+    if (!categorySubcategories.some((item) => item.id === recurringSubcategoryId)) {
+      setRecurringSubcategoryId(categorySubcategories[0]?.id ?? "");
+    }
+  }, [recurringCategoryId, recurringSubcategoryId, subcategories]);
 
   useEffect(() => {
     const selectedBudgetCategory = categories.find((category) => category.id === budgetCategoryId);
@@ -565,6 +575,7 @@ export default function ExpenseTrackerPage() {
       const rule = await createRecurringRule({
         accountId: recurringAccountId,
         categoryId: recurringCategoryId,
+        subcategoryId: recurringSubcategoryId || undefined,
         type: recurringType,
         amount: parsedAmount,
         merchant: recurringName.trim(),
@@ -696,6 +707,7 @@ export default function ExpenseTrackerPage() {
       const updated = await updateRecurringRule(ruleId, {
         accountId: draft.accountId,
         categoryId: draft.categoryId,
+        subcategoryId: draft.subcategoryId || undefined,
         type: draft.type,
         amount: parsedAmount,
         merchant: draft.merchant.trim(),
@@ -1186,6 +1198,12 @@ export default function ExpenseTrackerPage() {
                       <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
                     ))}
                   </select>
+                  <select value={recurringSubcategoryId} onChange={(event) => setRecurringSubcategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <option value="">No subcategory</option>
+                    {subcategories.filter((subcategory) => subcategory.categoryId === recurringCategoryId).map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                    ))}
+                  </select>
                   <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>{account.name}</option>
@@ -1212,19 +1230,21 @@ export default function ExpenseTrackerPage() {
               <div className="space-y-3">
                 {upcoming.map((rule) => {
                   const draft = recurringDrafts[rule.id] ?? recurringRuleToDraft(rule);
+                  const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
                   return (
                     <form key={rule.id} onSubmit={(event) => handleUpdateRecurring(event, rule.id)} className="rounded-lg border border-ink/10 bg-white p-3">
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium">{rule.merchant}</p>
+                        <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
                         <strong className={`shrink-0 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{currency.format(rule.amount)}</strong>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_130px_130px_auto_auto]">
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
                         <select
                           value={draft.type}
                           onChange={(event) => {
                             const nextType = event.target.value as TransactionType;
                             const nextCategoryId = categories.find((category) => category.kind === nextType)?.id ?? "";
-                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, type: nextType, categoryId: nextCategoryId } }));
+                            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
+                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, type: nextType, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
                           }}
                           className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                         >
@@ -1233,9 +1253,23 @@ export default function ExpenseTrackerPage() {
                         </select>
                         <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
                         <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
-                        <select value={draft.categoryId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                        <select
+                          value={draft.categoryId}
+                          onChange={(event) => {
+                            const nextCategoryId = event.target.value;
+                            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
+                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
+                          }}
+                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                        >
                           {categories.filter((category) => category.kind === draft.type).map((category) => (
                             <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                          ))}
+                        </select>
+                        <select value={draft.subcategoryId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, subcategoryId: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                          <option value="">No subcategory</option>
+                          {subcategories.filter((subcategory) => subcategory.categoryId === draft.categoryId).map((subcategory) => (
+                            <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
                           ))}
                         </select>
                         <select value={draft.frequency} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, frequency: event.target.value as RecurringRule["frequency"] } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
@@ -1491,6 +1525,7 @@ function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {
   return {
     accountId: rule.accountId,
     categoryId: rule.categoryId ?? "",
+    subcategoryId: rule.subcategoryId ?? "",
     type: rule.type,
     amount: String(rule.amount),
     merchant: rule.merchant,

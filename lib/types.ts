@@ -55,6 +55,7 @@ export type RecurringRule = {
   id: string;
   accountId: string;
   categoryId?: string;
+  subcategoryId?: string;
   type: TransactionType;
   amount: number;
   merchant: string;

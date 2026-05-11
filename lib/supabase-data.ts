@@ -47,6 +47,7 @@ export type NewSubcategoryInput = {
 export type NewRecurringRuleInput = {
   accountId: string;
   categoryId?: string;
+  subcategoryId?: string;
   type: TransactionType;
   amount: number;
   merchant: string;
@@ -145,6 +146,7 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
       id: row.id,
       accountId: row.account_id,
       categoryId: row.category_id ?? undefined,
+      subcategoryId: row.subcategory_id ?? undefined,
       type: row.type,
       amount: Number(row.amount),
       merchant: row.merchant,
@@ -486,6 +488,7 @@ export async function createRecurringRule(input: NewRecurringRuleInput): Promise
       user_id: DEMO_USER_ID,
       account_id: input.accountId,
       category_id: input.categoryId,
+      subcategory_id: input.subcategoryId,
       type: input.type,
       amount: input.amount,
       merchant: input.merchant,
@@ -504,6 +507,7 @@ export async function createRecurringRule(input: NewRecurringRuleInput): Promise
     id: data.id,
     accountId: data.account_id,
     categoryId: data.category_id ?? undefined,
+    subcategoryId: data.subcategory_id ?? undefined,
     type: data.type,
     amount: Number(data.amount),
     merchant: data.merchant,
@@ -525,6 +529,7 @@ export async function updateRecurringRule(id: string, input: UpdateRecurringRule
     .update({
       account_id: input.accountId,
       category_id: input.categoryId,
+      subcategory_id: input.subcategoryId,
       type: input.type,
       amount: input.amount,
       merchant: input.merchant,
@@ -544,6 +549,7 @@ export async function updateRecurringRule(id: string, input: UpdateRecurringRule
     id: data.id,
     accountId: data.account_id,
     categoryId: data.category_id ?? undefined,
+    subcategoryId: data.subcategory_id ?? undefined,
     type: data.type,
     amount: Number(data.amount),
     merchant: data.merchant,

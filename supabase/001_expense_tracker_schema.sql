@@ -82,6 +82,7 @@ create table if not exists public.recurring_rules (
   user_id uuid not null references public.app_users(id) on delete cascade,
   account_id uuid not null references public.accounts(id) on delete restrict,
   category_id uuid references public.categories(id) on delete set null,
+  subcategory_id uuid references public.subcategories(id) on delete set null,
   type text not null check (type in ('income', 'expense')),
   amount numeric(12,2) not null check (amount >= 0),
   merchant text not null,
@@ -166,6 +167,7 @@ create index if not exists transactions_user_date_idx on public.transactions(use
 create index if not exists transactions_category_idx on public.transactions(category_id);
 create index if not exists subcategories_category_idx on public.subcategories(category_id);
 create index if not exists transactions_subcategory_idx on public.transactions(subcategory_id);
+create index if not exists recurring_subcategory_idx on public.recurring_rules(subcategory_id);
 create index if not exists budgets_user_month_idx on public.budgets(user_id, month);
 create index if not exists recurring_user_due_idx on public.recurring_rules(user_id, next_due_on) where active = true;
 
