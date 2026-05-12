@@ -31,6 +31,8 @@ export type NewTransactionInput = {
   notes?: string;
 };
 
+export type UpdateTransactionInput = NewTransactionInput;
+
 export type NewCategoryInput = {
   name: string;
   kind: TransactionType;
@@ -185,6 +187,47 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
       merchant: input.merchant ?? "",
       notes: input.notes ?? ""
     })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    accountId: data.account_id,
+    categoryId: data.category_id ?? undefined,
+    subcategoryId: data.subcategory_id ?? undefined,
+    type: data.type,
+    amount: Number(data.amount),
+    occurredOn: data.occurred_on,
+    merchant: data.merchant,
+    notes: data.notes,
+    isRecurring: data.is_recurring
+  };
+}
+
+export async function updateTransaction(id: string, input: UpdateTransactionInput): Promise<Transaction> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({
+      account_id: input.accountId,
+      category_id: input.categoryId,
+      subcategory_id: input.subcategoryId,
+      type: input.type,
+      amount: input.amount,
+      occurred_on: input.occurredOn,
+      merchant: input.merchant ?? "",
+      notes: input.notes ?? ""
+    })
+    .eq("id", id)
     .select("*")
     .single();
 

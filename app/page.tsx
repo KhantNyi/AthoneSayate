@@ -10,6 +10,7 @@ import {
   Languages,
   LayoutDashboard,
   LineChart,
+  Pencil,
   PiggyBank,
   Plus,
   ReceiptText,
@@ -17,7 +18,8 @@ import {
   Settings,
   Target,
   Trash2,
-  WalletCards
+  WalletCards,
+  X
 } from "lucide-react";
 import {
   Area,
@@ -34,7 +36,7 @@ import {
   YAxis
 } from "recharts";
 import { format, parseISO } from "date-fns";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   archiveAccount,
   archiveCategory,
@@ -52,6 +54,7 @@ import {
   updateAccount,
   updateCategory,
   updateCategoryBudget,
+  updateTransaction,
   updateGoal,
   upsertMonthlyBudget,
   updateRecurringRule,
@@ -219,6 +222,16 @@ type GoalDraft = {
   targetDate: string;
 };
 
+type TransactionDraft = {
+  accountId: string;
+  categoryId: string;
+  subcategoryId: string;
+  type: TransactionType;
+  amount: string;
+  occurredOn: string;
+  notes: string;
+};
+
 type AccountDraft = {
   name: string;
   type: AccountType;
@@ -244,6 +257,10 @@ export default function ExpenseTrackerPage() {
   const [savingGoalId, setSavingGoalId] = useState("");
   const [savingRecurringId, setSavingRecurringId] = useState("");
   const [savingAccountId, setSavingAccountId] = useState("");
+  const [savingTransactionId, setSavingTransactionId] = useState("");
+  const [editingTransactionId, setEditingTransactionId] = useState("");
+  const [editingBudgetId, setEditingBudgetId] = useState("");
+  const [editingRecurringId, setEditingRecurringId] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -277,6 +294,7 @@ export default function ExpenseTrackerPage() {
   const [goalTargetDate, setGoalTargetDate] = useState("");
   const [goalDrafts, setGoalDrafts] = useState<Record<string, GoalDraft>>({});
   const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
+  const [transactionDrafts, setTransactionDrafts] = useState<Record<string, TransactionDraft>>({});
 
   useEffect(() => {
     let ignore = false;
@@ -299,6 +317,7 @@ export default function ExpenseTrackerPage() {
         setGoals(data.goals);
         setRecurringRules(data.recurringRules);
         setTransactions(data.transactions);
+        setTransactionDrafts(Object.fromEntries(data.transactions.map((transaction) => [transaction.id, transactionToDraft(transaction)])));
         setAccountId(data.accounts[0]?.id ?? "");
         setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
@@ -430,6 +449,7 @@ export default function ExpenseTrackerPage() {
       });
 
       setTransactions((current) => [transaction, ...current]);
+      setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
       setAmount("");
       setNotes("");
     } catch (error) {
@@ -439,15 +459,104 @@ export default function ExpenseTrackerPage() {
     }
   }
 
+  function startEditingTransaction(transaction: Transaction) {
+    setEditingTransactionId(transaction.id);
+    setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
+  }
+
+  function cancelEditingTransaction(transaction: Transaction) {
+    setEditingTransactionId("");
+    setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
+  }
+
+  function startEditingRecurring(rule: RecurringRule) {
+    setEditingRecurringId(rule.id);
+    setRecurringDrafts((current) => ({ ...current, [rule.id]: recurringRuleToDraft(rule) }));
+  }
+
+  function cancelEditingRecurring(rule: RecurringRule) {
+    setEditingRecurringId("");
+    setRecurringDrafts((current) => ({ ...current, [rule.id]: recurringRuleToDraft(rule) }));
+  }
+
+  function updateTransactionDraft(transactionId: string, patch: Partial<TransactionDraft>) {
+    setTransactionDrafts((current) => {
+      const transaction = transactions.find((tx) => tx.id === transactionId);
+      const currentDraft = current[transactionId] ?? (transaction ? transactionToDraft(transaction) : undefined);
+
+      if (!currentDraft) {
+        return current;
+      }
+
+      const nextDraft = { ...currentDraft, ...patch };
+
+      if (patch.type && patch.type !== currentDraft.type) {
+        const nextCategory = categories.find((category) => category.kind === patch.type);
+        const nextSubcategory = subcategories.find((subcategory) => subcategory.categoryId === nextCategory?.id);
+        nextDraft.categoryId = nextCategory?.id ?? "";
+        nextDraft.subcategoryId = nextSubcategory?.id ?? "";
+      }
+
+      if (patch.categoryId !== undefined && patch.categoryId !== currentDraft.categoryId) {
+        nextDraft.subcategoryId = subcategories.find((subcategory) => subcategory.categoryId === patch.categoryId)?.id ?? "";
+      }
+
+      return { ...current, [transactionId]: nextDraft };
+    });
+  }
+
+  async function handleUpdateTransaction(transaction: Transaction, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const draft = transactionDrafts[transaction.id] ?? transactionToDraft(transaction);
+    const parsedAmount = Number(draft.amount);
+    const draftCategory = categories.find((category) => category.id === draft.categoryId);
+    const draftSubcategory = subcategories.find((subcategory) => subcategory.id === draft.subcategoryId);
+
+    if (!parsedAmount || !draft.accountId || !draft.categoryId) {
+      setDataError("Transaction needs an account, category, and amount.");
+      return;
+    }
+
+    try {
+      setSavingTransactionId(transaction.id);
+      setDataError("");
+      const updated = await updateTransaction(transaction.id, {
+        accountId: draft.accountId,
+        categoryId: draft.categoryId || undefined,
+        subcategoryId: draft.subcategoryId || undefined,
+        type: draft.type,
+        amount: parsedAmount,
+        occurredOn: draft.occurredOn,
+        merchant: draftSubcategory?.name ?? draftCategory?.name ?? transaction.merchant ?? "",
+        notes: draft.notes.trim()
+      });
+
+      setTransactions((current) => current.map((tx) => (tx.id === updated.id ? updated : tx)).sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)));
+      setTransactionDrafts((current) => ({ ...current, [updated.id]: transactionToDraft(updated) }));
+      setEditingTransactionId("");
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to update transaction.");
+    } finally {
+      setSavingTransactionId("");
+    }
+  }
+
   async function deleteTransaction(id: string) {
     const previous = transactions;
+    const previousDrafts = transactionDrafts;
     setTransactions((current) => current.filter((tx) => tx.id !== id));
+    setTransactionDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
 
     try {
       setDataError("");
       await removeTransaction(id);
     } catch (error) {
       setTransactions(previous);
+      setTransactionDrafts(previousDrafts);
       setDataError(error instanceof Error ? error.message : "Unable to delete transaction.");
     }
   }
@@ -518,6 +627,7 @@ export default function ExpenseTrackerPage() {
       if (updated.categoryId === budgetCategoryId) {
         setBudgetAmount(String(updated.amount));
       }
+      setEditingBudgetId("");
       setDataNotice(`Budget saved for ${category?.name ?? "category"} in ${budgetMonth}.`);
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update budget.");
@@ -667,6 +777,7 @@ export default function ExpenseTrackerPage() {
       delete next[categoryIdToDelete];
       return next;
     });
+    setEditingBudgetId("");
 
     if (budgetCategoryId === categoryIdToDelete) {
       const nextCategory = categories.find((item) => item.kind === "expense" && item.id !== categoryIdToDelete);
@@ -717,6 +828,7 @@ export default function ExpenseTrackerPage() {
       });
       setRecurringRules((current) => current.map((rule) => (rule.id === updated.id ? updated : rule)));
       setRecurringDrafts((current) => ({ ...current, [updated.id]: recurringRuleToDraft(updated) }));
+      setEditingRecurringId("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update recurring item.");
     } finally {
@@ -727,6 +839,9 @@ export default function ExpenseTrackerPage() {
   async function handleDeleteRecurring(ruleId: string) {
     const previous = recurringRules;
     setRecurringRules((current) => current.filter((rule) => rule.id !== ruleId));
+    if (editingRecurringId === ruleId) {
+      setEditingRecurringId("");
+    }
 
     try {
       setDataError("");
@@ -868,6 +983,113 @@ export default function ExpenseTrackerPage() {
     }
   }
 
+  const renderTransactionEditor = (transaction: Transaction) => {
+    const draft = transactionDrafts[transaction.id] ?? transactionToDraft(transaction);
+    const canSave = Boolean(draft.accountId && draft.categoryId && Number(draft.amount) > 0 && savingTransactionId !== transaction.id);
+
+    return (
+      <form onSubmit={(event) => handleUpdateTransaction(transaction, event)} className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto_auto]">
+        <select value={draft.type} onChange={(event) => updateTransactionDraft(transaction.id, { type: event.target.value as TransactionType })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <option value="expense">{t.expense}</option>
+          <option value="income">{t.income}</option>
+        </select>
+        <input value={draft.amount} onChange={(event) => updateTransactionDraft(transaction.id, { amount: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+        <select value={draft.categoryId} onChange={(event) => updateTransactionDraft(transaction.id, { categoryId: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          {categories.filter((category) => category.kind === draft.type).map((category) => (
+            <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+          ))}
+        </select>
+        <select value={draft.subcategoryId} onChange={(event) => updateTransactionDraft(transaction.id, { subcategoryId: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <option value="">Subcategory</option>
+          {subcategories.filter((subcategory) => subcategory.categoryId === draft.categoryId).map((subcategory) => (
+            <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+          ))}
+        </select>
+        <select value={draft.accountId} onChange={(event) => updateTransactionDraft(transaction.id, { accountId: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>{account.name}</option>
+          ))}
+        </select>
+        <input type="date" value={draft.occurredOn} onChange={(event) => updateTransactionDraft(transaction.id, { occurredOn: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+        <button disabled={!canSave} className="inline-flex h-10 items-center justify-center rounded-lg bg-river px-4 text-sm font-semibold text-white transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
+          {savingTransactionId === transaction.id ? "Saving" : "Update"}
+        </button>
+        <button type="button" aria-label="Cancel edit" onClick={() => cancelEditingTransaction(transaction)} className="inline-grid h-10 place-items-center rounded-lg border border-ink/10 bg-white px-3 text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+          <X size={16} />
+        </button>
+        <input value={draft.notes} onChange={(event) => updateTransactionDraft(transaction.id, { notes: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm lg:col-span-full" placeholder={t.optionalNote} />
+      </form>
+    );
+  };
+
+  const renderRecurringEditor = (rule: RecurringRule) => {
+    const draft = recurringDrafts[rule.id] ?? recurringRuleToDraft(rule);
+
+    return (
+      <form onSubmit={(event) => handleUpdateRecurring(event, rule.id)} className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
+        <select
+          value={draft.type}
+          onChange={(event) => {
+            const nextType = event.target.value as TransactionType;
+            const nextCategoryId = categories.find((category) => category.kind === nextType)?.id ?? "";
+            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
+            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, type: nextType, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
+          }}
+          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+        >
+          <option value="expense">{t.expense}</option>
+          <option value="income">{t.income}</option>
+        </select>
+        <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+        <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
+        <select
+          value={draft.categoryId}
+          onChange={(event) => {
+            const nextCategoryId = event.target.value;
+            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
+            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
+          }}
+          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+        >
+          {categories.filter((category) => category.kind === draft.type).map((category) => (
+            <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+          ))}
+        </select>
+        <select value={draft.subcategoryId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, subcategoryId: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <option value="">No subcategory</option>
+          {subcategories.filter((subcategory) => subcategory.categoryId === draft.categoryId).map((subcategory) => (
+            <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+          ))}
+        </select>
+        <select value={draft.frequency} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, frequency: event.target.value as RecurringRule["frequency"] } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Biweekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+        <input type="date" value={draft.nextDueOn} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, nextDueOn: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingRecurringId === rule.id}>
+          {savingRecurringId === rule.id ? "Saving" : "Update"}
+        </button>
+        <button type="button" aria-label="Cancel recurring edit" onClick={() => cancelEditingRecurring(rule)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+          <X size={16} />
+        </button>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-ink/55 lg:col-span-full">
+          <select value={draft.accountId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, accountId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>{account.name}</option>
+            ))}
+          </select>
+          <label className="flex h-9 items-center gap-2 rounded-lg border border-ink/10 bg-white px-3">
+            <input type="checkbox" checked={draft.autoCreate} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, autoCreate: event.target.checked } }))} />
+            Auto-create
+          </label>
+        </div>
+      </form>
+    );
+  };
+
   return (
     <main className="min-h-screen pb-20 text-ink xl:pb-0" lang={language === "my" ? "my" : "en"}>
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur xl:block">
@@ -1007,34 +1229,42 @@ export default function ExpenseTrackerPage() {
                   placeholder={t.searchPlaceholder}
                 />
               </label>
-              <form onSubmit={handleSubmit} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto]">
-                <select value={type} onChange={(event) => setType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  <option value="expense">{t.expense}</option>
-                  <option value="income">{t.income}</option>
-                </select>
-                <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-                <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  {categories.filter((category) => category.kind === type).map((category) => (
-                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
-                  ))}
-                </select>
-                <select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  <option value="">Subcategory</option>
-                  {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
-                  ))}
-                </select>
-                <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-                <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper transition hover:bg-ink/85 disabled:cursor-not-allowed disabled:opacity-45">
-                  <Plus size={17} />
-                  {isSaving ? "Saving" : t.add}
-                </button>
-                <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-full" placeholder={t.optionalNote} />
+              <form onSubmit={handleSubmit} className="rounded-lg border border-river/15 bg-river/5 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-river">Record new transaction</h3>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${type === "income" ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral"}`}>
+                    {type === "income" ? t.income : t.expense}
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto]">
+                  <select value={type} onChange={(event) => setType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <option value="expense">{t.expense}</option>
+                    <option value="income">{t.income}</option>
+                  </select>
+                  <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
+                  <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    {categories.filter((category) => category.kind === type).map((category) => (
+                      <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                    ))}
+                  </select>
+                  <select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    <option value="">Subcategory</option>
+                    {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                    ))}
+                  </select>
+                  <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                  <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                  <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper transition hover:bg-ink/85 disabled:cursor-not-allowed disabled:opacity-45">
+                    <Plus size={17} />
+                    {isSaving ? "Saving" : t.add}
+                  </button>
+                  <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-full" placeholder={t.optionalNote} />
+                </div>
               </form>
             </div>
 
@@ -1043,26 +1273,38 @@ export default function ExpenseTrackerPage() {
                 const category = categories.find((item) => item.id === tx.categoryId);
                 const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                 const account = accounts.find((item) => item.id === tx.accountId);
+                const isEditing = editingTransactionId === tx.id;
                 return (
-                  <article key={tx.id} className="rounded-lg border border-ink/10 bg-white p-3">
+                  <article key={tx.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</p>
-                        <p className="mt-1 text-sm text-ink/55">{format(parseISO(tx.occurredOn), "MMM d")} - {account?.name}</p>
+                        <p className="mt-1 text-sm text-ink/55">{format(parseISO(tx.occurredOn), "MMM d")} - {account?.name}{tx.notes ? ` - ${tx.notes}` : ""}</p>
                       </div>
                       <strong className={`shrink-0 text-right ${tx.type === "income" ? "text-moss" : "text-coral"}`}>
                         {tx.type === "income" ? "+" : "-"}{preciseCurrency.format(tx.amount)}
                       </strong>
                     </div>
+                    {isEditing ? (
+                      <div className="mt-3">
+                        {renderTransactionEditor(tx)}
+                      </div>
+                    ) : (
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="inline-flex min-w-0 items-center gap-2 text-sm">
                         <span className="size-2.5 shrink-0 rounded-full" style={{ background: category?.color }} />
                         <span className="truncate">{subcategory?.name ?? categoryLabel(category?.name)}</span>
                       </span>
-                      <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 shrink-0 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                        <Trash2 size={16} />
-                      </button>
+                      <span className="inline-flex shrink-0 items-center gap-1">
+                        <button aria-label="Edit transaction" onClick={() => startEditingTransaction(tx)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                          <Pencil size={16} />
+                        </button>
+                        <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                          <Trash2 size={16} />
+                        </button>
+                      </span>
                     </div>
+                    )}
                   </article>
                 );
               })}
@@ -1085,26 +1327,42 @@ export default function ExpenseTrackerPage() {
                     const category = categories.find((item) => item.id === tx.categoryId);
                     const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                     const account = accounts.find((item) => item.id === tx.accountId);
+                    const isEditing = editingTransactionId === tx.id;
                     return (
-                      <tr key={tx.id} className="group">
-                        <td className="border-b border-ink/5 py-3 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
-                        <td className="border-b border-ink/5 py-3">
-                          <span className="inline-flex items-center gap-2">
-                            <span className="size-2.5 rounded-full" style={{ background: category?.color }} />
-                            {categoryLabel(category?.name)}
-                          </span>
-                        </td>
-                        <td className="border-b border-ink/5 py-3 font-medium">{subcategory?.name ?? "-"}</td>
-                        <td className="border-b border-ink/5 py-3 text-ink/65">{account?.name}</td>
-                        <td className={`border-b border-ink/5 py-3 text-right font-semibold ${tx.type === "income" ? "text-moss" : "text-coral"}`}>
-                          {tx.type === "income" ? "+" : "-"}{preciseCurrency.format(tx.amount)}
-                        </td>
-                        <td className="border-b border-ink/5 py-3 text-right">
-                          <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
+                      <Fragment key={tx.id}>
+                        <tr className={`group ${isEditing ? "bg-river/5" : ""}`}>
+                          <td className="border-b border-ink/5 py-3 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
+                          <td className="border-b border-ink/5 py-3">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="size-2.5 rounded-full" style={{ background: category?.color }} />
+                              {categoryLabel(category?.name)}
+                            </span>
+                            {tx.notes ? <p className="mt-1 max-w-[240px] truncate text-xs text-ink/45">{tx.notes}</p> : null}
+                          </td>
+                          <td className="border-b border-ink/5 py-3 font-medium">{subcategory?.name ?? "-"}</td>
+                          <td className="border-b border-ink/5 py-3 text-ink/65">{account?.name}</td>
+                          <td className={`border-b border-ink/5 py-3 text-right font-semibold ${tx.type === "income" ? "text-moss" : "text-coral"}`}>
+                            {tx.type === "income" ? "+" : "-"}{preciseCurrency.format(tx.amount)}
+                          </td>
+                          <td className="border-b border-ink/5 py-3 text-right">
+                            <span className="inline-flex items-center justify-end gap-1">
+                              <button aria-label="Edit transaction" onClick={() => startEditingTransaction(tx)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                                <Pencil size={16} />
+                              </button>
+                              <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                                <Trash2 size={16} />
+                              </button>
+                            </span>
+                          </td>
+                        </tr>
+                        {isEditing ? (
+                          <tr>
+                            <td colSpan={6} className="border-b border-river/15 py-3">
+                              {renderTransactionEditor(tx)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1116,8 +1374,8 @@ export default function ExpenseTrackerPage() {
           {(activeTab === "budgets" || activeTab === "recurring") && <div className="grid gap-4">
             {activeTab === "budgets" && (
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
-              <form onSubmit={handleSetBudget} className="mb-4 max-w-2xl rounded-lg border border-ink/10 bg-white p-3">
-                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Set monthly budget</h3>
+              <form onSubmit={handleSetBudget} className="mb-4 max-w-2xl rounded-lg border border-river/15 bg-river/5 p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-river">Set new monthly budget</h3>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[150px_minmax(0,1fr)_150px]">
                   <input
                     type="month"
@@ -1148,8 +1406,11 @@ export default function ExpenseTrackerPage() {
                 </div>
               </form>
               <div className="space-y-4">
-                {budgetTabRows.map((row) => (
-                  <form key={row.id} onSubmit={(event) => handleSaveBudget(event, row.id)} className="rounded-lg border border-ink/10 bg-white p-3">
+                {budgetTabRows.map((row) => {
+                  const isEditing = editingBudgetId === row.id;
+
+                  return (
+                  <article key={row.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
                     <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                       <div className="min-w-0">
                         <p className="font-medium">{categoryLabel(row.name)}</p>
@@ -1157,35 +1418,58 @@ export default function ExpenseTrackerPage() {
                           {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget for {budgetMonth}
                         </p>
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-72">
-                        <input
-                          value={budgetDrafts[row.id] ?? ""}
-                          onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
-                          className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                          inputMode="decimal"
-                          placeholder="Budget"
-                        />
-                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingBudgetId === row.id}>
-                          {savingBudgetId === row.id ? "Saving" : "Save"}
-                        </button>
-                        <button type="button" aria-label="Delete budget category" onClick={() => handleDeleteBudget(row.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral" disabled={savingBudgetId === row.id}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      {isEditing ? (
+                        <form onSubmit={(event) => handleSaveBudget(event, row.id)} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-80">
+                          <input
+                            value={budgetDrafts[row.id] ?? ""}
+                            onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
+                            className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                            inputMode="decimal"
+                            placeholder="Budget"
+                          />
+                          <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingBudgetId === row.id}>
+                            {savingBudgetId === row.id ? "Saving" : "Update"}
+                          </button>
+                          <button type="button" aria-label="Cancel budget edit" onClick={() => {
+                            setEditingBudgetId("");
+                            setBudgetDrafts((current) => ({ ...current, [row.id]: String(row.monthlyBudget ?? "") }));
+                          }} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+                            <X size={16} />
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="inline-flex justify-end gap-1">
+                          <button type="button" aria-label="Edit budget" onClick={() => {
+                            setEditingBudgetId(row.id);
+                            setBudgetDrafts((current) => ({ ...current, [row.id]: String(row.monthlyBudget ?? "") }));
+                          }} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                            <Pencil size={16} />
+                          </button>
+                          <button type="button" aria-label="Delete budget category" onClick={() => handleDeleteBudget(row.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral" disabled={savingBudgetId === row.id}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#bd5b4b" : row.color }} />
                     </div>
-                  </form>
-                ))}
+                  </article>
+                  );
+                })}
               </div>
             </Panel>
             )}
 
             {activeTab === "recurring" && (
             <Panel id="recurring" title={t.recurring} action={`${upcoming.length} ${t.rules}`}>
-              <form onSubmit={handleCreateRecurring} className="mb-4 max-w-3xl rounded-lg border border-ink/10 bg-white p-3">
-                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Add recurring item</h3>
+              <form onSubmit={handleCreateRecurring} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-river">Add new recurring item</h3>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${recurringType === "income" ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral"}`}>
+                    {recurringType === "income" ? t.income : t.expense}
+                  </span>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <select value={recurringType} onChange={(event) => setRecurringType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                     <option value="expense">{t.expense}</option>
@@ -1229,77 +1513,36 @@ export default function ExpenseTrackerPage() {
               </form>
               <div className="space-y-3">
                 {upcoming.map((rule) => {
-                  const draft = recurringDrafts[rule.id] ?? recurringRuleToDraft(rule);
+                  const isEditing = editingRecurringId === rule.id;
+                  const ruleCategory = categories.find((category) => category.id === rule.categoryId);
                   const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
+                  const ruleAccount = accounts.find((account) => account.id === rule.accountId);
                   return (
-                    <form key={rule.id} onSubmit={(event) => handleUpdateRecurring(event, rule.id)} className="rounded-lg border border-ink/10 bg-white p-3">
+                    <article key={rule.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
-                        <strong className={`shrink-0 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{currency.format(rule.amount)}</strong>
+                        <div className="min-w-0">
+                          <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
+                          <p className="mt-1 text-sm text-ink/55">
+                            {categoryLabel(ruleCategory?.name)} - {ruleAccount?.name} - {frequencyLabel(rule.frequency)} - {t.dueIn} {rule.daysUntilDue}
+                            {rule.autoCreate ? " - Auto-create" : ""}
+                          </p>
+                        </div>
+                        <div className="inline-flex items-center gap-1">
+                          <strong className={`shrink-0 px-2 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{rule.type === "income" ? "+" : "-"}{currency.format(rule.amount)}</strong>
+                          {!isEditing ? (
+                            <>
+                              <button type="button" aria-label="Edit recurring item" onClick={() => startEditingRecurring(rule)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                                <Pencil size={16} />
+                              </button>
+                              <button type="button" aria-label="Delete recurring item" onClick={() => handleDeleteRecurring(rule.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
-                        <select
-                          value={draft.type}
-                          onChange={(event) => {
-                            const nextType = event.target.value as TransactionType;
-                            const nextCategoryId = categories.find((category) => category.kind === nextType)?.id ?? "";
-                            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
-                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, type: nextType, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
-                          }}
-                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        >
-                          <option value="expense">{t.expense}</option>
-                          <option value="income">{t.income}</option>
-                        </select>
-                        <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-                        <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
-                        <select
-                          value={draft.categoryId}
-                          onChange={(event) => {
-                            const nextCategoryId = event.target.value;
-                            const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
-                            setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
-                          }}
-                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        >
-                          {categories.filter((category) => category.kind === draft.type).map((category) => (
-                            <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
-                          ))}
-                        </select>
-                        <select value={draft.subcategoryId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, subcategoryId: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                          <option value="">No subcategory</option>
-                          {subcategories.filter((subcategory) => subcategory.categoryId === draft.categoryId).map((subcategory) => (
-                            <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
-                          ))}
-                        </select>
-                        <select value={draft.frequency} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, frequency: event.target.value as RecurringRule["frequency"] } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                          <option value="weekly">Weekly</option>
-                          <option value="biweekly">Biweekly</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="quarterly">Quarterly</option>
-                          <option value="yearly">Yearly</option>
-                        </select>
-                        <input type="date" value={draft.nextDueOn} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, nextDueOn: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingRecurringId === rule.id}>
-                          {savingRecurringId === rule.id ? "Saving" : "Save"}
-                        </button>
-                        <button type="button" aria-label="Delete recurring item" onClick={() => handleDeleteRecurring(rule.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ink/55">
-                        <select value={draft.accountId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, accountId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-                          {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>{account.name}</option>
-                          ))}
-                        </select>
-                        <label className="flex items-center gap-2">
-                          <input type="checkbox" checked={draft.autoCreate} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, autoCreate: event.target.checked } }))} />
-                          Auto-create
-                        </label>
-                        <span>{frequencyLabel(rule.frequency)} - {t.dueIn} {rule.daysUntilDue}</span>
-                      </div>
-                    </form>
+                      {isEditing ? renderRecurringEditor(rule) : null}
+                    </article>
                   );
                 })}
               </div>
@@ -1532,6 +1775,18 @@ function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {
     frequency: rule.frequency,
     nextDueOn: rule.nextDueOn,
     autoCreate: rule.autoCreate
+  };
+}
+
+function transactionToDraft(transaction: Transaction): TransactionDraft {
+  return {
+    accountId: transaction.accountId,
+    categoryId: transaction.categoryId ?? "",
+    subcategoryId: transaction.subcategoryId ?? "",
+    type: transaction.type,
+    amount: String(transaction.amount),
+    occurredOn: transaction.occurredOn,
+    notes: transaction.notes ?? ""
   };
 }
 
