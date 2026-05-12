@@ -35,7 +35,19 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { format, parseISO } from "date-fns";
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameMonth,
+  isToday,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+  subMonths
+} from "date-fns";
 import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   archiveAccount,
@@ -66,7 +78,6 @@ import {
   currency,
   dailySeries,
   monthTransactions,
-  monthlyComparison,
   preciseCurrency,
   safeToSpend,
   totals,
@@ -87,15 +98,21 @@ const translations = {
     add: "Add",
     allTimeNet: "all-time net",
     amount: "Amount",
+    avgDay: "Avg/day",
     balances: "Balances",
     budgetHealth: "Budget health",
     budgets: "Budgets",
     category: "Category",
+    categories: "Categories",
     categoryMix: "Category mix",
+    clear: "Clear",
     currentMonth: "Current month",
     dashboard: "Dashboard",
     dailyExpenseTrend: "Daily expense trend",
     date: "Date",
+    due: "Due",
+    dueItems: "Due items",
+    dueThisMonth: "Due this month",
     dueIn: "due in",
     entries: "entries",
     expense: "Expense",
@@ -104,22 +121,36 @@ const translations = {
     income: "Income",
     language: "Language",
     merchant: "Merchant",
+    month: "Month",
     monthExpenses: "Month expenses",
     monthIncome: "Month income",
+    monthIncomeShort: "Month income",
+    monthSpent: "Month spent",
+    monthlyActivity: "Monthly activity",
     monthlyLimits: "Monthly limits",
     netCashFlow: "Net cash flow",
+    noExpenseTransactions: "No expense transactions this month.",
+    noSpendingRecorded: "No spending recorded this month.",
+    none: "None",
     optionalNote: "Optional note",
+    pickDayToFilter: "Pick a day to filter the records below",
     personalFinanceCockpit: "Personal finance cockpit",
     recurring: "Recurring",
+    recurringDue: "Recurring due",
     reports: "Reports",
     rules: "rules",
     safeToSpendDay: "safe to spend/day",
     savingsProgress: "Savings progress",
     savingsRate: "savings rate",
+    scanActivityMonth: "Scan activity across the month",
     searchPlaceholder: "Search note, category, subcategory, account",
+    selectedDay: "Selected day",
+    selectedWeek: "Selected week",
     settings: "Settings",
     snapshot: "May 2026 snapshot",
     spendingPace: "Spending pace",
+    spending: "Spending",
+    topSpendingDrivers: "Top spending drivers",
     transactions: "Transactions",
     vsLastMonth: "vs last month",
     weekdayPattern: "Weekday pattern"
@@ -172,6 +203,59 @@ const translations = {
   }
 } as const;
 
+const uiTranslations = {
+  en: {
+    activityCalendar: "Activity calendar",
+    avgDay: "Avg/day",
+    categories: "Categories",
+    clear: "Clear",
+    due: "Due",
+    dueItems: "Due items",
+    dueThisMonth: "Due this month",
+    incomeLegend: "Income",
+    month: "Month",
+    monthIncome: "Month income",
+    monthSpent: "Month spent",
+    monthlyActivity: "Monthly activity",
+    noExpenseTransactions: "No expense transactions this month.",
+    noSpendingRecorded: "No spending recorded this month.",
+    none: "None",
+    pickDayToFilter: "Pick a day to filter the records below",
+    recurringDue: "Recurring due",
+    scanActivityMonth: "Scan activity across the month",
+    selectedDay: "Selected day",
+    selectedWeek: "Selected week",
+    spending: "Spending",
+    topSpendingDrivers: "Top spending drivers",
+    transactions: "Transactions"
+  },
+  my: {
+    activityCalendar: "လှုပ်ရှားမှု ပြက္ခဒိန်",
+    avgDay: "နေ့စဉ်ပျမ်းမျှ",
+    categories: "အမျိုးအစားများ",
+    clear: "ရှင်းမည်",
+    due: "ပေးရန်",
+    dueItems: "ပေးရန်များ",
+    dueThisMonth: "ဒီလ ပေးရန်",
+    incomeLegend: "ဝင်ငွေ",
+    month: "လ",
+    monthIncome: "လဝင်ငွေ",
+    monthSpent: "လသုံးငွေ",
+    monthlyActivity: "လစဉ်လှုပ်ရှားမှု",
+    noExpenseTransactions: "ဒီလ သုံးငွေမှတ်တမ်း မရှိသေးပါ",
+    noSpendingRecorded: "ဒီလ သုံးငွေ မရှိသေးပါ",
+    none: "မရှိပါ",
+    pickDayToFilter: "အောက်ကစာရင်းကို စစ်ရန် နေ့ရွေးပါ",
+    recurringDue: "ပုံမှန်ပေးရန်",
+    scanActivityMonth: "တစ်လတာ လှုပ်ရှားမှုကို ကြည့်ပါ",
+    selectedDay: "ရွေးထားသောနေ့",
+    selectedWeek: "ရွေးထားသောပတ်",
+    spending: "သုံးငွေ",
+    topSpendingDrivers: "အများဆုံး သုံးငွေများ",
+    transactions: "မှတ်တမ်းများ"
+  }
+} as const;
+
 const categoryTranslations: Record<string, string> = {
   Salary: "လစာ",
   Housing: "နေအိမ်",
@@ -200,6 +284,8 @@ const navItems = [
   { key: "reports", label: "reports", icon: LineChart },
   { key: "settings", label: "category", icon: Settings }
 ] as const;
+
+const chartColors = ["#f97316", "#16a34a", "#d946ef", "#06b6d4", "#e11d48", "#8b5cf6", "#84cc16"];
 
 type TabKey = (typeof navItems)[number]["key"];
 
@@ -232,6 +318,14 @@ type TransactionDraft = {
   notes: string;
 };
 
+type CalendarDaySummary = {
+  income?: number;
+  expense?: number;
+  count?: number;
+  dueAmount?: number;
+  recurringCount?: number;
+};
+
 type AccountDraft = {
   name: string;
   type: AccountType;
@@ -261,6 +355,17 @@ export default function ExpenseTrackerPage() {
   const [editingTransactionId, setEditingTransactionId] = useState("");
   const [editingBudgetId, setEditingBudgetId] = useState("");
   const [editingRecurringId, setEditingRecurringId] = useState("");
+  const [editingGoalId, setEditingGoalId] = useState("");
+  const [editingAccountId, setEditingAccountId] = useState("");
+  const [visibleMonth, setVisibleMonth] = useState(startOfMonth(new Date()));
+  const [dashboardStatsMonth, setDashboardStatsMonth] = useState(startOfMonth(new Date()));
+  const [dashboardPaceMonth, setDashboardPaceMonth] = useState(startOfMonth(new Date()));
+  const [dashboardCategoryMonth, setDashboardCategoryMonth] = useState(startOfMonth(new Date()));
+  const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState(startOfMonth(new Date()));
+  const [dashboardDriversMonth, setDashboardDriversMonth] = useState(startOfMonth(new Date()));
+  const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
+  const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
+  const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -395,27 +500,56 @@ export default function ExpenseTrackerPage() {
     })));
   }, [budgetMonth, budgets, categories]);
 
-  const monthTx = useMemo(() => monthTransactions(transactions), [transactions]);
-  const monthTotals = useMemo(() => totals(monthTx), [monthTx]);
+  useEffect(() => {
+    setBudgetMonth(format(visibleMonth, "yyyy-MM"));
+  }, [visibleMonth]);
+
+  const visibleMonthKey = format(visibleMonth, "yyyy-MM");
+  const dashboardCategoryMonthKey = format(dashboardCategoryMonth, "yyyy-MM");
+  const dashboardCalendarMonthKey = format(dashboardCalendarMonth, "yyyy-MM");
+  const dashboardDriversMonthKey = format(dashboardDriversMonth, "yyyy-MM");
+  const currentMonthTx = useMemo(() => monthTransactions(transactions), [transactions]);
+  const currentMonthTotals = useMemo(() => totals(currentMonthTx), [currentMonthTx]);
+  const dashboardStatsTx = useMemo(() => monthTransactions(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
+  const monthTotals = useMemo(() => totals(dashboardStatsTx), [dashboardStatsTx]);
   const allTotals = useMemo(() => totals(transactions), [transactions]);
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions]);
-  const currentBudgetMonth = format(new Date(), "yyyy-MM");
-  const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, currentBudgetMonth), [categories, budgets, currentBudgetMonth]);
+  const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, dashboardCategoryMonthKey), [categories, budgets, dashboardCategoryMonthKey]);
   const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, budgetMonth), [categories, budgets, budgetMonth]);
-  const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, monthTx), [categoriesForCurrentMonth, monthTx]);
-  const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, monthTx).filter((row) => row.monthlyBudget !== undefined), [categoriesForBudgetMonth, monthTx]);
-  const comparison = useMemo(() => monthlyComparison(transactions), [transactions]);
-  const daily = useMemo(() => dailySeries(monthTx), [monthTx]);
-  const weekday = useMemo(() => weekdaySpend(monthTx), [monthTx]);
+  const budgetMonthTx = useMemo(() => monthTransactions(transactions, visibleMonth), [transactions, visibleMonth]);
+  const dashboardCategoryTx = useMemo(() => monthTransactions(transactions, dashboardCategoryMonth), [transactions, dashboardCategoryMonth]);
+  const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, dashboardCategoryTx), [categoriesForCurrentMonth, dashboardCategoryTx]);
+  const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, budgetMonthTx).filter((row) => row.monthlyBudget !== undefined), [categoriesForBudgetMonth, budgetMonthTx]);
+  const comparison = useMemo(() => monthlyComparisonForMonth(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
+  const dashboardPaceTx = useMemo(() => monthTransactions(transactions, dashboardPaceMonth), [transactions, dashboardPaceMonth]);
+  const daily = useMemo(() => dailySeries(dashboardPaceTx, dashboardPaceMonth), [dashboardPaceTx, dashboardPaceMonth]);
+  const weekday = useMemo(() => weekdaySpend(currentMonthTx), [currentMonthTx]);
   const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
   const recurringDue = upcoming.filter((rule) => rule.type === "expense" && rule.daysUntilDue >= 0).reduce((sum, rule) => sum + rule.amount, 0);
-  const dailyAllowance = safeToSpend(monthTotals.income, monthTotals.expenses, recurringDue);
+  const dailyAllowance = safeToSpend(currentMonthTotals.income, currentMonthTotals.expenses, recurringDue);
   const t = translations[language];
+  const ui = uiTranslations[language];
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
   const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
+  const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
+  const recurringCalendarDays = useMemo(() => summarizeRecurringByDay(recurringRules.filter((rule) => rule.nextDueOn.startsWith(visibleMonthKey))), [recurringRules, visibleMonthKey]);
+  const dashboardCalendarTransactionDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(dashboardCalendarMonthKey))), [transactions, dashboardCalendarMonthKey]);
+  const dashboardCalendarRecurringDays = useMemo(() => summarizeRecurringByDay(recurringRules.filter((rule) => rule.nextDueOn.startsWith(dashboardCalendarMonthKey))), [recurringRules, dashboardCalendarMonthKey]);
+  const dashboardCalendarDays = useMemo(() => mergeCalendarSummaries(dashboardCalendarTransactionDays, dashboardCalendarRecurringDays), [dashboardCalendarTransactionDays, dashboardCalendarRecurringDays]);
+  const dashboardSelectedSummary = selectedDashboardDate ? dashboardCalendarDays[selectedDashboardDate] : undefined;
+  const dashboardMonthSummary = useMemo(() => summarizeActivityRange(transactions, recurringRules, startOfMonth(dashboardCalendarMonth), endOfMonth(dashboardCalendarMonth)), [transactions, recurringRules, dashboardCalendarMonth]);
+  const dashboardWeekSummary = useMemo(() => {
+    const selectedDay = selectedDashboardDate ? parseISO(selectedDashboardDate) : new Date();
+    return summarizeActivityRange(transactions, recurringRules, startOfWeek(selectedDay), endOfWeek(selectedDay));
+  }, [transactions, recurringRules, selectedDashboardDate]);
+  const dashboardDriversTx = useMemo(() => monthTransactions(transactions, dashboardDriversMonth), [transactions, dashboardDriversMonth]);
+  const dashboardDriversCategories = useMemo(() => applyMonthlyBudgets(categories, budgets, dashboardDriversMonthKey), [categories, budgets, dashboardDriversMonthKey]);
+  const dashboardDriverRows = useMemo(() => categorySpend(dashboardDriversCategories, dashboardDriversTx), [dashboardDriversCategories, dashboardDriversTx]);
+  const topCategoryDrivers = useMemo(() => dashboardDriverRows.filter((row) => row.spent > 0).slice(0, 4), [dashboardDriverRows]);
+  const topTransactionDrivers = useMemo(() => dashboardDriversTx.filter((tx) => tx.type === "expense").sort((a, b) => b.amount - a.amount).slice(0, 4), [dashboardDriversTx]);
 
   const filteredTransactions = transactions
     .filter((tx) => {
@@ -423,9 +557,12 @@ export default function ExpenseTrackerPage() {
       const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
       const account = accounts.find((item) => item.id === tx.accountId);
       const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
-      return haystack.includes(query.toLowerCase());
+      const matchesQuery = haystack.includes(query.toLowerCase());
+      const matchesDate = selectedTransactionDate ? tx.occurredOn === selectedTransactionDate : true;
+      return matchesQuery && matchesDate;
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
+  const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate : true);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -477,6 +614,26 @@ export default function ExpenseTrackerPage() {
   function cancelEditingRecurring(rule: RecurringRule) {
     setEditingRecurringId("");
     setRecurringDrafts((current) => ({ ...current, [rule.id]: recurringRuleToDraft(rule) }));
+  }
+
+  function startEditingGoal(goal: Goal) {
+    setEditingGoalId(goal.id);
+    setGoalDrafts((current) => ({ ...current, [goal.id]: goalToDraft(goal) }));
+  }
+
+  function cancelEditingGoal(goal: Goal) {
+    setEditingGoalId("");
+    setGoalDrafts((current) => ({ ...current, [goal.id]: goalToDraft(goal) }));
+  }
+
+  function startEditingAccount(account: Account) {
+    setEditingAccountId(account.id);
+    setAccountDrafts((current) => ({ ...current, [account.id]: accountToDraft(account) }));
+  }
+
+  function cancelEditingAccount(account: Account) {
+    setEditingAccountId("");
+    setAccountDrafts((current) => ({ ...current, [account.id]: accountToDraft(account) }));
   }
 
   function updateTransactionDraft(transactionId: string, patch: Partial<TransactionDraft>) {
@@ -752,6 +909,7 @@ export default function ExpenseTrackerPage() {
       });
       setGoals((current) => current.map((goal) => (goal.id === updated.id ? updated : goal)));
       setGoalDrafts((current) => ({ ...current, [updated.id]: goalToDraft(updated) }));
+      setEditingGoalId("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update goal.");
     } finally {
@@ -855,6 +1013,9 @@ export default function ExpenseTrackerPage() {
   async function handleDeleteGoal(goalId: string) {
     const previous = goals;
     setGoals((current) => current.filter((goal) => goal.id !== goalId));
+    if (editingGoalId === goalId) {
+      setEditingGoalId("");
+    }
 
     try {
       setDataError("");
@@ -950,10 +1111,11 @@ export default function ExpenseTrackerPage() {
         name: draft.name.trim(),
         type: draft.type,
         openingBalance: parsedOpeningBalance,
-        color: draft.color || "#3d7485"
+        color: draft.color || "#2563eb"
       });
       setAccounts((current) => current.map((account) => account.id === updated.id ? updated : account));
       setAccountDrafts((current) => ({ ...current, [updated.id]: accountToDraft(updated) }));
+      setEditingAccountId("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update account.");
     } finally {
@@ -965,6 +1127,9 @@ export default function ExpenseTrackerPage() {
     const previous = accounts;
     const nextAccounts = accounts.filter((account) => account.id !== accountIdToDelete);
     setAccounts(nextAccounts);
+    if (editingAccountId === accountIdToDelete) {
+      setEditingAccountId("");
+    }
 
     if (accountId === accountIdToDelete) {
       setAccountId(nextAccounts[0]?.id ?? "");
@@ -1092,9 +1257,9 @@ export default function ExpenseTrackerPage() {
 
   return (
     <main className="min-h-screen pb-20 text-ink xl:pb-0" lang={language === "my" ? "my" : "en"}>
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur xl:block">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-white px-4 py-5 xl:block">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="grid size-11 place-items-center rounded-lg bg-ink text-paper">
+          <div className="grid size-11 place-items-center rounded-lg bg-river text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)]">
             <WalletCards size={22} />
           </div>
           <div>
@@ -1109,7 +1274,7 @@ export default function ExpenseTrackerPage() {
               type="button"
               onClick={() => setActiveTab(item.key)}
               className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition ${
-                activeTab === item.key ? "bg-ink text-paper" : "text-ink/70 hover:bg-white hover:text-ink"
+                activeTab === item.key ? "bg-river text-white shadow-[0_10px_22px_rgba(37,99,235,0.16)]" : "text-ink/70 hover:bg-white hover:text-river"
               }`}
             >
               <item.icon size={18} />
@@ -1119,7 +1284,7 @@ export default function ExpenseTrackerPage() {
         </nav>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-paper/94 px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] backdrop-blur xl:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] xl:hidden">
         <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">
           {navItems.filter((item) => ["dashboard", "transactions", "budgets", "recurring", "settings"].includes(item.key)).map((item) => (
             <button
@@ -1127,7 +1292,7 @@ export default function ExpenseTrackerPage() {
               type="button"
               onClick={() => setActiveTab(item.key)}
               className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
-                activeTab === item.key ? "bg-ink text-paper" : "text-ink/65"
+                activeTab === item.key ? "bg-river text-white shadow-[0_8px_18px_rgba(37,99,235,0.16)]" : "text-ink/65"
               }`}
             >
               <item.icon size={18} />
@@ -1146,7 +1311,7 @@ export default function ExpenseTrackerPage() {
           <div className="flex flex-wrap items-center gap-2">
             <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
             <StatusPill tone="river" label={`${currency.format(dailyAllowance)} ${t.safeToSpendDay}`} />
-            <StatusPill tone="moss" label={`${monthTotals.savingsRate.toFixed(1)}% ${t.savingsRate}`} />
+            <StatusPill tone="moss" label={`${currentMonthTotals.savingsRate.toFixed(1)}% ${t.savingsRate}`} />
           </div>
         </header>
 
@@ -1159,52 +1324,61 @@ export default function ExpenseTrackerPage() {
         )}
 
         <section id="dashboard" className={activeTab === "dashboard" ? "grid gap-4" : "hidden"}>
+          <div className="flex justify-end">
+            <MonthField label={`${ui.month} - ${t.dashboard}`} month={dashboardStatsMonth} onChange={setDashboardStatsMonth} />
+          </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={currency.format(monthTotals.income)} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
             <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={currency.format(monthTotals.expenses)} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
-            <MetricCard icon={PiggyBank} label={t.netCashFlow} value={currency.format(monthTotals.net)} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="plum" />
+            <MetricCard icon={PiggyBank} label={t.netCashFlow} value={currency.format(monthTotals.net)} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="river" />
             <MetricCard icon={Banknote} label={t.accountBalance} value={currency.format(balances.reduce((sum, account) => sum + account.balance, 0))} sub={`${balances.length} ${t.activeAccounts}`} tone="river" />
           </div>
 
           <div className="grid gap-4 2xl:grid-cols-[1.55fr_1fr]">
             <Panel title={t.spendingPace} action={t.dailyExpenseTrend}>
+              <div className="mb-3 flex justify-end">
+                <MonthField label={ui.month} month={dashboardPaceMonth} onChange={setDashboardPaceMonth} />
+              </div>
               <div className="h-56 sm:h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={daily}>
                     <defs>
                       <linearGradient id="spentGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor="#3d7485" stopOpacity={0.55} />
-                        <stop offset="95%" stopColor="#3d7485" stopOpacity={0.04} />
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.38} />
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0.03} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
                     <XAxis dataKey="day" tickLine={false} axisLine={false} />
                     <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={48} />
                     <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                    <Area type="monotone" dataKey="spent" stroke="#3d7485" fill="url(#spentGradient)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="spent" stroke="#f97316" fill="url(#spentGradient)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </Panel>
 
-            <Panel title={t.categoryMix} action={t.currentMonth}>
+            <Panel title={t.categoryMix} action={format(dashboardCategoryMonth, "MMM yyyy")}>
+              <div className="mb-3 flex justify-end">
+                <MonthField label={ui.month} month={dashboardCategoryMonth} onChange={setDashboardCategoryMonth} />
+              </div>
               <div className="grid gap-4 md:grid-cols-[160px_1fr]">
                 <div className="h-44">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie innerRadius={45} outerRadius={70} paddingAngle={3} data={budgetRows.filter((row) => row.spent > 0)} dataKey="spent">
-                        {budgetRows.map((entry) => (
-                          <Cell key={entry.id} fill={entry.color} />
+                        {budgetRows.filter((row) => row.spent > 0).map((entry, index) => (
+                          <Cell key={entry.id} fill={chartColors[index % chartColors.length]} />
                         ))}
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="space-y-3">
-                  {budgetRows.slice(0, 5).map((row) => (
+                  {budgetRows.slice(0, 5).map((row, index) => (
                     <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
                       <span className="flex items-center gap-2">
-                        <span className="size-3 rounded-full" style={{ background: row.color }} />
+                        <span className="size-3 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
                         {categoryLabel(row.name)}
                       </span>
                       <strong>{currency.format(row.spent)}</strong>
@@ -1214,11 +1388,108 @@ export default function ExpenseTrackerPage() {
               </div>
             </Panel>
           </div>
+
+          <div className="grid gap-4 2xl:grid-cols-[1fr_1fr]">
+            <Panel title={ui.activityCalendar} action={format(dashboardCalendarMonth, "MMM yyyy")}>
+              <div className="mb-3 grid gap-2 sm:grid-cols-4">
+                <ActivityStat label={ui.monthSpent} value={currency.format(dashboardMonthSummary.expense)} tone="coral" />
+                <ActivityStat label={ui.monthIncome} value={currency.format(dashboardMonthSummary.income)} tone="moss" />
+                <ActivityStat label="Net" value={currency.format(dashboardMonthSummary.income - dashboardMonthSummary.expense)} tone={dashboardMonthSummary.income - dashboardMonthSummary.expense >= 0 ? "moss" : "coral"} />
+                <ActivityStat label={ui.dueThisMonth} value={`${dashboardMonthSummary.recurringCount}`} sub={currency.format(dashboardMonthSummary.dueAmount)} tone="amber" />
+              </div>
+              <MonthCalendar
+                month={dashboardCalendarMonth}
+                selectedDate={selectedDashboardDate}
+                summaries={dashboardCalendarDays}
+                variant="activity"
+                labels={ui}
+                onMonthChange={(month) => {
+                  setDashboardCalendarMonth(month);
+                  setSelectedDashboardDate("");
+                }}
+                onDateSelect={setSelectedDashboardDate}
+                onClearDate={() => setSelectedDashboardDate("")}
+              />
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                <div className="rounded-lg border border-ink/10 bg-ink/[0.025] p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase text-ink/45">{ui.selectedWeek}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <ActivityStat label={ui.spending} value={currency.format(dashboardWeekSummary.expense)} tone="coral" compact />
+                    <ActivityStat label={t.income} value={currency.format(dashboardWeekSummary.income)} tone="moss" compact />
+                    <ActivityStat label={ui.avgDay} value={currency.format(dashboardWeekSummary.expense / 7)} tone="ink" compact />
+                    <ActivityStat label={t.entries} value={`${dashboardWeekSummary.count}`} tone="ink" compact />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-ink/10 bg-ink/[0.025] p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase text-ink/45">{ui.selectedDay}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                <div>
+                      <p className="text-xs uppercase text-ink/45">{t.date}</p>
+                  <p className="font-semibold">{selectedDashboardDate ? format(parseISO(selectedDashboardDate), "MMM d") : ui.none}</p>
+                </div>
+                    <ActivityStat label={ui.spending} value={currency.format(dashboardSelectedSummary?.expense ?? 0)} tone="coral" compact />
+                    <ActivityStat label={t.income} value={currency.format(dashboardSelectedSummary?.income ?? 0)} tone="moss" compact />
+                    <ActivityStat label={ui.due} value={`${dashboardSelectedSummary?.recurringCount ?? 0}`} tone="amber" compact />
+                  </div>
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title={ui.topSpendingDrivers} action={format(dashboardDriversMonth, "MMM yyyy")}>
+              <div className="mb-3 flex justify-end">
+                <MonthField label={ui.month} month={dashboardDriversMonth} onChange={setDashboardDriversMonth} />
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.categories}</h3>
+                  <div className="space-y-3">
+                    {topCategoryDrivers.map((row, index) => (
+                      <div key={row.id} className="rounded-lg border border-ink/10 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                          <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                            <span className="size-3 shrink-0 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                            <span className="truncate">{categoryLabel(row.name)}</span>
+                          </span>
+                          <strong>{currency.format(row.spent)}</strong>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                          <div className="h-full rounded-full bg-coral" style={{ width: `${Math.min(row.progress, 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                    {topCategoryDrivers.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.transactions}</h3>
+                  <div className="space-y-2">
+                    {topTransactionDrivers.map((tx) => {
+                      const category = categories.find((item) => item.id === tx.categoryId);
+                      const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+
+                      return (
+                        <div key={tx.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink/10 p-3 text-sm">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{subcategory?.name ?? categoryLabel(category?.name) ?? tx.merchant ?? t.transactions}</p>
+                            <p className="mt-1 text-xs text-ink/45">{format(parseISO(tx.occurredOn), "MMM d")}</p>
+                          </div>
+                          <strong className="shrink-0 text-coral">-{preciseCurrency.format(tx.amount)}</strong>
+                        </div>
+                      );
+                    })}
+                    {topTransactionDrivers.length === 0 ? <p className="text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
+                  </div>
+                </div>
+              </div>
+            </Panel>
+          </div>
         </section>
 
-        <section className={activeTab === "transactions" || activeTab === "budgets" || activeTab === "recurring" ? "mt-4 grid gap-4 2xl:grid-cols-[1fr_0.95fr]" : "hidden"}>
+        <section className={activeTab === "transactions" || activeTab === "budgets" || activeTab === "recurring" ? "mt-4 grid gap-4" : "hidden"}>
           {activeTab === "transactions" && (
           <Panel id="transactions" title={t.transactions} action={`${filteredTransactions.length} ${t.entries}`}>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="min-w-0">
             <div className="mb-4 grid gap-3">
               <label className="relative block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" size={18} />
@@ -1259,7 +1530,7 @@ export default function ExpenseTrackerPage() {
                     ))}
                   </select>
                   <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                  <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper transition hover:bg-ink/85 disabled:cursor-not-allowed disabled:opacity-45">
+                  <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
                     <Plus size={17} />
                     {isSaving ? "Saving" : t.add}
                   </button>
@@ -1368,6 +1639,23 @@ export default function ExpenseTrackerPage() {
                 </tbody>
               </table>
             </div>
+              </div>
+              <aside className="xl:sticky xl:top-4 xl:self-start">
+                <MonthCalendar
+                  month={visibleMonth}
+                  selectedDate={selectedTransactionDate}
+                  summaries={transactionCalendarDays}
+                  variant="transactions"
+                  labels={ui}
+                  onMonthChange={(month) => {
+                    setVisibleMonth(month);
+                    setSelectedTransactionDate("");
+                  }}
+                  onDateSelect={setSelectedTransactionDate}
+                  onClearDate={() => setSelectedTransactionDate("")}
+                />
+              </aside>
+            </div>
           </Panel>
           )}
 
@@ -1380,7 +1668,10 @@ export default function ExpenseTrackerPage() {
                   <input
                     type="month"
                     value={budgetMonth}
-                    onChange={(event) => setBudgetMonth(event.target.value)}
+                    onChange={(event) => {
+                      setBudgetMonth(event.target.value);
+                      setVisibleMonth(parseISO(`${event.target.value}-01`));
+                    }}
                     className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                   />
                   <select
@@ -1399,7 +1690,7 @@ export default function ExpenseTrackerPage() {
                     inputMode="decimal"
                     placeholder="Amount"
                   />
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper disabled:opacity-50 sm:col-span-2 lg:col-span-3" disabled={savingBudgetId === budgetCategoryId}>
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-3" disabled={savingBudgetId === budgetCategoryId}>
                     <Plus size={17} />
                     {savingBudgetId === budgetCategoryId ? "Saving budget" : "Save monthly budget"}
                   </button>
@@ -1451,8 +1742,8 @@ export default function ExpenseTrackerPage() {
                         </div>
                       )}
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#bd5b4b" : row.color }} />
+                    <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#f05a3f" : "#f97316" }} />
                     </div>
                   </article>
                   );
@@ -1462,7 +1753,9 @@ export default function ExpenseTrackerPage() {
             )}
 
             {activeTab === "recurring" && (
-            <Panel id="recurring" title={t.recurring} action={`${upcoming.length} ${t.rules}`}>
+            <Panel id="recurring" title={t.recurring} action={`${displayedRecurringRules.length} ${t.rules}`}>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="min-w-0">
               <form onSubmit={handleCreateRecurring} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold uppercase text-river">Add new recurring item</h3>
@@ -1505,14 +1798,14 @@ export default function ExpenseTrackerPage() {
                     <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
                     Auto-create
                   </label>
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-1">
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2 lg:col-span-1">
                     <Plus size={17} />
                     Add
                   </button>
                 </div>
               </form>
               <div className="space-y-3">
-                {upcoming.map((rule) => {
+                {displayedRecurringRules.map((rule) => {
                   const isEditing = editingRecurringId === rule.id;
                   const ruleCategory = categories.find((category) => category.id === rule.categoryId);
                   const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
@@ -1546,6 +1839,23 @@ export default function ExpenseTrackerPage() {
                   );
                 })}
               </div>
+                </div>
+                <aside className="xl:sticky xl:top-4 xl:self-start">
+                  <MonthCalendar
+                    month={visibleMonth}
+                    selectedDate={selectedRecurringDate}
+                    summaries={recurringCalendarDays}
+                    variant="recurring"
+                    labels={ui}
+                    onMonthChange={(month) => {
+                      setVisibleMonth(month);
+                      setSelectedRecurringDate("");
+                    }}
+                    onDateSelect={setSelectedRecurringDate}
+                    onClearDate={() => setSelectedRecurringDate("")}
+                  />
+                </aside>
+              </div>
             </Panel>
             )}
           </div>}
@@ -1554,14 +1864,14 @@ export default function ExpenseTrackerPage() {
         <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4" : "hidden"}>
           {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
-            <form onSubmit={handleCreateGoal} className="mb-4 max-w-3xl rounded-lg border border-ink/10 bg-white p-3">
-              <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Add savings goal</h3>
+            <form onSubmit={handleCreateGoal} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
+              <h3 className="mb-3 text-sm font-semibold uppercase text-river">Add savings goal</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_130px_130px_145px]">
                 <input value={goalName} onChange={(event) => setGoalName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Goal name" />
                 <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
                 <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
                 <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2 lg:col-span-full">
+                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2 lg:col-span-full">
                   <Plus size={17} />
                   Add goal
                 </button>
@@ -1570,48 +1880,44 @@ export default function ExpenseTrackerPage() {
             <div className="space-y-4">
               {goals.map((goal) => {
                 const draft = goalDrafts[goal.id] ?? goalToDraft(goal);
+                const isEditing = editingGoalId === goal.id;
+                const goalProgress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100);
 
                 return (
-                <div key={goal.id} className="rounded-lg border border-ink/10 bg-white p-3">
-                  <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                <article key={goal.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
+                  <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                     <div className="min-w-0">
                       <p className="font-medium">{goal.name}</p>
-                      <p className="text-ink/60">{currency.format(goal.currentAmount)} / {currency.format(goal.targetAmount)}</p>
+                      <p className="text-ink/60">{currency.format(goal.currentAmount)} saved / {currency.format(goal.targetAmount)} target</p>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 md:w-[520px] md:grid-cols-[minmax(0,1fr)_110px_110px_132px_auto_auto]">
-                      <input
-                        value={draft.name}
-                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, name: event.target.value } }))}
-                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        placeholder="Name"
-                      />
-                      <input
-                        value={draft.targetAmount}
-                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetAmount: event.target.value } }))}
-                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        inputMode="decimal"
-                        placeholder="Target"
-                      />
-                      <input
-                        value={draft.currentAmount}
-                        onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, currentAmount: event.target.value } }))}
-                        className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        inputMode="decimal"
-                        placeholder="Saved"
-                      />
-                      <input type="date" value={draft.targetDate} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetDate: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                      <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingGoalId === goal.id}>
-                        {savingGoalId === goal.id ? "Saving" : "Save"}
-                      </button>
-                      <button type="button" aria-label="Delete goal" onClick={() => handleDeleteGoal(goal.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </form>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-ink/8">
-                    <div className="h-full rounded-full" style={{ width: `${(goal.currentAmount / goal.targetAmount) * 100}%`, background: goal.color }} />
+                    {isEditing ? (
+                      <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} className="grid gap-2 sm:grid-cols-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_110px_110px_132px_auto_auto]">
+                        <input value={draft.name} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, name: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
+                        <input value={draft.targetAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetAmount: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
+                        <input value={draft.currentAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, currentAmount: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved" />
+                        <input type="date" value={draft.targetDate} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetDate: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingGoalId === goal.id}>
+                          {savingGoalId === goal.id ? "Saving" : "Update"}
+                        </button>
+                        <button type="button" aria-label="Cancel goal edit" onClick={() => cancelEditingGoal(goal)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+                          <X size={16} />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="inline-flex justify-end gap-1">
+                        <button type="button" aria-label="Edit goal" onClick={() => startEditingGoal(goal)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                          <Pencil size={16} />
+                        </button>
+                        <button type="button" aria-label="Delete goal" onClick={() => handleDeleteGoal(goal.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
+                    <div className="h-full rounded-full" style={{ width: `${goalProgress}%`, background: goal.color }} />
+                  </div>
+                </article>
                 );
               })}
             </div>
@@ -1627,7 +1933,7 @@ export default function ExpenseTrackerPage() {
                   <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
                   <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={44} />
                   <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                  <Bar dataKey="spent" fill="#c3833d" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="spent" fill="#f97316" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1642,51 +1948,50 @@ export default function ExpenseTrackerPage() {
                 <div className="grid gap-2">
                   {balances.map((account) => {
                     const draft = accountDrafts[account.id] ?? accountToDraft(account);
+                    const isEditing = editingAccountId === account.id;
 
                     return (
-                      <form key={account.id} onSubmit={(event) => handleUpdateAccount(event, account.id)} className="grid gap-2 rounded-lg border border-ink/10 p-2 md:grid-cols-[minmax(0,1fr)_140px_130px_92px_110px_auto] md:items-center">
-                        <div className="min-w-0">
-                          <input
-                            value={draft.name}
-                            onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))}
-                            className="h-10 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold"
-                            placeholder="Account name"
-                          />
-                          <p className="mt-1 text-xs text-ink/55">Current balance: {currency.format(account.balance)}</p>
+                      <article key={account.id} className={`rounded-lg border p-2 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10"}`}>
+                        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="size-3 rounded-full" style={{ background: account.color }} />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">{account.name}</p>
+                              <p className="mt-1 text-xs text-ink/55">{account.type.replace("_", " ")} - Current balance: {currency.format(account.balance)}</p>
+                            </div>
+                          </div>
+                          {isEditing ? (
+                            <form onSubmit={(event) => handleUpdateAccount(event, account.id)} className="grid gap-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_140px_130px_92px_auto_auto] md:items-center">
+                              <input value={draft.name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))} className="h-10 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold" placeholder="Account name" />
+                              <select value={draft.type} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, type: event.target.value as AccountType } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                                <option value="cash">Cash</option>
+                                <option value="checking">Checking</option>
+                                <option value="savings">Savings</option>
+                                <option value="credit_card">Credit card</option>
+                                <option value="wallet">Wallet</option>
+                                <option value="investment">Investment</option>
+                              </select>
+                              <input value={draft.openingBalance} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Opening" />
+                              <input type="color" value={draft.color} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, color: event.target.value } }))} className="h-10 w-full rounded-lg border border-ink/10 bg-white px-2" aria-label="Account color" />
+                              <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingAccountId === account.id}>
+                                {savingAccountId === account.id ? "Saving" : "Update"}
+                              </button>
+                              <button type="button" aria-label="Cancel account edit" onClick={() => cancelEditingAccount(account)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+                                <X size={16} />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="inline-flex justify-end gap-1">
+                              <button type="button" aria-label="Edit account" onClick={() => startEditingAccount(account)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                                <Pencil size={16} />
+                              </button>
+                              <button type="button" aria-label="Delete account" onClick={() => handleDeleteAccount(account.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <select
-                          value={draft.type}
-                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, type: event.target.value as AccountType } }))}
-                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                        >
-                          <option value="cash">Cash</option>
-                          <option value="checking">Checking</option>
-                          <option value="savings">Savings</option>
-                          <option value="credit_card">Credit card</option>
-                          <option value="wallet">Wallet</option>
-                          <option value="investment">Investment</option>
-                        </select>
-                        <input
-                          value={draft.openingBalance}
-                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))}
-                          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                          inputMode="decimal"
-                          placeholder="Opening"
-                        />
-                        <input
-                          type="color"
-                          value={draft.color}
-                          onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, color: event.target.value } }))}
-                          className="h-10 w-full rounded-lg border border-ink/10 bg-white px-2"
-                          aria-label="Account color"
-                        />
-                        <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper disabled:opacity-50" disabled={savingAccountId === account.id}>
-                          {savingAccountId === account.id ? "Saving" : "Save"}
-                        </button>
-                        <button type="button" aria-label="Delete account" onClick={() => handleDeleteAccount(account.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                          <Trash2 size={16} />
-                        </button>
-                      </form>
+                      </article>
                     );
                   })}
                 </div>
@@ -1734,7 +2039,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="rounded-lg border border-ink/10 bg-paper/78 p-3 shadow-soft backdrop-blur sm:p-4">
+    <section id={id} className="rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
         <span className="text-sm text-ink/55">{action}</span>
@@ -1742,6 +2047,292 @@ function Panel({
       {children}
     </section>
   );
+}
+
+function ActivityStat({
+  label,
+  value,
+  sub,
+  tone,
+  compact = false
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: "coral" | "moss" | "amber" | "ink";
+  compact?: boolean;
+}) {
+  const toneClass = {
+    amber: "text-amber",
+    coral: "text-coral",
+    ink: "text-ink",
+    moss: "text-moss"
+  }[tone];
+
+  return (
+    <div className={compact ? "" : "rounded-lg border border-ink/10 bg-white p-3"}>
+      <p className="text-xs uppercase text-ink/45">{label}</p>
+      <p className={`font-semibold ${compact ? "text-sm" : "text-base"} ${toneClass}`}>{value}</p>
+      {sub ? <p className="text-xs text-ink/45">{sub}</p> : null}
+    </div>
+  );
+}
+
+function MonthField({
+  label,
+  month,
+  onChange
+}: {
+  label: string;
+  month: Date;
+  onChange: (month: Date) => void;
+}) {
+  return (
+    <label className="inline-flex items-center gap-2 text-sm text-ink/55">
+      <span className="font-medium">{label}</span>
+      <input
+        type="month"
+        value={format(month, "yyyy-MM")}
+        onChange={(event) => onChange(parseISO(`${event.target.value}-01`))}
+        className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+      />
+    </label>
+  );
+}
+
+function MonthCalendar({
+  month,
+  selectedDate,
+  summaries,
+  variant,
+  labels,
+  onMonthChange,
+  onDateSelect,
+  onClearDate
+}: {
+  month: Date;
+  selectedDate: string;
+  summaries: Record<string, CalendarDaySummary>;
+  variant: "transactions" | "recurring" | "activity";
+  labels: Record<keyof typeof uiTranslations.en, string>;
+  onMonthChange: (month: Date) => void;
+  onDateSelect: (date: string) => void;
+  onClearDate: () => void;
+}) {
+  const days = buildCalendarGrid(month);
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const selectedSummary = selectedDate ? summaries[selectedDate] : undefined;
+  const selectedWeekStart = selectedDate ? startOfWeek(parseISO(selectedDate)) : undefined;
+  const selectedWeekEnd = selectedDate ? endOfWeek(parseISO(selectedDate)) : undefined;
+
+  return (
+    <section className="rounded-lg border border-ink/10 bg-white p-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold uppercase text-ink/65">{variant === "recurring" ? labels.recurringDue : labels.monthlyActivity}</h3>
+          <p className="mt-1 text-xs text-ink/45">
+            {selectedDate
+              ? `${format(parseISO(selectedDate), "MMM d, yyyy")} selected${selectedSummary?.count || selectedSummary?.recurringCount ? "" : " - no items"}`
+              : variant === "activity" ? labels.scanActivityMonth : labels.pickDayToFilter}
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1">
+          <button type="button" onClick={() => onMonthChange(startOfMonth(subMonths(month, 1)))} className="grid size-9 place-items-center rounded-lg border border-ink/10 text-ink/55 transition hover:bg-river/10 hover:text-river" aria-label="Previous month">
+            ‹
+          </button>
+          <span className="min-w-28 text-center text-sm font-semibold">{format(month, "MMM yyyy")}</span>
+          <button type="button" onClick={() => onMonthChange(startOfMonth(addMonths(month, 1)))} className="grid size-9 place-items-center rounded-lg border border-ink/10 text-ink/55 transition hover:bg-river/10 hover:text-river" aria-label="Next month">
+            ›
+          </button>
+          {selectedDate ? (
+            <button type="button" onClick={onClearDate} className="ml-1 h-9 rounded-lg border border-ink/10 px-3 text-xs font-semibold text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+              {labels.clear}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-ink/40">
+        {weekdays.map((weekday) => (
+          <span key={weekday} className="py-1">{weekday}</span>
+        ))}
+      </div>
+      {variant === "activity" ? (
+        <div className="mb-2 flex flex-wrap gap-2 text-xs text-ink/55">
+          <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-coral" /> {labels.spending}</span>
+          <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-moss" /> {labels.incomeLegend}</span>
+          <span className="inline-flex items-center gap-1"><span className="rounded bg-amber/15 px-1.5 py-0.5 font-semibold text-amber">{labels.due}</span> {labels.recurringDue}</span>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day) => {
+          const key = format(day, "yyyy-MM-dd");
+          const summary = summaries[key];
+          const selected = selectedDate === key;
+          const inMonth = isSameMonth(day, month);
+          const hasData = Boolean(summary?.count || summary?.recurringCount);
+          const intensity = summary?.expense ? Math.min(summary.expense / 50000, 1) : 0;
+          const inSelectedWeek = Boolean(selectedWeekStart && selectedWeekEnd && day >= selectedWeekStart && day <= selectedWeekEnd);
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onDateSelect(key)}
+              className={`min-h-20 rounded-lg border p-1.5 text-left transition ${
+                selected
+                  ? "border-river bg-river/10 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.14)]"
+                  : variant === "activity" && inSelectedWeek
+                    ? "border-river/25 bg-river/5"
+                  : hasData
+                    ? "border-ink/10 bg-white hover:border-river/35 hover:bg-river/5"
+                    : "border-transparent bg-ink/[0.025] hover:bg-ink/[0.04]"
+              } ${inMonth ? "text-ink" : "text-ink/30"}`}
+              style={variant === "activity" && intensity > 0 && !selected ? { background: `rgba(249, 115, 22, ${0.08 + intensity * 0.26})` } : undefined}
+            >
+              <span className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${isToday(day) ? "bg-ink text-white" : ""}`}>
+                {format(day, "d")}
+              </span>
+              {variant === "activity" ? (
+                <span className="mt-1 block space-y-0.5">
+                  {summary?.expense ? <span className="block truncate text-[11px] font-semibold text-coral">{compactCurrency(summary.expense)}</span> : null}
+                  <span className="flex min-h-4 items-center gap-1">
+                    {summary?.income ? <span className="rounded bg-moss/10 px-1 text-[10px] font-semibold text-moss">+</span> : null}
+                    {summary?.recurringCount ? <span className="rounded bg-amber/15 px-1 text-[10px] font-semibold text-amber">{labels.due}</span> : null}
+                  </span>
+                </span>
+              ) : variant === "transactions" ? (
+                <span className="mt-1 block space-y-0.5">
+                  {summary?.expense ? <span className="block truncate text-[11px] font-semibold text-coral">-{currency.format(summary.expense)}</span> : null}
+                  {summary?.income ? <span className="block truncate text-[11px] font-semibold text-moss">+{currency.format(summary.income)}</span> : null}
+                  {summary?.count ? <span className="block text-[10px] text-ink/45">{summary.count} entries</span> : null}
+                </span>
+              ) : (
+                <span className="mt-1 block space-y-0.5">
+                  {summary?.recurringCount ? <span className="block text-[11px] font-semibold text-coral">{summary.recurringCount} due</span> : null}
+                  {summary?.dueAmount ? <span className="block truncate text-[10px] text-ink/55">{currency.format(summary.dueAmount)}</span> : null}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function buildCalendarGrid(month: Date) {
+  return eachDayOfInterval({
+    start: startOfWeek(startOfMonth(month)),
+    end: endOfWeek(endOfMonth(month))
+  });
+}
+
+function summarizeTransactionsByDay(transactions: Transaction[]) {
+  return transactions.reduce<Record<string, CalendarDaySummary>>((summary, transaction) => {
+    const current = summary[transaction.occurredOn] ?? {};
+
+    summary[transaction.occurredOn] = {
+      ...current,
+      count: (current.count ?? 0) + 1,
+      income: (current.income ?? 0) + (transaction.type === "income" ? transaction.amount : 0),
+      expense: (current.expense ?? 0) + (transaction.type === "expense" ? transaction.amount : 0)
+    };
+
+    return summary;
+  }, {});
+}
+
+function summarizeRecurringByDay(rules: RecurringRule[]) {
+  return rules.reduce<Record<string, CalendarDaySummary>>((summary, rule) => {
+    const current = summary[rule.nextDueOn] ?? {};
+
+    summary[rule.nextDueOn] = {
+      ...current,
+      recurringCount: (current.recurringCount ?? 0) + 1,
+      dueAmount: (current.dueAmount ?? 0) + (rule.type === "expense" ? rule.amount : 0)
+    };
+
+    return summary;
+  }, {});
+}
+
+function summarizeActivityRange(transactions: Transaction[], rules: RecurringRule[], start: Date, end: Date): Required<CalendarDaySummary> {
+  const startKey = format(start, "yyyy-MM-dd");
+  const endKey = format(end, "yyyy-MM-dd");
+
+  const transactionSummary = transactions
+    .filter((transaction) => transaction.occurredOn >= startKey && transaction.occurredOn <= endKey)
+    .reduce<Required<CalendarDaySummary>>((summary, transaction) => ({
+      ...summary,
+      count: summary.count + 1,
+      income: summary.income + (transaction.type === "income" ? transaction.amount : 0),
+      expense: summary.expense + (transaction.type === "expense" ? transaction.amount : 0)
+    }), emptyCalendarSummary());
+
+  return rules
+    .filter((rule) => rule.nextDueOn >= startKey && rule.nextDueOn <= endKey)
+    .reduce<Required<CalendarDaySummary>>((summary, rule) => ({
+      ...summary,
+      dueAmount: summary.dueAmount + (rule.type === "expense" ? rule.amount : 0),
+      recurringCount: summary.recurringCount + 1
+    }), transactionSummary);
+}
+
+function mergeCalendarSummaries(...summaries: Record<string, CalendarDaySummary>[]) {
+  return summaries.reduce<Record<string, CalendarDaySummary>>((merged, summary) => {
+    Object.entries(summary).forEach(([date, value]) => {
+      const current = merged[date] ?? {};
+      merged[date] = {
+        income: (current.income ?? 0) + (value.income ?? 0),
+        expense: (current.expense ?? 0) + (value.expense ?? 0),
+        count: (current.count ?? 0) + (value.count ?? 0),
+        dueAmount: (current.dueAmount ?? 0) + (value.dueAmount ?? 0),
+        recurringCount: (current.recurringCount ?? 0) + (value.recurringCount ?? 0)
+      };
+    });
+
+    return merged;
+  }, {});
+}
+
+function monthlyComparisonForMonth(transactions: Transaction[], month: Date) {
+  const current = totals(monthTransactions(transactions, month));
+  const previous = totals(monthTransactions(transactions, subMonths(month, 1)));
+
+  return {
+    incomeDelta: percentDelta(current.income, previous.income),
+    expenseDelta: percentDelta(current.expenses, previous.expenses)
+  };
+}
+
+function percentDelta(current: number, previous: number) {
+  if (previous === 0) {
+    return current > 0 ? 100 : 0;
+  }
+
+  return ((current - previous) / previous) * 100;
+}
+
+function emptyCalendarSummary(): Required<CalendarDaySummary> {
+  return {
+    income: 0,
+    expense: 0,
+    count: 0,
+    dueAmount: 0,
+    recurringCount: 0
+  };
+}
+
+function compactCurrency(value: number) {
+  if (value >= 1000000) {
+    return `฿${(value / 1000000).toFixed(1)}m`;
+  }
+
+  if (value >= 1000) {
+    return `฿${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  }
+
+  return currency.format(value);
 }
 
 function applyMonthlyBudgets(categories: Category[], budgets: Budget[], month: string) {
@@ -1819,17 +2410,16 @@ function MetricCard({
   label: string;
   value: string;
   sub: string;
-  tone: "moss" | "river" | "plum" | "coral";
+  tone: "moss" | "river" | "coral";
 }) {
   const tones = {
     moss: "bg-moss/12 text-moss",
     river: "bg-river/12 text-river",
-    plum: "bg-plum/12 text-plum",
     coral: "bg-coral/12 text-coral"
   };
 
   return (
-    <article className="rounded-lg border border-ink/10 bg-paper/78 p-3 shadow-soft backdrop-blur sm:p-4">
+    <article className="rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
       <div className="mb-4 flex items-center justify-between">
         <span className={`grid size-10 place-items-center rounded-lg ${tones[tone]}`}>
           <Icon size={20} />
@@ -1883,6 +2473,8 @@ function CategoryManager({
 }) {
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; kind: TransactionType; monthlyBudget: string }>>({});
   const [subcategoryDrafts, setSubcategoryDrafts] = useState<Record<string, { categoryId: string; name: string }>>({});
+  const [editingCategoryId, setEditingCategoryId] = useState("");
+  const [editingSubcategoryId, setEditingSubcategoryId] = useState("");
 
   useEffect(() => {
     setCategoryDrafts(Object.fromEntries(categories.map((category) => [category.id, {
@@ -1902,8 +2494,8 @@ function CategoryManager({
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="grid gap-4">
-        <form onSubmit={onCreateCategory} className="rounded-lg border border-ink/10 bg-white p-3">
-          <h3 className="mb-3 font-semibold">Create category</h3>
+        <form onSubmit={onCreateCategory} className="rounded-lg border border-river/15 bg-river/5 p-3">
+          <h3 className="mb-3 text-sm font-semibold uppercase text-river">Create category</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               value={newCategoryName}
@@ -1926,15 +2518,15 @@ function CategoryManager({
               inputMode="decimal"
               placeholder="Monthly budget, optional"
             />
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper sm:col-span-2">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2">
               <Plus size={17} />
               Create category
             </button>
           </div>
         </form>
 
-        <form onSubmit={onCreateSubcategory} className="rounded-lg border border-ink/10 bg-white p-3">
-          <h3 className="mb-3 font-semibold">Create subcategory</h3>
+        <form onSubmit={onCreateSubcategory} className="rounded-lg border border-river/15 bg-river/5 p-3">
+          <h3 className="mb-3 text-sm font-semibold uppercase text-river">Create subcategory</h3>
           <div className="grid gap-2">
             <select
               value={newSubcategoryCategoryId}
@@ -1952,7 +2544,7 @@ function CategoryManager({
               className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
               placeholder="Subcategory name, e.g. Electricity"
             />
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-paper">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white">
               <Plus size={17} />
               Create subcategory
             </button>
@@ -1963,73 +2555,96 @@ function CategoryManager({
       <div className="space-y-3">
         {categories.map((category) => {
           const children = subcategories.filter((subcategory) => subcategory.categoryId === category.id);
+          const isEditingCategory = editingCategoryId === category.id;
           const categoryDraft = categoryDrafts[category.id] ?? {
             name: category.name,
             kind: category.kind,
             monthlyBudget: String(category.monthlyBudget ?? "")
           };
           return (
-            <div key={category.id} className="rounded-lg border border-ink/10 bg-white p-3">
-              <form onSubmit={(event) => {
-                event.preventDefault();
-                onUpdateCategory(category.id, categoryDraft);
-              }} className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_120px_120px_auto_auto]">
+            <div key={category.id} className={`rounded-lg border p-3 ${isEditingCategory ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
+              <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="size-3 rounded-full" style={{ background: category.color }} />
-                  <input
-                    value={categoryDraft.name}
-                    onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, name: event.target.value } }))}
-                    className="h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold"
-                    placeholder="Category name"
-                  />
+                  <span className="size-3 shrink-0 rounded-full" style={{ background: category.color }} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{category.name}</p>
+                    <p className="mt-1 text-xs text-ink/55">
+                      {category.kind}{category.monthlyBudget !== undefined ? ` - ${currency.format(category.monthlyBudget)} monthly budget` : ""}
+                    </p>
+                  </div>
                 </div>
-                <select
-                  value={categoryDraft.kind}
-                  onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, kind: event.target.value as TransactionType } }))}
-                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                >
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                </select>
-                <input
-                  value={categoryDraft.monthlyBudget}
-                  onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, monthlyBudget: event.target.value } }))}
-                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                  inputMode="decimal"
-                  placeholder="Budget"
-                />
-                <button className="h-10 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">Save</button>
-                <button type="button" aria-label="Delete category" onClick={() => onDeleteCategory(category.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                  <Trash2 size={16} />
-                </button>
-              </form>
-              <div className="grid gap-2">
-                {children.length > 0 ? children.map((subcategory) => (
-                  <form key={subcategory.id} onSubmit={(event) => {
+                {isEditingCategory ? (
+                  <form onSubmit={(event) => {
                     event.preventDefault();
-                    onUpdateSubcategory(subcategory.id, subcategoryDrafts[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name });
-                  }} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(150px,0.6fr)_auto_auto]">
-                    <input
-                      value={subcategoryDrafts[subcategory.id]?.name ?? subcategory.name}
-                      onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...(current[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name }), name: event.target.value } }))}
-                      className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                      placeholder="Subcategory"
-                    />
-                    <select
-                      value={subcategoryDrafts[subcategory.id]?.categoryId ?? subcategory.categoryId}
-                      onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...(current[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name }), categoryId: event.target.value } }))}
-                      className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm"
-                    >
-                      {categories.map((item) => (
-                        <option key={item.id} value={item.id}>{item.name}</option>
-                      ))}
+                    onUpdateCategory(category.id, categoryDraft);
+                    setEditingCategoryId("");
+                  }} className="grid gap-2 md:w-[520px] md:grid-cols-[minmax(0,1fr)_120px_120px_auto_auto]">
+                    <input value={categoryDraft.name} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, name: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold" placeholder="Category name" />
+                    <select value={categoryDraft.kind} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, kind: event.target.value as TransactionType } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                      <option value="expense">Expense</option>
+                      <option value="income">Income</option>
                     </select>
-                    <button className="h-9 rounded-lg bg-ink px-3 text-sm font-semibold text-paper">Save</button>
-                    <button type="button" aria-label="Delete subcategory" onClick={() => onDeleteSubcategory(subcategory.id)} className="grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
-                      <Trash2 size={15} />
+                    <input value={categoryDraft.monthlyBudget} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, monthlyBudget: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Budget" />
+                    <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white">Update</button>
+                    <button type="button" aria-label="Cancel category edit" onClick={() => {
+                      setEditingCategoryId("");
+                      setCategoryDrafts((current) => ({ ...current, [category.id]: { name: category.name, kind: category.kind, monthlyBudget: String(category.monthlyBudget ?? "") } }));
+                    }} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+                      <X size={16} />
                     </button>
                   </form>
-                )) : (
+                ) : (
+                  <div className="inline-flex justify-end gap-1">
+                    <button type="button" aria-label="Edit category" onClick={() => setEditingCategoryId(category.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                      <Pencil size={16} />
+                    </button>
+                    <button type="button" aria-label="Delete category" onClick={() => onDeleteCategory(category.id)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="grid gap-2">
+                {children.length > 0 ? children.map((subcategory) => {
+                  const subcategoryDraft = subcategoryDrafts[subcategory.id] ?? { categoryId: subcategory.categoryId, name: subcategory.name };
+                  const isEditingSubcategory = editingSubcategoryId === subcategory.id;
+
+                  return (
+                    <div key={subcategory.id} className={`grid gap-2 rounded-lg p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${isEditingSubcategory ? "bg-river/5" : "bg-ink/[0.03]"}`}>
+                      <p className="min-w-0 truncate text-sm text-ink/75">{subcategory.name}</p>
+                      {isEditingSubcategory ? (
+                        <form onSubmit={(event) => {
+                          event.preventDefault();
+                          onUpdateSubcategory(subcategory.id, subcategoryDraft);
+                          setEditingSubcategoryId("");
+                        }} className="grid gap-2 sm:w-[420px] sm:grid-cols-[minmax(0,1fr)_minmax(150px,0.6fr)_auto_auto]">
+                          <input value={subcategoryDraft.name} onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...subcategoryDraft, name: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Subcategory" />
+                          <select value={subcategoryDraft.categoryId} onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...subcategoryDraft, categoryId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+                            {categories.map((item) => (
+                              <option key={item.id} value={item.id}>{item.name}</option>
+                            ))}
+                          </select>
+                          <button className="h-9 rounded-lg bg-river px-3 text-sm font-semibold text-white">Update</button>
+                          <button type="button" aria-label="Cancel subcategory edit" onClick={() => {
+                            setEditingSubcategoryId("");
+                            setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { categoryId: subcategory.categoryId, name: subcategory.name } }));
+                          }} className="grid size-9 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
+                            <X size={15} />
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="inline-flex justify-end gap-1">
+                          <button type="button" aria-label="Edit subcategory" onClick={() => setEditingSubcategoryId(subcategory.id)} className="grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
+                            <Pencil size={15} />
+                          </button>
+                          <button type="button" aria-label="Delete subcategory" onClick={() => onDeleteSubcategory(subcategory.id)} className="grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }) : (
                   <span className="text-sm text-ink/45">No subcategories yet</span>
                 )}
               </div>
@@ -2061,7 +2676,7 @@ function LanguageToggle({
           type="button"
           onClick={() => onChange(item)}
           className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
-            language === item ? "bg-ink text-paper" : "text-ink/55 hover:bg-ink/5 hover:text-ink"
+            language === item ? "bg-river text-white" : "text-ink/55 hover:bg-river/10 hover:text-river"
           }`}
         >
           {item === "en" ? "EN" : "မြန်မာ"}
