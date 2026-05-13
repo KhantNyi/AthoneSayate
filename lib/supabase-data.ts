@@ -29,6 +29,7 @@ export type NewTransactionInput = {
   occurredOn: string;
   merchant?: string;
   notes?: string;
+  isRecurring?: boolean;
 };
 
 export type UpdateTransactionInput = NewTransactionInput;
@@ -185,7 +186,8 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
       amount: input.amount,
       occurred_on: input.occurredOn,
       merchant: input.merchant ?? "",
-      notes: input.notes ?? ""
+      notes: input.notes ?? "",
+      is_recurring: input.isRecurring ?? false
     })
     .select("*")
     .single();

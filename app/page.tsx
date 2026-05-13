@@ -36,6 +36,7 @@ import {
   YAxis
 } from "recharts";
 import {
+  addDays,
   addMonths,
   eachDayOfInterval,
   endOfMonth,
@@ -520,12 +521,43 @@ export default function ExpenseTrackerPage() {
   const dashboardCategoryTx = useMemo(() => monthTransactions(transactions, dashboardCategoryMonth), [transactions, dashboardCategoryMonth]);
   const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, dashboardCategoryTx), [categoriesForCurrentMonth, dashboardCategoryTx]);
   const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, budgetMonthTx).filter((row) => row.monthlyBudget !== undefined), [categoriesForBudgetMonth, budgetMonthTx]);
+  const reportMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(new Date(), 5 - index))), []);
+  const reportMonthlySeries = useMemo(() => reportMonths.map((month) => {
+    const monthTotal = totals(monthTransactions(transactions, month));
+
+    return {
+      month: format(month, "MMM"),
+      income: monthTotal.income,
+      expenses: monthTotal.expenses,
+      net: monthTotal.net
+    };
+  }), [reportMonths, transactions]);
+  const reportStartKey = format(reportMonths[0] ?? startOfMonth(new Date()), "yyyy-MM-dd");
+  const reportEndKey = format(endOfMonth(reportMonths[reportMonths.length - 1] ?? new Date()), "yyyy-MM-dd");
+  const reportRangeTransactions = useMemo(() => transactions.filter((tx) => tx.occurredOn >= reportStartKey && tx.occurredOn <= reportEndKey), [reportEndKey, reportStartKey, transactions]);
+  const reportExpenseTotal = useMemo(() => reportRangeTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0), [reportRangeTransactions]);
+  const reportCategoryRows = useMemo(() => categories.filter((category) => category.kind === "expense").map((category) => {
+    const categoryTransactions = reportRangeTransactions.filter((tx) => tx.type === "expense" && tx.categoryId === category.id);
+    const spent = categoryTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    return {
+      ...category,
+      spent,
+      count: categoryTransactions.length,
+      share: reportExpenseTotal > 0 ? (spent / reportExpenseTotal) * 100 : 0
+    };
+  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [categories, reportExpenseTotal, reportRangeTransactions]);
+  const reportBudgetRows = useMemo(() => budgetTabRows.filter((row) => row.monthlyBudget !== undefined).sort((a, b) => b.progress - a.progress).slice(0, 6), [budgetTabRows]);
   const comparison = useMemo(() => monthlyComparisonForMonth(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
   const dashboardPaceTx = useMemo(() => monthTransactions(transactions, dashboardPaceMonth), [transactions, dashboardPaceMonth]);
   const daily = useMemo(() => dailySeries(dashboardPaceTx, dashboardPaceMonth), [dashboardPaceTx, dashboardPaceMonth]);
   const weekday = useMemo(() => weekdaySpend(currentMonthTx), [currentMonthTx]);
   const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
-  const recurringDue = upcoming.filter((rule) => rule.type === "expense" && rule.daysUntilDue >= 0).reduce((sum, rule) => sum + rule.amount, 0);
+  const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
+    ...matches,
+    [rule.id]: findRecurringPayment(rule, transactions)
+  }), {}), [transactions, upcoming]);
+  const recurringDue = upcoming.filter((rule) => rule.type === "expense" && !recurringPayments[rule.id] && parseISO(rule.nextDueOn) <= endOfMonth(new Date())).reduce((sum, rule) => sum + rule.amount, 0);
   const dailyAllowance = safeToSpend(currentMonthTotals.income, currentMonthTotals.expenses, recurringDue);
   const t = translations[language];
   const ui = uiTranslations[language];
@@ -563,6 +595,19 @@ export default function ExpenseTrackerPage() {
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
   const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate : true);
+  const recurringDueLabel = (daysUntilDue: number) => {
+    const dayLabel = Math.abs(daysUntilDue) === 1 ? "day" : "days";
+
+    if (daysUntilDue < 0) {
+      return `overdue by ${Math.abs(daysUntilDue)} ${dayLabel}`;
+    }
+
+    if (daysUntilDue === 0) {
+      return "due today";
+    }
+
+    return `${t.dueIn} ${daysUntilDue} ${dayLabel}`;
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -989,6 +1034,51 @@ export default function ExpenseTrackerPage() {
       setEditingRecurringId("");
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to update recurring item.");
+    } finally {
+      setSavingRecurringId("");
+    }
+  }
+
+  async function handleMarkRecurringPaid(rule: RecurringRule) {
+    if (!rule.categoryId) {
+      setDataError("Recurring item needs a category before it can be recorded.");
+      return;
+    }
+
+    try {
+      setDataError("");
+      setDataNotice("");
+      setSavingRecurringId(rule.id);
+      const transaction = await createTransaction({
+        accountId: rule.accountId,
+        categoryId: rule.categoryId,
+        subcategoryId: rule.subcategoryId,
+        type: rule.type,
+        amount: rule.amount,
+        occurredOn: format(new Date(), "yyyy-MM-dd"),
+        merchant: rule.merchant,
+        notes: `Recorded from recurring item due ${rule.nextDueOn}`,
+        isRecurring: true
+      });
+      const updatedRule = await updateRecurringRule(rule.id, {
+        accountId: rule.accountId,
+        categoryId: rule.categoryId,
+        subcategoryId: rule.subcategoryId,
+        type: rule.type,
+        amount: rule.amount,
+        merchant: rule.merchant,
+        frequency: rule.frequency,
+        nextDueOn: nextRecurringDueOn(rule),
+        autoCreate: rule.autoCreate
+      });
+
+      setTransactions((current) => [transaction, ...current].sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)));
+      setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
+      setRecurringRules((current) => current.map((item) => (item.id === updatedRule.id ? updatedRule : item)));
+      setRecurringDrafts((current) => ({ ...current, [updatedRule.id]: recurringRuleToDraft(updatedRule) }));
+      setDataNotice(`${rule.merchant} recorded and moved to ${format(parseISO(updatedRule.nextDueOn), "MMM d")}.`);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to record recurring payment.");
     } finally {
       setSavingRecurringId("");
     }
@@ -1662,9 +1752,9 @@ export default function ExpenseTrackerPage() {
           {(activeTab === "budgets" || activeTab === "recurring") && <div className="grid gap-4">
             {activeTab === "budgets" && (
             <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
-              <form onSubmit={handleSetBudget} className="mb-4 max-w-2xl rounded-lg border border-river/15 bg-river/5 p-3">
+              <form onSubmit={handleSetBudget} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
                 <h3 className="mb-3 text-sm font-semibold uppercase text-river">Set new monthly budget</h3>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[150px_minmax(0,1fr)_150px]">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[150px_minmax(0,1fr)_150px_auto]">
                   <input
                     type="month"
                     value={budgetMonth}
@@ -1690,19 +1780,19 @@ export default function ExpenseTrackerPage() {
                     inputMode="decimal"
                     placeholder="Amount"
                   />
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-3" disabled={savingBudgetId === budgetCategoryId}>
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-1" disabled={savingBudgetId === budgetCategoryId}>
                     <Plus size={17} />
                     {savingBudgetId === budgetCategoryId ? "Saving budget" : "Save monthly budget"}
                   </button>
                 </div>
               </form>
-              <div className="space-y-4">
+              <div className="grid gap-3 xl:grid-cols-2">
                 {budgetTabRows.map((row) => {
                   const isEditing = editingBudgetId === row.id;
 
                   return (
-                  <article key={row.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
-                    <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                  <article key={row.id} className={`rounded-lg border p-4 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
+                    <div className="mb-4 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-start">
                       <div className="min-w-0">
                         <p className="font-medium">{categoryLabel(row.name)}</p>
                         <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
@@ -1742,8 +1832,14 @@ export default function ExpenseTrackerPage() {
                         </div>
                       )}
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#f05a3f" : "#f97316" }} />
+                    <div className="max-w-md">
+                      <div className="mb-2 flex items-center justify-between text-xs font-medium text-ink/50">
+                        <span>{Math.min(row.progress, 100).toFixed(0)}% used</span>
+                        <span>{currency.format(row.remaining)} left</span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#f05a3f" : "#f97316" }} />
+                      </div>
                     </div>
                   </article>
                   );
@@ -1810,13 +1906,20 @@ export default function ExpenseTrackerPage() {
                   const ruleCategory = categories.find((category) => category.id === rule.categoryId);
                   const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
                   const ruleAccount = accounts.find((account) => account.id === rule.accountId);
+                  const matchedTransaction = recurringPayments[rule.id];
+                  const statusTone = matchedTransaction ? "bg-moss/12 text-moss" : rule.daysUntilDue < 0 ? "bg-coral/12 text-coral" : rule.daysUntilDue === 0 ? "bg-amber/15 text-amber" : "bg-ink/5 text-ink/55";
                   return (
                     <article key={rule.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
-                          <p className="mt-1 text-sm text-ink/55">
-                            {categoryLabel(ruleCategory?.name)} - {ruleAccount?.name} - {frequencyLabel(rule.frequency)} - {t.dueIn} {rule.daysUntilDue}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}`}>
+                              {matchedTransaction ? `Recorded ${format(parseISO(matchedTransaction.occurredOn), "MMM d")}` : recurringDueLabel(rule.daysUntilDue)}
+                            </span>
+                          </div>
+                          <p className={`mt-1 text-sm ${!matchedTransaction && rule.daysUntilDue < 0 ? "font-semibold text-coral" : "text-ink/55"}`}>
+                            {categoryLabel(ruleCategory?.name)} - {ruleAccount?.name} - {frequencyLabel(rule.frequency)}
                             {rule.autoCreate ? " - Auto-create" : ""}
                           </p>
                         </div>
@@ -1824,6 +1927,9 @@ export default function ExpenseTrackerPage() {
                           <strong className={`shrink-0 px-2 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{rule.type === "income" ? "+" : "-"}{currency.format(rule.amount)}</strong>
                           {!isEditing ? (
                             <>
+                              <button type="button" onClick={() => handleMarkRecurringPaid(rule)} disabled={Boolean(matchedTransaction) || savingRecurringId === rule.id} className="h-10 rounded-lg border border-ink/10 px-3 text-sm font-semibold text-ink/60 transition hover:bg-moss/10 hover:text-moss disabled:cursor-not-allowed disabled:opacity-45">
+                                {savingRecurringId === rule.id ? "Recording" : rule.type === "income" ? "Record received" : "Mark paid"}
+                              </button>
                               <button type="button" aria-label="Edit recurring item" onClick={() => startEditingRecurring(rule)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
                                 <Pencil size={16} />
                               </button>
@@ -1925,9 +2031,71 @@ export default function ExpenseTrackerPage() {
           )}
 
           {activeTab === "reports" && (
-          <Panel id="reports" title={t.reports} action={t.weekdayPattern}>
-            <div className="h-52 sm:h-56">
-              <ResponsiveContainer width="100%" height="100%">
+          <Panel id="reports" title={t.reports} action={`${format(parseISO(reportStartKey), "MMM yyyy")} - ${format(parseISO(reportEndKey), "MMM yyyy")}`}>
+            <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+              <section className="rounded-lg border border-ink/10 bg-ink/[0.02] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">6-month cash flow</h3>
+                  <span className="text-xs font-semibold text-ink/45">{currency.format(reportMonthlySeries.reduce((sum, item) => sum + item.net, 0))} net</span>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={reportMonthlySeries}>
+                      <defs>
+                        <linearGradient id="reportIncomeGradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="5%" stopColor="#16a34a" stopOpacity={0.28} />
+                          <stop offset="95%" stopColor="#16a34a" stopOpacity={0.03} />
+                        </linearGradient>
+                        <linearGradient id="reportExpenseGradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.28} />
+                          <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={48} />
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
+                      <Area type="monotone" dataKey="income" stroke="#16a34a" fill="url(#reportIncomeGradient)" strokeWidth={2.5} />
+                      <Area type="monotone" dataKey="expenses" stroke="#f05a3f" fill="url(#reportExpenseGradient)" strokeWidth={2.5} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">Category concentration</h3>
+                  <span className="text-xs font-semibold text-ink/45">{currency.format(reportExpenseTotal)}</span>
+                </div>
+                <div className="space-y-3">
+                  {reportCategoryRows.slice(0, 6).map((row, index) => (
+                    <div key={row.id}>
+                      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                        <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                          <span className="size-3 shrink-0 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                          <span className="truncate">{categoryLabel(row.name)}</span>
+                        </span>
+                        <strong>{row.share.toFixed(0)}%</strong>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+                          <div className="h-full rounded-full bg-river" style={{ width: `${Math.min(row.share, 100)}%` }} />
+                        </div>
+                        <span className="w-24 text-right text-xs text-ink/55">{currency.format(row.spent)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {reportCategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">{t.weekdayPattern}</h3>
+                  <span className="text-xs font-semibold text-ink/45">{format(new Date(), "MMM yyyy")}</span>
+                </div>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weekday}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
                   <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
@@ -1935,7 +2103,37 @@ export default function ExpenseTrackerPage() {
                   <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
                   <Bar dataKey="spent" fill="#f97316" radius={[6, 6, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">Budget variance</h3>
+                  <span className="text-xs font-semibold text-ink/45">{budgetMonth}</span>
+                </div>
+                <div className="space-y-3">
+                  {reportBudgetRows.map((row) => {
+                    const overBudget = row.spent > (row.monthlyBudget ?? 0);
+
+                    return (
+                      <div key={row.id} className="rounded-lg border border-ink/10 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate font-medium">{categoryLabel(row.name)}</span>
+                          <strong className={overBudget ? "text-coral" : "text-moss"}>
+                            {overBudget ? "+" : ""}{currency.format(row.spent - (row.monthlyBudget ?? 0))}
+                          </strong>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                          <div className={`h-full rounded-full ${overBudget ? "bg-coral" : "bg-moss"}`} style={{ width: `${Math.min(row.progress, 100)}%` }} />
+                        </div>
+                        <p className="mt-2 text-xs text-ink/50">{currency.format(row.spent)} / {currency.format(row.monthlyBudget ?? 0)}</p>
+                      </div>
+                    );
+                  })}
+                  {reportBudgetRows.length === 0 ? <p className="text-sm text-ink/45">No budgets set for {budgetMonth}.</p> : null}
+                </div>
+              </section>
             </div>
           </Panel>
           )}
@@ -2355,6 +2553,52 @@ function upsertBudgetInState(budgets: Budget[], updated: Budget) {
   return [updated, ...budgets];
 }
 
+function findRecurringPayment(rule: RecurringRule, transactions: Transaction[]) {
+  const window = recurringPaymentWindow(rule);
+  const tolerance = Math.max(rule.amount * 0.1, 10);
+
+  return transactions
+    .filter((transaction) => {
+      const sameType = transaction.type === rule.type;
+      const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
+      const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
+      const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
+      const inWindow = transaction.occurredOn >= window.start && transaction.occurredOn <= window.end;
+
+      return sameType && sameCategory && sameSubcategory && amountMatches && inWindow;
+    })
+    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(rule.nextDueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(rule.nextDueOn).getTime()))[0];
+}
+
+function recurringPaymentWindow(rule: RecurringRule) {
+  const dueDate = parseISO(rule.nextDueOn);
+  const days = {
+    weekly: 3,
+    biweekly: 5,
+    monthly: 14,
+    quarterly: 21,
+    yearly: 30
+  }[rule.frequency];
+
+  return {
+    start: format(addDays(dueDate, -days), "yyyy-MM-dd"),
+    end: format(addDays(dueDate, days), "yyyy-MM-dd")
+  };
+}
+
+function nextRecurringDueOn(rule: RecurringRule) {
+  const dueDate = parseISO(rule.nextDueOn);
+  const nextDate = {
+    weekly: addDays(dueDate, 7),
+    biweekly: addDays(dueDate, 14),
+    monthly: addMonths(dueDate, 1),
+    quarterly: addMonths(dueDate, 3),
+    yearly: addMonths(dueDate, 12)
+  }[rule.frequency];
+
+  return format(nextDate, "yyyy-MM-dd");
+}
+
 function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {
   return {
     accountId: rule.accountId,
@@ -2475,6 +2719,7 @@ function CategoryManager({
   const [subcategoryDrafts, setSubcategoryDrafts] = useState<Record<string, { categoryId: string; name: string }>>({});
   const [editingCategoryId, setEditingCategoryId] = useState("");
   const [editingSubcategoryId, setEditingSubcategoryId] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
 
   useEffect(() => {
     setCategoryDrafts(Object.fromEntries(categories.map((category) => [category.id, {
@@ -2491,8 +2736,16 @@ function CategoryManager({
     }])));
   }, [subcategories]);
 
+  useEffect(() => {
+    if (!categories.some((category) => category.id === selectedCategoryId)) {
+      setSelectedCategoryId(categories[0]?.id ?? "");
+    }
+  }, [categories, selectedCategoryId]);
+
+  const selectedCategory = categories.find((category) => category.id === selectedCategoryId) ?? categories[0];
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+    <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="grid gap-4">
         <form onSubmit={onCreateCategory} className="rounded-lg border border-river/15 bg-river/5 p-3">
           <h3 className="mb-3 text-sm font-semibold uppercase text-river">Create category</h3>
@@ -2553,7 +2806,44 @@ function CategoryManager({
       </div>
 
       <div className="space-y-3">
-        {categories.map((category) => {
+        <div className="rounded-lg border border-ink/10 bg-white p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase text-ink/55">Category library</h3>
+            <span className="text-xs font-semibold text-ink/45">{categories.length}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {categories.map((category) => {
+              const childCount = subcategories.filter((subcategory) => subcategory.categoryId === category.id).length;
+              const selected = selectedCategory?.id === category.id;
+
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategoryId(category.id);
+                    setEditingCategoryId("");
+                    setEditingSubcategoryId("");
+                  }}
+                  className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                    selected ? "border-river/25 bg-river/10 text-river" : "border-ink/10 hover:bg-ink/[0.04]"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="size-3 shrink-0 rounded-full" style={{ background: category.color }} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{category.name}</span>
+                      <span className="block text-xs text-ink/45">{category.kind} - {childCount} sub</span>
+                    </span>
+                  </span>
+                  {category.monthlyBudget !== undefined ? <span className="shrink-0 text-xs font-semibold">{currency.format(category.monthlyBudget)}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {categories.filter((category) => !selectedCategory || category.id === selectedCategory.id).map((category) => {
           const children = subcategories.filter((subcategory) => subcategory.categoryId === category.id);
           const isEditingCategory = editingCategoryId === category.id;
           const categoryDraft = categoryDrafts[category.id] ?? {
