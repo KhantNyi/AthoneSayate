@@ -6,6 +6,8 @@ import {
   BadgeDollarSign,
   Banknote,
   CalendarClock,
+  CheckCircle2,
+  CircleAlert,
   CircleDollarSign,
   Languages,
   LayoutDashboard,
@@ -1968,19 +1970,29 @@ export default function ExpenseTrackerPage() {
                   const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
                   const ruleAccount = accounts.find((account) => account.id === rule.accountId);
                   const matchedTransaction = recurringPayments[rule.id];
-                  const statusTone = matchedTransaction ? "bg-moss/12 text-moss" : rule.daysUntilDue < 0 ? "bg-coral/12 text-coral" : rule.daysUntilDue === 0 ? "bg-amber/15 text-amber" : "bg-ink/5 text-ink/55";
+                  const isPaid = Boolean(matchedTransaction);
+                  const paymentStatusLabel = isPaid ? (rule.type === "income" ? "Received" : "Paid") : rule.type === "income" ? "Not received" : "Unpaid";
+                  const paymentStatusTone = isPaid ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral";
+                  const dueStatusTone = isPaid ? "bg-ink/5 text-ink/55" : rule.daysUntilDue < 0 ? "bg-coral/12 text-coral" : rule.daysUntilDue === 0 ? "bg-amber/15 text-amber" : "bg-ink/5 text-ink/55";
+                  const recurringActionClass = isPaid
+                    ? "h-10 rounded-lg border border-moss/20 bg-moss/10 px-3 text-sm font-semibold text-moss transition disabled:cursor-not-allowed"
+                    : "h-10 rounded-lg border border-ink/10 px-3 text-sm font-semibold text-ink/60 transition hover:bg-moss/10 hover:text-moss disabled:cursor-not-allowed disabled:opacity-45";
                   return (
                     <article key={rule.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-medium">{rule.merchant}{ruleSubcategory ? ` / ${ruleSubcategory.name}` : ""}</p>
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone}`}>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${paymentStatusTone}`}>
+                              {isPaid ? <CheckCircle2 size={13} /> : <CircleAlert size={13} />}
+                              {paymentStatusLabel}
+                            </span>
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${dueStatusTone}`}>
                               {matchedTransaction ? `Recorded ${format(parseISO(matchedTransaction.occurredOn), "MMM d")}` : recurringDueLabel(rule.daysUntilDue)}
                             </span>
                           </div>
                           <p className={`mt-1 text-sm ${!matchedTransaction && rule.daysUntilDue < 0 ? "font-semibold text-coral" : "text-ink/55"}`}>
-                            {categoryLabel(ruleCategory?.name)} - {ruleAccount?.name} - {frequencyLabel(rule.frequency)}
+                            Due {format(parseISO(rule.nextDueOn), "MMM d, yyyy")} - {categoryLabel(ruleCategory?.name)} - {ruleAccount?.name} - {frequencyLabel(rule.frequency)}
                             {rule.autoCreate ? " - Auto-create" : ""}
                           </p>
                         </div>
@@ -1988,8 +2000,8 @@ export default function ExpenseTrackerPage() {
                           <strong className={`shrink-0 px-2 ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{rule.type === "income" ? "+" : "-"}{currency.format(rule.amount)}</strong>
                           {!isEditing ? (
                             <>
-                              <button type="button" onClick={() => handleMarkRecurringPaid(rule)} disabled={Boolean(matchedTransaction) || savingRecurringId === rule.id} className="h-10 rounded-lg border border-ink/10 px-3 text-sm font-semibold text-ink/60 transition hover:bg-moss/10 hover:text-moss disabled:cursor-not-allowed disabled:opacity-45">
-                                {savingRecurringId === rule.id ? "Recording" : rule.type === "income" ? "Record received" : "Mark paid"}
+                              <button type="button" onClick={() => handleMarkRecurringPaid(rule)} disabled={isPaid || savingRecurringId === rule.id} className={recurringActionClass}>
+                                {savingRecurringId === rule.id ? "Recording" : isPaid ? paymentStatusLabel : rule.type === "income" ? "Record received" : "Mark paid"}
                               </button>
                               <button type="button" aria-label="Edit recurring item" onClick={() => startEditingRecurring(rule)} className="grid size-10 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
                                 <Pencil size={16} />
