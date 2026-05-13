@@ -327,6 +327,13 @@ type CalendarDaySummary = {
   recurringCount?: number;
 };
 
+type LastRecurringPayment = {
+  transaction: Transaction;
+  previousRule: RecurringRule;
+  updatedRule: RecurringRule;
+  notice: string;
+};
+
 type AccountDraft = {
   name: string;
   type: AccountType;
@@ -353,6 +360,7 @@ export default function ExpenseTrackerPage() {
   const [savingRecurringId, setSavingRecurringId] = useState("");
   const [savingAccountId, setSavingAccountId] = useState("");
   const [savingTransactionId, setSavingTransactionId] = useState("");
+  const [undoingRecurringPaymentId, setUndoingRecurringPaymentId] = useState("");
   const [editingTransactionId, setEditingTransactionId] = useState("");
   const [editingBudgetId, setEditingBudgetId] = useState("");
   const [editingRecurringId, setEditingRecurringId] = useState("");
@@ -401,6 +409,7 @@ export default function ExpenseTrackerPage() {
   const [goalDrafts, setGoalDrafts] = useState<Record<string, GoalDraft>>({});
   const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
   const [transactionDrafts, setTransactionDrafts] = useState<Record<string, TransactionDraft>>({});
+  const [lastRecurringPayment, setLastRecurringPayment] = useState<LastRecurringPayment | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -1076,11 +1085,53 @@ export default function ExpenseTrackerPage() {
       setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
       setRecurringRules((current) => current.map((item) => (item.id === updatedRule.id ? updatedRule : item)));
       setRecurringDrafts((current) => ({ ...current, [updatedRule.id]: recurringRuleToDraft(updatedRule) }));
-      setDataNotice(`${rule.merchant} recorded and moved to ${format(parseISO(updatedRule.nextDueOn), "MMM d")}.`);
+      const notice = `${rule.merchant} recorded and moved to ${format(parseISO(updatedRule.nextDueOn), "MMM d")}.`;
+      setLastRecurringPayment({ transaction, previousRule: rule, updatedRule, notice });
+      setDataNotice(notice);
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to record recurring payment.");
     } finally {
       setSavingRecurringId("");
+    }
+  }
+
+  async function handleUndoRecurringPaid() {
+    if (!lastRecurringPayment) {
+      return;
+    }
+
+    const { previousRule, transaction, updatedRule } = lastRecurringPayment;
+
+    try {
+      setDataError("");
+      setUndoingRecurringPaymentId(transaction.id);
+      await removeTransaction(transaction.id);
+      const restoredRule = await updateRecurringRule(previousRule.id, {
+        accountId: previousRule.accountId,
+        categoryId: previousRule.categoryId,
+        subcategoryId: previousRule.subcategoryId,
+        type: previousRule.type,
+        amount: previousRule.amount,
+        merchant: previousRule.merchant,
+        frequency: previousRule.frequency,
+        nextDueOn: previousRule.nextDueOn,
+        autoCreate: previousRule.autoCreate
+      });
+
+      setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+      setTransactionDrafts((current) => {
+        const remaining = { ...current };
+        delete remaining[transaction.id];
+        return remaining;
+      });
+      setRecurringRules((current) => current.map((item) => (item.id === updatedRule.id ? restoredRule : item)));
+      setRecurringDrafts((current) => ({ ...current, [restoredRule.id]: recurringRuleToDraft(restoredRule) }));
+      setLastRecurringPayment(null);
+      setDataNotice(`${previousRule.merchant} payment undone and moved back to ${format(parseISO(restoredRule.nextDueOn), "MMM d")}.`);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to undo recurring payment.");
+    } finally {
+      setUndoingRecurringPaymentId("");
     }
   }
 
@@ -1406,10 +1457,20 @@ export default function ExpenseTrackerPage() {
         </header>
 
         {(isLoading || dataError || dataNotice) && (
-          <div className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+          <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
             dataError ? "border-coral/25 bg-coral/10 text-coral" : "border-river/20 bg-river/10 text-river"
           }`}>
-            {dataError || dataNotice || "Loading Supabase data..."}
+            <span>{dataError || dataNotice || "Loading Supabase data..."}</span>
+            {!dataError && lastRecurringPayment && dataNotice === lastRecurringPayment.notice ? (
+              <button
+                type="button"
+                onClick={handleUndoRecurringPaid}
+                disabled={undoingRecurringPaymentId === lastRecurringPayment.transaction.id}
+                className="h-9 rounded-lg border border-river/25 bg-white px-3 text-sm font-semibold text-river transition hover:bg-river/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {undoingRecurringPaymentId === lastRecurringPayment.transaction.id ? "Undoing" : "Undo"}
+              </button>
+            ) : null}
           </div>
         )}
 

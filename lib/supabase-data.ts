@@ -76,6 +76,75 @@ export type MonthlyBudgetInput = {
   amount: number;
 };
 
+type RecurringRulePayload = {
+  user_id?: string;
+  account_id: string;
+  category_id?: string;
+  subcategory_id?: string | null;
+  type: TransactionType;
+  amount: number;
+  merchant: string;
+  frequency: RecurringRule["frequency"];
+  next_due_on: string;
+  auto_create: boolean;
+};
+
+type RecurringRuleRow = {
+  id: string;
+  account_id: string;
+  category_id?: string | null;
+  subcategory_id?: string | null;
+  type: TransactionType;
+  amount: number | string;
+  merchant: string;
+  frequency: RecurringRule["frequency"];
+  next_due_on: string;
+  auto_create: boolean;
+};
+
+function recurringRulePayload(input: NewRecurringRuleInput, options: { includeUser?: boolean; includeSubcategory?: boolean } = {}): RecurringRulePayload {
+  const payload: RecurringRulePayload = {
+    account_id: input.accountId,
+    category_id: input.categoryId,
+    type: input.type,
+    amount: input.amount,
+    merchant: input.merchant,
+    frequency: input.frequency,
+    next_due_on: input.nextDueOn,
+    auto_create: input.autoCreate
+  };
+
+  if (options.includeUser) {
+    payload.user_id = DEMO_USER_ID;
+  }
+
+  if (options.includeSubcategory) {
+    payload.subcategory_id = input.subcategoryId ?? null;
+  }
+
+  return payload;
+}
+
+function isMissingRecurringSubcategoryError(error: { message?: string; details?: string } | null) {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""}`;
+  return text.includes("'subcategory_id'") && text.includes("'recurring_rules'");
+}
+
+function mapRecurringRule(data: RecurringRuleRow): RecurringRule {
+  return {
+    id: data.id,
+    accountId: data.account_id,
+    categoryId: data.category_id ?? undefined,
+    subcategoryId: data.subcategory_id ?? undefined,
+    type: data.type,
+    amount: Number(data.amount),
+    merchant: data.merchant,
+    frequency: data.frequency,
+    nextDueOn: data.next_due_on,
+    autoCreate: data.auto_create
+  };
+}
+
 export async function fetchExpenseData(): Promise<ExpenseData> {
   const supabase = createSupabaseBrowserClient();
 
@@ -527,39 +596,25 @@ export async function createRecurringRule(input: NewRecurringRuleInput): Promise
     throw new Error("Missing Supabase environment variables.");
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("recurring_rules")
-    .insert({
-      user_id: DEMO_USER_ID,
-      account_id: input.accountId,
-      category_id: input.categoryId,
-      subcategory_id: input.subcategoryId,
-      type: input.type,
-      amount: input.amount,
-      merchant: input.merchant,
-      frequency: input.frequency,
-      next_due_on: input.nextDueOn,
-      auto_create: input.autoCreate
-    })
+    .insert(recurringRulePayload(input, { includeUser: true, includeSubcategory: true }))
     .select("*")
     .single();
+
+  if (isMissingRecurringSubcategoryError(error)) {
+    ({ data, error } = await supabase
+      .from("recurring_rules")
+      .insert(recurringRulePayload(input, { includeUser: true }))
+      .select("*")
+      .single());
+  }
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return {
-    id: data.id,
-    accountId: data.account_id,
-    categoryId: data.category_id ?? undefined,
-    subcategoryId: data.subcategory_id ?? undefined,
-    type: data.type,
-    amount: Number(data.amount),
-    merchant: data.merchant,
-    frequency: data.frequency,
-    nextDueOn: data.next_due_on,
-    autoCreate: data.auto_create
-  };
+  return mapRecurringRule(data);
 }
 
 export async function updateRecurringRule(id: string, input: UpdateRecurringRuleInput): Promise<RecurringRule> {
@@ -569,39 +624,27 @@ export async function updateRecurringRule(id: string, input: UpdateRecurringRule
     throw new Error("Missing Supabase environment variables.");
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("recurring_rules")
-    .update({
-      account_id: input.accountId,
-      category_id: input.categoryId,
-      subcategory_id: input.subcategoryId,
-      type: input.type,
-      amount: input.amount,
-      merchant: input.merchant,
-      frequency: input.frequency,
-      next_due_on: input.nextDueOn,
-      auto_create: input.autoCreate
-    })
+    .update(recurringRulePayload(input, { includeSubcategory: true }))
     .eq("id", id)
     .select("*")
     .single();
+
+  if (isMissingRecurringSubcategoryError(error)) {
+    ({ data, error } = await supabase
+      .from("recurring_rules")
+      .update(recurringRulePayload(input))
+      .eq("id", id)
+      .select("*")
+      .single());
+  }
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return {
-    id: data.id,
-    accountId: data.account_id,
-    categoryId: data.category_id ?? undefined,
-    subcategoryId: data.subcategory_id ?? undefined,
-    type: data.type,
-    amount: Number(data.amount),
-    merchant: data.merchant,
-    frequency: data.frequency,
-    nextDueOn: data.next_due_on,
-    autoCreate: data.auto_create
-  };
+  return mapRecurringRule(data);
 }
 
 export async function archiveRecurringRule(id: string) {
