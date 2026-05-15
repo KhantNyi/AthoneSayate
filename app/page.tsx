@@ -11,7 +11,6 @@ import {
   CircleDollarSign,
   Languages,
   LayoutDashboard,
-  LineChart,
   Pencil,
   PiggyBank,
   Plus,
@@ -284,7 +283,6 @@ const navItems = [
   { key: "budgets", label: "budgets", icon: CircleDollarSign },
   { key: "recurring", label: "recurring", icon: CalendarClock },
   { key: "goals", label: "goals", icon: Target },
-  { key: "reports", label: "reports", icon: LineChart },
   { key: "settings", label: "category", icon: Settings }
 ] as const;
 
@@ -388,7 +386,9 @@ export default function ExpenseTrackerPage() {
   const [dashboardPaceMonth, setDashboardPaceMonth] = useState(startOfMonth(new Date()));
   const [dashboardCategoryMonth, setDashboardCategoryMonth] = useState(startOfMonth(new Date()));
   const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState(startOfMonth(new Date()));
-  const [dashboardDriversMonth, setDashboardDriversMonth] = useState(startOfMonth(new Date()));
+  const [dashboardConcentrationMonth, setDashboardConcentrationMonth] = useState(startOfMonth(new Date()));
+  const [dashboardWeekdayMonth, setDashboardWeekdayMonth] = useState(startOfMonth(new Date()));
+  const [dashboardCashflowMonth, setDashboardCashflowMonth] = useState(startOfMonth(new Date()));
   const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
   const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
   const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
@@ -534,7 +534,6 @@ export default function ExpenseTrackerPage() {
   const visibleMonthKey = format(visibleMonth, "yyyy-MM");
   const dashboardCategoryMonthKey = format(dashboardCategoryMonth, "yyyy-MM");
   const dashboardCalendarMonthKey = format(dashboardCalendarMonth, "yyyy-MM");
-  const dashboardDriversMonthKey = format(dashboardDriversMonth, "yyyy-MM");
   const currentMonthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const currentMonthTotals = useMemo(() => totals(currentMonthTx), [currentMonthTx]);
   const dashboardStatsTx = useMemo(() => monthTransactions(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
@@ -548,7 +547,7 @@ export default function ExpenseTrackerPage() {
   const dashboardCategoryTx = useMemo(() => monthTransactions(transactions, dashboardCategoryMonth), [transactions, dashboardCategoryMonth]);
   const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, dashboardCategoryTx), [categoriesForCurrentMonth, dashboardCategoryTx]);
   const budgetTabRows = useMemo(() => categorySpend(categoriesForBudgetMonth, budgetMonthTx).filter((row) => row.monthlyBudget !== undefined), [categoriesForBudgetMonth, budgetMonthTx]);
-  const reportMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(new Date(), 5 - index))), []);
+  const reportMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(dashboardCashflowMonth, 5 - index))), [dashboardCashflowMonth]);
   const reportMonthlySeries = useMemo(() => reportMonths.map((month) => {
     const monthTotal = totals(monthTransactions(transactions, month));
 
@@ -561,24 +560,24 @@ export default function ExpenseTrackerPage() {
   }), [reportMonths, transactions]);
   const reportStartKey = format(reportMonths[0] ?? startOfMonth(new Date()), "yyyy-MM-dd");
   const reportEndKey = format(endOfMonth(reportMonths[reportMonths.length - 1] ?? new Date()), "yyyy-MM-dd");
-  const reportRangeTransactions = useMemo(() => transactions.filter((tx) => tx.occurredOn >= reportStartKey && tx.occurredOn <= reportEndKey), [reportEndKey, reportStartKey, transactions]);
-  const reportExpenseTotal = useMemo(() => reportRangeTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0), [reportRangeTransactions]);
-  const reportCategoryRows = useMemo(() => displayCategories.filter((category) => category.kind === "expense").map((category) => {
-    const categoryTransactions = reportRangeTransactions.filter((tx) => tx.type === "expense" && tx.categoryId === category.id);
+  const dashboardConcentrationTx = useMemo(() => monthTransactions(transactions, dashboardConcentrationMonth), [transactions, dashboardConcentrationMonth]);
+  const dashboardConcentrationTotal = useMemo(() => dashboardConcentrationTx.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0), [dashboardConcentrationTx]);
+  const dashboardConcentrationRows = useMemo(() => displayCategories.filter((category) => category.kind === "expense").map((category) => {
+    const categoryTransactions = dashboardConcentrationTx.filter((tx) => tx.type === "expense" && tx.categoryId === category.id);
     const spent = categoryTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
     return {
       ...category,
       spent,
       count: categoryTransactions.length,
-      share: reportExpenseTotal > 0 ? (spent / reportExpenseTotal) * 100 : 0
+      share: dashboardConcentrationTotal > 0 ? (spent / dashboardConcentrationTotal) * 100 : 0
     };
-  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [displayCategories, reportExpenseTotal, reportRangeTransactions]);
-  const reportBudgetRows = useMemo(() => budgetTabRows.filter((row) => row.monthlyBudget !== undefined).sort((a, b) => b.progress - a.progress).slice(0, 6), [budgetTabRows]);
+  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [dashboardConcentrationTotal, dashboardConcentrationTx, displayCategories]);
   const comparison = useMemo(() => monthlyComparisonForMonth(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
   const dashboardPaceTx = useMemo(() => monthTransactions(transactions, dashboardPaceMonth), [transactions, dashboardPaceMonth]);
   const daily = useMemo(() => dailySeries(dashboardPaceTx, dashboardPaceMonth), [dashboardPaceTx, dashboardPaceMonth]);
-  const weekday = useMemo(() => weekdaySpend(currentMonthTx), [currentMonthTx]);
+  const dashboardWeekdayTx = useMemo(() => monthTransactions(transactions, dashboardWeekdayMonth), [transactions, dashboardWeekdayMonth]);
+  const weekday = useMemo(() => weekdaySpend(dashboardWeekdayTx), [dashboardWeekdayTx]);
   const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
   const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
@@ -608,12 +607,6 @@ export default function ExpenseTrackerPage() {
     const selectedDay = selectedDashboardDate ? parseISO(selectedDashboardDate) : new Date();
     return summarizeActivityRange(transactions, recurringRules, startOfWeek(selectedDay), endOfWeek(selectedDay));
   }, [transactions, recurringRules, selectedDashboardDate]);
-  const dashboardDriversTx = useMemo(() => monthTransactions(transactions, dashboardDriversMonth), [transactions, dashboardDriversMonth]);
-  const dashboardDriversCategories = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, dashboardDriversMonthKey), [displayCategories, budgets, dashboardDriversMonthKey]);
-  const dashboardDriverRows = useMemo(() => categorySpend(dashboardDriversCategories, dashboardDriversTx), [dashboardDriversCategories, dashboardDriversTx]);
-  const topCategoryDrivers = useMemo(() => dashboardDriverRows.filter((row) => row.spent > 0).slice(0, 4), [dashboardDriverRows]);
-  const topTransactionDrivers = useMemo(() => dashboardDriversTx.filter((tx) => tx.type === "expense").sort((a, b) => b.amount - a.amount).slice(0, 4), [dashboardDriversTx]);
-
   const filteredTransactions = transactions
     .filter((tx) => {
       const category = displayCategories.find((item) => item.id === tx.categoryId);
@@ -1608,51 +1601,78 @@ export default function ExpenseTrackerPage() {
               </div>
             </Panel>
 
-            <Panel title={ui.topSpendingDrivers} action={format(dashboardDriversMonth, "MMM yyyy")}>
+            <Panel title="Category concentration" action={format(dashboardConcentrationMonth, "MMM yyyy")}>
               <div className="mb-3 flex justify-end">
-                <MonthField label={ui.month} month={dashboardDriversMonth} onChange={setDashboardDriversMonth} />
+                <MonthField label={ui.month} month={dashboardConcentrationMonth} onChange={setDashboardConcentrationMonth} />
               </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.categories}</h3>
-                  <div className="space-y-3">
-                    {topCategoryDrivers.map((row) => (
-                      <div key={row.id} className="rounded-lg border border-ink/10 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                          <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                            <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
-                            <span className="truncate">{categoryLabel(row.name)}</span>
-                          </span>
-                          <strong>{currency.format(row.spent)}</strong>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                          <div className="h-full rounded-full bg-coral" style={{ width: `${Math.min(row.progress, 100)}%` }} />
-                        </div>
+              <div className="mb-3 text-right text-xs font-semibold text-ink/45">{currency.format(dashboardConcentrationTotal)}</div>
+              <div className="space-y-3">
+                {dashboardConcentrationRows.slice(0, 6).map((row) => (
+                  <div key={row.id}>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                      <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                        <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                        <span className="truncate">{categoryLabel(row.name)}</span>
+                      </span>
+                      <strong>{row.share.toFixed(0)}%</strong>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+                        <div className="h-full rounded-full bg-river" style={{ width: `${Math.min(row.share, 100)}%` }} />
                       </div>
-                    ))}
-                    {topCategoryDrivers.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                      <span className="w-24 text-right text-xs text-ink/55">{currency.format(row.spent)}</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.transactions}</h3>
-                  <div className="space-y-2">
-                    {topTransactionDrivers.map((tx) => {
-                      const category = displayCategories.find((item) => item.id === tx.categoryId);
-                      const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+                ))}
+                {dashboardConcentrationRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+              </div>
+            </Panel>
+          </div>
 
-                      return (
-                        <div key={tx.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink/10 p-3 text-sm">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{subcategory?.name ?? categoryLabel(category?.name) ?? tx.merchant ?? t.transactions}</p>
-                            <p className="mt-1 text-xs text-ink/45">{format(parseISO(tx.occurredOn), "MMM d")}</p>
-                          </div>
-                          <strong className="shrink-0 text-coral">-{preciseCurrency.format(tx.amount)}</strong>
-                        </div>
-                      );
-                    })}
-                    {topTransactionDrivers.length === 0 ? <p className="text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
-                  </div>
-                </div>
+          <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+            <Panel title="6-month cash flow" action={`${format(parseISO(reportStartKey), "MMM yyyy")} - ${format(parseISO(reportEndKey), "MMM yyyy")}`}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-ink/45">{currency.format(reportMonthlySeries.reduce((sum, item) => sum + item.net, 0))} net</span>
+                <MonthField label={`${ui.month} ending`} month={dashboardCashflowMonth} onChange={setDashboardCashflowMonth} />
+              </div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={reportMonthlySeries}>
+                    <defs>
+                      <linearGradient id="reportIncomeGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0.03} />
+                      </linearGradient>
+                      <linearGradient id="reportExpenseGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={48} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
+                    <Area type="monotone" dataKey="income" stroke="#16a34a" fill="url(#reportIncomeGradient)" strokeWidth={2.5} />
+                    <Area type="monotone" dataKey="expenses" stroke="#f05a3f" fill="url(#reportExpenseGradient)" strokeWidth={2.5} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+
+            <Panel title={t.weekdayPattern} action={format(dashboardWeekdayMonth, "MMM yyyy")}>
+              <div className="mb-3 flex justify-end">
+                <MonthField label={ui.month} month={dashboardWeekdayMonth} onChange={setDashboardWeekdayMonth} />
+              </div>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weekday}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                    <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={44} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
+                    <Bar dataKey="spent" fill="#f97316" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </Panel>
           </div>
@@ -2060,7 +2080,7 @@ export default function ExpenseTrackerPage() {
           </div>}
         </section>
 
-        <section className={activeTab === "goals" || activeTab === "reports" || activeTab === "settings" ? "mt-4 grid gap-4" : "hidden"}>
+        <section className={activeTab === "goals" || activeTab === "settings" ? "mt-4 grid gap-4" : "hidden"}>
           {activeTab === "goals" && (
           <Panel id="goals" title={t.goals} action={t.savingsProgress}>
             <form onSubmit={handleCreateGoal} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
@@ -2119,114 +2139,6 @@ export default function ExpenseTrackerPage() {
                 </article>
                 );
               })}
-            </div>
-          </Panel>
-          )}
-
-          {activeTab === "reports" && (
-          <Panel id="reports" title={t.reports} action={`${format(parseISO(reportStartKey), "MMM yyyy")} - ${format(parseISO(reportEndKey), "MMM yyyy")}`}>
-            <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
-              <section className="rounded-lg border border-ink/10 bg-ink/[0.02] p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">6-month cash flow</h3>
-                  <span className="text-xs font-semibold text-ink/45">{currency.format(reportMonthlySeries.reduce((sum, item) => sum + item.net, 0))} net</span>
-                </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={reportMonthlySeries}>
-                      <defs>
-                        <linearGradient id="reportIncomeGradient" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="5%" stopColor="#16a34a" stopOpacity={0.28} />
-                          <stop offset="95%" stopColor="#16a34a" stopOpacity={0.03} />
-                        </linearGradient>
-                        <linearGradient id="reportExpenseGradient" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.28} />
-                          <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
-                      <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                      <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={48} />
-                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                      <Area type="monotone" dataKey="income" stroke="#16a34a" fill="url(#reportIncomeGradient)" strokeWidth={2.5} />
-                      <Area type="monotone" dataKey="expenses" stroke="#f05a3f" fill="url(#reportExpenseGradient)" strokeWidth={2.5} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-ink/10 bg-white p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">Category concentration</h3>
-                  <span className="text-xs font-semibold text-ink/45">{currency.format(reportExpenseTotal)}</span>
-                </div>
-                <div className="space-y-3">
-                  {reportCategoryRows.slice(0, 6).map((row) => (
-                    <div key={row.id}>
-                      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                        <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                          <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
-                          <span className="truncate">{categoryLabel(row.name)}</span>
-                        </span>
-                        <strong>{row.share.toFixed(0)}%</strong>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
-                          <div className="h-full rounded-full bg-river" style={{ width: `${Math.min(row.share, 100)}%` }} />
-                        </div>
-                        <span className="w-24 text-right text-xs text-ink/55">{currency.format(row.spent)}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {reportCategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-ink/10 bg-white p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">{t.weekdayPattern}</h3>
-                  <span className="text-xs font-semibold text-ink/45">{format(new Date(), "MMM yyyy")}</span>
-                </div>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weekday}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
-                  <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={44} />
-                  <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                  <Bar dataKey="spent" fill="#f97316" radius={[6, 6, 0, 0]} />
-                </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-ink/10 bg-white p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">Budget variance</h3>
-                  <span className="text-xs font-semibold text-ink/45">{budgetMonth}</span>
-                </div>
-                <div className="space-y-3">
-                  {reportBudgetRows.map((row) => {
-                    const overBudget = row.spent > (row.monthlyBudget ?? 0);
-
-                    return (
-                      <div key={row.id} className="rounded-lg border border-ink/10 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                          <span className="min-w-0 truncate font-medium">{categoryLabel(row.name)}</span>
-                          <strong className={overBudget ? "text-coral" : "text-moss"}>
-                            {overBudget ? "+" : ""}{currency.format(row.spent - (row.monthlyBudget ?? 0))}
-                          </strong>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                          <div className={`h-full rounded-full ${overBudget ? "bg-coral" : "bg-moss"}`} style={{ width: `${Math.min(row.progress, 100)}%` }} />
-                        </div>
-                        <p className="mt-2 text-xs text-ink/50">{currency.format(row.spent)} / {currency.format(row.monthlyBudget ?? 0)}</p>
-                      </div>
-                    );
-                  })}
-                  {reportBudgetRows.length === 0 ? <p className="text-sm text-ink/45">No budgets set for {budgetMonth}.</p> : null}
-                </div>
-              </section>
             </div>
           </Panel>
           )}
