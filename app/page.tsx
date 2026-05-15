@@ -325,6 +325,8 @@ type CalendarDaySummary = {
   count?: number;
   dueAmount?: number;
   recurringCount?: number;
+  paidAmount?: number;
+  paidRecurringCount?: number;
 };
 
 type LastRecurringPayment = {
@@ -576,7 +578,11 @@ export default function ExpenseTrackerPage() {
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
   const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
   const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
-  const recurringCalendarDays = useMemo(() => summarizeRecurringByDay(recurringRules.filter((rule) => rule.nextDueOn.startsWith(visibleMonthKey))), [recurringRules, visibleMonthKey]);
+  const visibleRecurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
+    ...matches,
+    [rule.id]: findRecurringPayment(rule, transactions, visibleMonth)
+  }), {}), [transactions, upcoming, visibleMonth]);
+  const recurringCalendarDays = useMemo(() => summarizeRecurringCalendarByDay(upcoming, transactions, visibleRecurringPayments, visibleMonthKey), [transactions, upcoming, visibleMonthKey, visibleRecurringPayments]);
   const dashboardCalendarTransactionDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(dashboardCalendarMonthKey))), [transactions, dashboardCalendarMonthKey]);
   const dashboardCalendarRecurringDays = useMemo(() => summarizeRecurringByDay(recurringRules.filter((rule) => rule.nextDueOn.startsWith(dashboardCalendarMonthKey))), [recurringRules, dashboardCalendarMonthKey]);
   const dashboardCalendarDays = useMemo(() => mergeCalendarSummaries(dashboardCalendarTransactionDays, dashboardCalendarRecurringDays), [dashboardCalendarTransactionDays, dashboardCalendarRecurringDays]);
@@ -603,7 +609,7 @@ export default function ExpenseTrackerPage() {
       return matchesQuery && matchesDate;
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
-  const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate : true);
+  const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate || visibleRecurringPayments[rule.id]?.occurredOn === selectedRecurringDate : true);
   const recurringDueLabel = (daysUntilDue: number) => {
     const dayLabel = Math.abs(daysUntilDue) === 1 ? "day" : "days";
 
@@ -2401,7 +2407,7 @@ function MonthCalendar({
           <h3 className="text-sm font-semibold uppercase text-ink/65">{variant === "recurring" ? labels.recurringDue : labels.monthlyActivity}</h3>
           <p className="mt-1 text-xs text-ink/45">
             {selectedDate
-              ? `${format(parseISO(selectedDate), "MMM d, yyyy")} selected${selectedSummary?.count || selectedSummary?.recurringCount ? "" : " - no items"}`
+              ? `${format(parseISO(selectedDate), "MMM d, yyyy")} selected${selectedSummary?.count || selectedSummary?.recurringCount || selectedSummary?.paidRecurringCount ? "" : " - no items"}`
               : variant === "activity" ? labels.scanActivityMonth : labels.pickDayToFilter}
           </p>
         </div>
@@ -2438,7 +2444,7 @@ function MonthCalendar({
           const summary = summaries[key];
           const selected = selectedDate === key;
           const inMonth = isSameMonth(day, month);
-          const hasData = Boolean(summary?.count || summary?.recurringCount);
+          const hasData = Boolean(summary?.count || summary?.recurringCount || summary?.paidRecurringCount);
           const intensity = summary?.expense ? Math.min(summary.expense / 50000, 1) : 0;
           const inSelectedWeek = Boolean(selectedWeekStart && selectedWeekEnd && day >= selectedWeekStart && day <= selectedWeekEnd);
 
@@ -2478,7 +2484,9 @@ function MonthCalendar({
               ) : (
                 <span className="mt-1 block space-y-0.5">
                   {summary?.recurringCount ? <span className="block text-[11px] font-semibold text-coral">{summary.recurringCount} due</span> : null}
+                  {summary?.paidRecurringCount ? <span className="block text-[11px] font-semibold text-moss">{summary.paidRecurringCount} paid</span> : null}
                   {summary?.dueAmount ? <span className="block truncate text-[10px] text-ink/55">{currency.format(summary.dueAmount)}</span> : null}
+                  {summary?.paidAmount ? <span className="block truncate text-[10px] text-moss/75">{currency.format(summary.paidAmount)}</span> : null}
                 </span>
               )}
             </button>
@@ -2525,6 +2533,42 @@ function summarizeRecurringByDay(rules: RecurringRule[]) {
   }, {});
 }
 
+function summarizeRecurringCalendarByDay(rules: RecurringRule[], transactions: Transaction[], paymentsByRule: Record<string, Transaction | undefined>, monthKey: string) {
+  const paidTransactions = new Map<string, Transaction>();
+  const paidRuleIds = new Set<string>();
+
+  Object.entries(paymentsByRule).forEach(([ruleId, transaction]) => {
+    if (!transaction) {
+      return;
+    }
+
+    paidRuleIds.add(ruleId);
+
+    if (transaction.occurredOn.startsWith(monthKey)) {
+      paidTransactions.set(transaction.id, transaction);
+    }
+  });
+
+  transactions
+    .filter((transaction) => transaction.isRecurring && transaction.occurredOn.startsWith(monthKey))
+    .forEach((transaction) => paidTransactions.set(transaction.id, transaction));
+
+  const dueSummary = summarizeRecurringByDay(rules.filter((rule) => rule.nextDueOn.startsWith(monthKey) && !paidRuleIds.has(rule.id)));
+  const paidSummary = Array.from(paidTransactions.values()).reduce<Record<string, CalendarDaySummary>>((summary, transaction) => {
+    const current = summary[transaction.occurredOn] ?? {};
+
+    summary[transaction.occurredOn] = {
+      ...current,
+      paidAmount: (current.paidAmount ?? 0) + transaction.amount,
+      paidRecurringCount: (current.paidRecurringCount ?? 0) + 1
+    };
+
+    return summary;
+  }, {});
+
+  return mergeCalendarSummaries(dueSummary, paidSummary);
+}
+
 function summarizeActivityRange(transactions: Transaction[], rules: RecurringRule[], start: Date, end: Date): Required<CalendarDaySummary> {
   const startKey = format(start, "yyyy-MM-dd");
   const endKey = format(end, "yyyy-MM-dd");
@@ -2556,7 +2600,9 @@ function mergeCalendarSummaries(...summaries: Record<string, CalendarDaySummary>
         expense: (current.expense ?? 0) + (value.expense ?? 0),
         count: (current.count ?? 0) + (value.count ?? 0),
         dueAmount: (current.dueAmount ?? 0) + (value.dueAmount ?? 0),
-        recurringCount: (current.recurringCount ?? 0) + (value.recurringCount ?? 0)
+        recurringCount: (current.recurringCount ?? 0) + (value.recurringCount ?? 0),
+        paidAmount: (current.paidAmount ?? 0) + (value.paidAmount ?? 0),
+        paidRecurringCount: (current.paidRecurringCount ?? 0) + (value.paidRecurringCount ?? 0)
       };
     });
 
@@ -2588,7 +2634,9 @@ function emptyCalendarSummary(): Required<CalendarDaySummary> {
     expense: 0,
     count: 0,
     dueAmount: 0,
-    recurringCount: 0
+    recurringCount: 0,
+    paidAmount: 0,
+    paidRecurringCount: 0
   };
 }
 
