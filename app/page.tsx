@@ -288,8 +288,6 @@ const navItems = [
   { key: "settings", label: "category", icon: Settings }
 ] as const;
 
-const chartColors = ["#f97316", "#16a34a", "#d946ef", "#06b6d4", "#e11d48", "#8b5cf6", "#84cc16"];
-
 type TabKey = (typeof navItems)[number]["key"];
 
 type RecurringDraft = {
@@ -1520,18 +1518,18 @@ export default function ExpenseTrackerPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie innerRadius={45} outerRadius={70} paddingAngle={3} data={budgetRows.filter((row) => row.spent > 0)} dataKey="spent">
-                        {budgetRows.filter((row) => row.spent > 0).map((entry, index) => (
-                          <Cell key={entry.id} fill={chartColors[index % chartColors.length]} />
+                        {budgetRows.filter((row) => row.spent > 0).map((entry) => (
+                          <Cell key={entry.id} fill={entry.color} />
                         ))}
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="space-y-3">
-                  {budgetRows.slice(0, 5).map((row, index) => (
+                  {budgetRows.slice(0, 5).map((row) => (
                     <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
                       <span className="flex items-center gap-2">
-                        <span className="size-3 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                        <span className="size-3 rounded-full" style={{ background: row.color }} />
                         {categoryLabel(row.name)}
                       </span>
                       <strong>{currency.format(row.spent)}</strong>
@@ -1596,11 +1594,11 @@ export default function ExpenseTrackerPage() {
                 <div>
                   <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.categories}</h3>
                   <div className="space-y-3">
-                    {topCategoryDrivers.map((row, index) => (
+                    {topCategoryDrivers.map((row) => (
                       <div key={row.id} className="rounded-lg border border-ink/10 p-3">
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm">
                           <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                            <span className="size-3 shrink-0 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                            <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                             <span className="truncate">{categoryLabel(row.name)}</span>
                           </span>
                           <strong>{currency.format(row.spent)}</strong>
@@ -2141,11 +2139,11 @@ export default function ExpenseTrackerPage() {
                   <span className="text-xs font-semibold text-ink/45">{currency.format(reportExpenseTotal)}</span>
                 </div>
                 <div className="space-y-3">
-                  {reportCategoryRows.slice(0, 6).map((row, index) => (
+                  {reportCategoryRows.slice(0, 6).map((row) => (
                     <div key={row.id}>
                       <div className="mb-1 flex items-center justify-between gap-3 text-sm">
                         <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                          <span className="size-3 shrink-0 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                          <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                           <span className="truncate">{categoryLabel(row.name)}</span>
                         </span>
                         <strong>{row.share.toFixed(0)}%</strong>
@@ -2626,8 +2624,9 @@ function upsertBudgetInState(budgets: Budget[], updated: Budget) {
   return [updated, ...budgets];
 }
 
-function findRecurringPayment(rule: RecurringRule, transactions: Transaction[]) {
-  const window = recurringPaymentWindow(rule);
+function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date()) {
+  const dueOn = recurringPaymentDueOnForStatus(rule, referenceDate);
+  const window = recurringPaymentWindow(rule, dueOn);
   const tolerance = Math.max(rule.amount * 0.1, 10);
 
   return transactions
@@ -2640,11 +2639,19 @@ function findRecurringPayment(rule: RecurringRule, transactions: Transaction[]) 
 
       return sameType && sameCategory && sameSubcategory && amountMatches && inWindow;
     })
-    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(rule.nextDueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(rule.nextDueOn).getTime()))[0];
+    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(dueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(dueOn).getTime()))[0];
 }
 
-function recurringPaymentWindow(rule: RecurringRule) {
-  const dueDate = parseISO(rule.nextDueOn);
+function recurringPaymentDueOnForStatus(rule: RecurringRule, referenceDate: Date) {
+  const nextDueDate = parseISO(rule.nextDueOn);
+  const previousDueDate = previousRecurringDueDate(rule);
+  const isPaidCycleInView = nextDueDate > endOfMonth(referenceDate) && (isSameMonth(previousDueDate, referenceDate) || previousDueDate > referenceDate);
+
+  return format(isPaidCycleInView ? previousDueDate : nextDueDate, "yyyy-MM-dd");
+}
+
+function recurringPaymentWindow(rule: RecurringRule, dueOn = rule.nextDueOn) {
+  const dueDate = parseISO(dueOn);
   const days = {
     weekly: 3,
     biweekly: 5,
@@ -2657,6 +2664,18 @@ function recurringPaymentWindow(rule: RecurringRule) {
     start: format(addDays(dueDate, -days), "yyyy-MM-dd"),
     end: format(addDays(dueDate, days), "yyyy-MM-dd")
   };
+}
+
+function previousRecurringDueDate(rule: RecurringRule) {
+  const dueDate = parseISO(rule.nextDueOn);
+
+  return {
+    weekly: addDays(dueDate, -7),
+    biweekly: addDays(dueDate, -14),
+    monthly: subMonths(dueDate, 1),
+    quarterly: subMonths(dueDate, 3),
+    yearly: subMonths(dueDate, 12)
+  }[rule.frequency];
 }
 
 function nextRecurringDueOn(rule: RecurringRule) {
