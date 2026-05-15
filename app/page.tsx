@@ -288,6 +288,21 @@ const navItems = [
   { key: "settings", label: "category", icon: Settings }
 ] as const;
 
+const categoryDisplayColors = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+  "#ca8a04",
+  "#db2777",
+  "#65a30d",
+  "#4f46e5",
+  "#ea580c",
+  "#059669"
+];
+
 type TabKey = (typeof navItems)[number]["key"];
 
 type RecurringDraft = {
@@ -526,8 +541,9 @@ export default function ExpenseTrackerPage() {
   const monthTotals = useMemo(() => totals(dashboardStatsTx), [dashboardStatsTx]);
   const allTotals = useMemo(() => totals(transactions), [transactions]);
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions]);
-  const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, dashboardCategoryMonthKey), [categories, budgets, dashboardCategoryMonthKey]);
-  const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(categories, budgets, budgetMonth), [categories, budgets, budgetMonth]);
+  const displayCategories = useMemo(() => applyCategoryDisplayColors(categories), [categories]);
+  const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, dashboardCategoryMonthKey), [displayCategories, budgets, dashboardCategoryMonthKey]);
+  const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, budgetMonth), [displayCategories, budgets, budgetMonth]);
   const budgetMonthTx = useMemo(() => monthTransactions(transactions, visibleMonth), [transactions, visibleMonth]);
   const dashboardCategoryTx = useMemo(() => monthTransactions(transactions, dashboardCategoryMonth), [transactions, dashboardCategoryMonth]);
   const budgetRows = useMemo(() => categorySpend(categoriesForCurrentMonth, dashboardCategoryTx), [categoriesForCurrentMonth, dashboardCategoryTx]);
@@ -547,7 +563,7 @@ export default function ExpenseTrackerPage() {
   const reportEndKey = format(endOfMonth(reportMonths[reportMonths.length - 1] ?? new Date()), "yyyy-MM-dd");
   const reportRangeTransactions = useMemo(() => transactions.filter((tx) => tx.occurredOn >= reportStartKey && tx.occurredOn <= reportEndKey), [reportEndKey, reportStartKey, transactions]);
   const reportExpenseTotal = useMemo(() => reportRangeTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0), [reportRangeTransactions]);
-  const reportCategoryRows = useMemo(() => categories.filter((category) => category.kind === "expense").map((category) => {
+  const reportCategoryRows = useMemo(() => displayCategories.filter((category) => category.kind === "expense").map((category) => {
     const categoryTransactions = reportRangeTransactions.filter((tx) => tx.type === "expense" && tx.categoryId === category.id);
     const spent = categoryTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
@@ -557,7 +573,7 @@ export default function ExpenseTrackerPage() {
       count: categoryTransactions.length,
       share: reportExpenseTotal > 0 ? (spent / reportExpenseTotal) * 100 : 0
     };
-  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [categories, reportExpenseTotal, reportRangeTransactions]);
+  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [displayCategories, reportExpenseTotal, reportRangeTransactions]);
   const reportBudgetRows = useMemo(() => budgetTabRows.filter((row) => row.monthlyBudget !== undefined).sort((a, b) => b.progress - a.progress).slice(0, 6), [budgetTabRows]);
   const comparison = useMemo(() => monthlyComparisonForMonth(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
   const dashboardPaceTx = useMemo(() => monthTransactions(transactions, dashboardPaceMonth), [transactions, dashboardPaceMonth]);
@@ -574,7 +590,7 @@ export default function ExpenseTrackerPage() {
   const ui = uiTranslations[language];
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
-  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const selectedCategory = displayCategories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
   const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
   const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
@@ -593,14 +609,14 @@ export default function ExpenseTrackerPage() {
     return summarizeActivityRange(transactions, recurringRules, startOfWeek(selectedDay), endOfWeek(selectedDay));
   }, [transactions, recurringRules, selectedDashboardDate]);
   const dashboardDriversTx = useMemo(() => monthTransactions(transactions, dashboardDriversMonth), [transactions, dashboardDriversMonth]);
-  const dashboardDriversCategories = useMemo(() => applyMonthlyBudgets(categories, budgets, dashboardDriversMonthKey), [categories, budgets, dashboardDriversMonthKey]);
+  const dashboardDriversCategories = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, dashboardDriversMonthKey), [displayCategories, budgets, dashboardDriversMonthKey]);
   const dashboardDriverRows = useMemo(() => categorySpend(dashboardDriversCategories, dashboardDriversTx), [dashboardDriversCategories, dashboardDriversTx]);
   const topCategoryDrivers = useMemo(() => dashboardDriverRows.filter((row) => row.spent > 0).slice(0, 4), [dashboardDriverRows]);
   const topTransactionDrivers = useMemo(() => dashboardDriversTx.filter((tx) => tx.type === "expense").sort((a, b) => b.amount - a.amount).slice(0, 4), [dashboardDriversTx]);
 
   const filteredTransactions = transactions
     .filter((tx) => {
-      const category = categories.find((item) => item.id === tx.categoryId);
+      const category = displayCategories.find((item) => item.id === tx.categoryId);
       const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
       const account = accounts.find((item) => item.id === tx.accountId);
       const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
@@ -1621,7 +1637,7 @@ export default function ExpenseTrackerPage() {
                   <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">{ui.transactions}</h3>
                   <div className="space-y-2">
                     {topTransactionDrivers.map((tx) => {
-                      const category = categories.find((item) => item.id === tx.categoryId);
+                      const category = displayCategories.find((item) => item.id === tx.categoryId);
                       const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
 
                       return (
@@ -1698,7 +1714,7 @@ export default function ExpenseTrackerPage() {
 
             <div className="grid gap-3 lg:hidden">
               {filteredTransactions.slice(0, 14).map((tx) => {
-                const category = categories.find((item) => item.id === tx.categoryId);
+                const category = displayCategories.find((item) => item.id === tx.categoryId);
                 const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                 const account = accounts.find((item) => item.id === tx.accountId);
                 const isEditing = editingTransactionId === tx.id;
@@ -1752,7 +1768,7 @@ export default function ExpenseTrackerPage() {
                 </thead>
                 <tbody>
                   {filteredTransactions.slice(0, 14).map((tx) => {
-                    const category = categories.find((item) => item.id === tx.categoryId);
+                    const category = displayCategories.find((item) => item.id === tx.categoryId);
                     const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                     const account = accounts.find((item) => item.id === tx.accountId);
                     const isEditing = editingTransactionId === tx.id;
@@ -1970,7 +1986,7 @@ export default function ExpenseTrackerPage() {
               <div className="space-y-3">
                 {displayedRecurringRules.map((rule) => {
                   const isEditing = editingRecurringId === rule.id;
-                  const ruleCategory = categories.find((category) => category.id === rule.categoryId);
+                  const ruleCategory = displayCategories.find((category) => category.id === rule.categoryId);
                   const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
                   const ruleAccount = accounts.find((account) => account.id === rule.accountId);
                   const matchedTransaction = recurringPayments[rule.id];
@@ -2273,7 +2289,7 @@ export default function ExpenseTrackerPage() {
               </div>
 
               <CategoryManager
-                categories={categories}
+                categories={displayCategories}
                 subcategories={subcategories}
                 newCategoryName={newCategoryName}
                 newCategoryKind={newCategoryKind}
@@ -2650,6 +2666,21 @@ function compactCurrency(value: number) {
   }
 
   return currency.format(value);
+}
+
+function applyCategoryDisplayColors(categories: Category[]) {
+  return categories.map((category, index) => ({
+    ...category,
+    color: categoryDisplayColor(index)
+  }));
+}
+
+function categoryDisplayColor(index: number) {
+  if (index < categoryDisplayColors.length) {
+    return categoryDisplayColors[index];
+  }
+
+  return `hsl(${Math.round((index * 137.508) % 360)} 88% 48%)`;
 }
 
 function applyMonthlyBudgets(categories: Category[], budgets: Budget[], month: string) {
