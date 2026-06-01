@@ -280,6 +280,7 @@ const frequencyTranslations: Record<string, string> = {
 const navItems = [
   { key: "dashboard", label: "dashboard", icon: LayoutDashboard },
   { key: "transactions", label: "transactions", icon: ReceiptText },
+  { key: "reports", label: "reports", icon: WalletCards },
   { key: "budgets", label: "budgets", icon: CircleDollarSign },
   { key: "recurring", label: "recurring", icon: CalendarClock },
   { key: "goals", label: "goals", icon: Target },
@@ -389,6 +390,10 @@ export default function ExpenseTrackerPage() {
   const [dashboardConcentrationMonth, setDashboardConcentrationMonth] = useState(startOfMonth(new Date()));
   const [dashboardWeekdayMonth, setDashboardWeekdayMonth] = useState(startOfMonth(new Date()));
   const [dashboardCashflowMonth, setDashboardCashflowMonth] = useState(startOfMonth(new Date()));
+  const [monthlyReportMonth, setMonthlyReportMonth] = useState(startOfMonth(new Date()));
+  const [monthlyReportCategoryId, setMonthlyReportCategoryId] = useState("all");
+  const [monthlyReportAccountId, setMonthlyReportAccountId] = useState("all");
+  const [monthlyReportRecurringFilter, setMonthlyReportRecurringFilter] = useState<"all" | "recurring" | "manual">("all");
   const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
   const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
   const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
@@ -534,6 +539,7 @@ export default function ExpenseTrackerPage() {
   const visibleMonthKey = format(visibleMonth, "yyyy-MM");
   const dashboardCategoryMonthKey = format(dashboardCategoryMonth, "yyyy-MM");
   const dashboardCalendarMonthKey = format(dashboardCalendarMonth, "yyyy-MM");
+  const monthlyReportMonthKey = format(monthlyReportMonth, "yyyy-MM");
   const currentMonthTx = useMemo(() => monthTransactions(transactions), [transactions]);
   const currentMonthTotals = useMemo(() => totals(currentMonthTx), [currentMonthTx]);
   const dashboardStatsTx = useMemo(() => monthTransactions(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
@@ -578,6 +584,66 @@ export default function ExpenseTrackerPage() {
   const daily = useMemo(() => dailySeries(dashboardPaceTx, dashboardPaceMonth), [dashboardPaceTx, dashboardPaceMonth]);
   const dashboardWeekdayTx = useMemo(() => monthTransactions(transactions, dashboardWeekdayMonth), [transactions, dashboardWeekdayMonth]);
   const weekday = useMemo(() => weekdaySpend(dashboardWeekdayTx), [dashboardWeekdayTx]);
+  const monthlyReportCategories = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, monthlyReportMonthKey), [displayCategories, budgets, monthlyReportMonthKey]);
+  const monthlyReportTx = useMemo(() => monthTransactions(transactions, monthlyReportMonth).filter((tx) => tx.type === "expense"), [transactions, monthlyReportMonth]);
+  const monthlyReportFilteredTx = useMemo(() => monthlyReportTx.filter((tx) => {
+    const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
+    const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
+    const matchesRecurring =
+      monthlyReportRecurringFilter === "all" ||
+      (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
+
+    return matchesCategory && matchesAccount && matchesRecurring;
+  }).sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)), [monthlyReportAccountId, monthlyReportCategoryId, monthlyReportRecurringFilter, monthlyReportTx]);
+  const monthlyReportTotal = useMemo(() => monthlyReportFilteredTx.reduce((sum, tx) => sum + tx.amount, 0), [monthlyReportFilteredTx]);
+  const monthlyReportDays = useMemo(() => eachDayOfInterval({ start: startOfMonth(monthlyReportMonth), end: endOfMonth(monthlyReportMonth) }).length, [monthlyReportMonth]);
+  const monthlyReportActiveDays = useMemo(() => new Set(monthlyReportFilteredTx.map((tx) => tx.occurredOn)).size, [monthlyReportFilteredTx]);
+  const monthlyReportBudgetTotal = useMemo(() => monthlyReportCategories
+    .filter((category) => category.kind === "expense" && (monthlyReportCategoryId === "all" || category.id === monthlyReportCategoryId))
+    .reduce((sum, category) => sum + (category.monthlyBudget ?? 0), 0), [monthlyReportCategories, monthlyReportCategoryId]);
+  const monthlyReportDaily = useMemo(() => dailySeries(monthlyReportFilteredTx, monthlyReportMonth), [monthlyReportFilteredTx, monthlyReportMonth]);
+  const monthlyReportCategoryRows = useMemo(() => categorySpend(monthlyReportCategories, monthlyReportFilteredTx).filter((row) => row.spent > 0), [monthlyReportCategories, monthlyReportFilteredTx]);
+  const monthlyReportSubcategoryRows = useMemo(() => subcategories.map((subcategory) => {
+    const category = displayCategories.find((item) => item.id === subcategory.categoryId);
+    const subcategoryTransactions = monthlyReportFilteredTx.filter((tx) => tx.subcategoryId === subcategory.id);
+    const spent = subcategoryTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    return {
+      id: subcategory.id,
+      name: subcategory.name,
+      categoryName: category?.name ?? "",
+      color: category?.color ?? "#64748b",
+      spent,
+      count: subcategoryTransactions.length
+    };
+  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [displayCategories, monthlyReportFilteredTx, subcategories]);
+  const monthlyReportAccountRows = useMemo(() => accounts.map((account) => {
+    const accountTransactions = monthlyReportFilteredTx.filter((tx) => tx.accountId === account.id);
+    const spent = accountTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    return {
+      ...account,
+      spent,
+      count: accountTransactions.length
+    };
+  }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [accounts, monthlyReportFilteredTx]);
+  const monthlyReportTrendMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(monthlyReportMonth, 5 - index))), [monthlyReportMonth]);
+  const monthlyReportTrendSeries = useMemo(() => monthlyReportTrendMonths.map((month) => {
+    const monthExpenseTransactions = monthTransactions(transactions, month).filter((tx) => {
+      const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
+      const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
+      const matchesRecurring =
+        monthlyReportRecurringFilter === "all" ||
+        (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
+
+      return tx.type === "expense" && matchesCategory && matchesAccount && matchesRecurring;
+    });
+
+    return {
+      month: format(month, "MMM"),
+      expenses: monthExpenseTransactions.reduce((sum, tx) => sum + tx.amount, 0)
+    };
+  }), [monthlyReportAccountId, monthlyReportCategoryId, monthlyReportRecurringFilter, monthlyReportTrendMonths, transactions]);
   const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
   const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
@@ -1441,8 +1507,8 @@ export default function ExpenseTrackerPage() {
       </aside>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] xl:hidden">
-        <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">
-          {navItems.filter((item) => ["dashboard", "transactions", "budgets", "recurring", "settings"].includes(item.key)).map((item) => (
+        <div className="mx-auto grid max-w-3xl grid-cols-6 gap-1">
+          {navItems.filter((item) => ["dashboard", "transactions", "reports", "budgets", "recurring", "settings"].includes(item.key)).map((item) => (
             <button
               key={item.key}
               type="button"
@@ -1676,6 +1742,207 @@ export default function ExpenseTrackerPage() {
               </div>
             </Panel>
           </div>
+        </section>
+
+        <section id="reports" className={activeTab === "reports" ? "mt-4 grid gap-4" : "hidden"}>
+          <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
+            <div className="mb-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+              <MonthField label={ui.month} month={monthlyReportMonth} onChange={setMonthlyReportMonth} />
+              <div className="grid gap-2 sm:grid-cols-3">
+                <select
+                  value={monthlyReportCategoryId}
+                  onChange={(event) => setMonthlyReportCategoryId(event.target.value)}
+                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  aria-label="Report category"
+                >
+                  <option value="all">All categories</option>
+                  {displayCategories.filter((category) => category.kind === "expense").map((category) => (
+                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                  ))}
+                </select>
+                <select
+                  value={monthlyReportAccountId}
+                  onChange={(event) => setMonthlyReportAccountId(event.target.value)}
+                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  aria-label="Report account"
+                >
+                  <option value="all">All accounts</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>{account.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={monthlyReportRecurringFilter}
+                  onChange={(event) => setMonthlyReportRecurringFilter(event.target.value as "all" | "recurring" | "manual")}
+                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  aria-label="Report recurring filter"
+                >
+                  <option value="all">All entries</option>
+                  <option value="recurring">Recurring only</option>
+                  <option value="manual">Manual only</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <ActivityStat label="Total expenses" value={currency.format(monthlyReportTotal)} tone="coral" />
+              <ActivityStat label="Average/day" value={currency.format(monthlyReportTotal / Math.max(monthlyReportDays, 1))} sub={`${monthlyReportActiveDays} active days`} tone="ink" />
+              <ActivityStat label="Budget remaining" value={currency.format(Math.max(monthlyReportBudgetTotal - monthlyReportTotal, 0))} sub={`${currency.format(monthlyReportBudgetTotal)} planned`} tone={monthlyReportBudgetTotal >= monthlyReportTotal ? "moss" : "coral"} />
+              <ActivityStat label="Transactions" value={`${monthlyReportFilteredTx.length}`} sub={`${monthlyReportCategoryRows.length} categories`} tone="ink" />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">Daily expenses</h3>
+                  <span className="text-xs font-semibold text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</span>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={monthlyReportDaily}>
+                      <defs>
+                        <linearGradient id="monthlyReportDailyGradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.32} />
+                          <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
+                      <Area type="monotone" dataKey="spent" stroke="#f05a3f" fill="url(#monthlyReportDailyGradient)" strokeWidth={3} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase text-ink/55">6-month expense trend</h3>
+                  <span className="text-xs font-semibold text-ink/45">{currency.format(monthlyReportTrendSeries.reduce((sum, item) => sum + item.expenses, 0))}</span>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyReportTrendSeries}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
+                      <Bar dataKey="expenses" fill="#f05a3f" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-3">
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Top categories</h3>
+                <div className="space-y-3">
+                  {monthlyReportCategoryRows.slice(0, 6).map((row) => {
+                    const share = monthlyReportTotal > 0 ? (row.spent / monthlyReportTotal) * 100 : 0;
+
+                    return (
+                      <div key={row.id}>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                            <span className="truncate font-medium">{categoryLabel(row.name)}</span>
+                          </span>
+                          <span className="shrink-0 font-semibold">{currency.format(row.spent)}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                          <div className="h-full rounded-full bg-coral" style={{ width: `${Math.min(share, 100)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {monthlyReportCategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Top subcategories</h3>
+                <div className="space-y-3">
+                  {monthlyReportSubcategoryRows.slice(0, 6).map((row) => (
+                    <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{row.name}</span>
+                          <span className="block truncate text-xs text-ink/45">{categoryLabel(row.categoryName)} - {row.count} entries</span>
+                        </span>
+                      </span>
+                      <strong className="shrink-0">{currency.format(row.spent)}</strong>
+                    </div>
+                  ))}
+                  {monthlyReportSubcategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-ink/10 bg-white p-3">
+                <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Accounts used</h3>
+                <div className="space-y-3">
+                  {monthlyReportAccountRows.slice(0, 6).map((row) => (
+                    <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{row.name}</span>
+                          <span className="block text-xs text-ink/45">{row.count} entries</span>
+                        </span>
+                      </span>
+                      <strong className="shrink-0">{currency.format(row.spent)}</strong>
+                    </div>
+                  ))}
+                  {monthlyReportAccountRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-ink/10 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-3 py-3">
+                <h3 className="text-sm font-semibold uppercase text-ink/55">Monthly transactions</h3>
+                <span className="text-xs font-semibold text-ink/45">{monthlyReportFilteredTx.length} entries</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-[760px] w-full text-left text-sm">
+                  <thead className="bg-ink/[0.03] text-xs uppercase text-ink/45">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                      <th className="px-3 py-2 font-semibold">Category</th>
+                      <th className="px-3 py-2 font-semibold">Account</th>
+                      <th className="px-3 py-2 font-semibold">Note</th>
+                      <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyReportFilteredTx.slice(0, 50).map((tx) => {
+                      const category = displayCategories.find((item) => item.id === tx.categoryId);
+                      const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+                      const account = accounts.find((item) => item.id === tx.accountId);
+
+                      return (
+                        <tr key={tx.id} className="border-t border-ink/10">
+                          <td className="px-3 py-2 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              <span className="size-2.5 shrink-0 rounded-full" style={{ background: category?.color ?? "#64748b" }} />
+                              <span className="truncate">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-ink/65">{account?.name ?? "-"}</td>
+                          <td className="max-w-[260px] truncate px-3 py-2 text-ink/55">{tx.notes || tx.merchant || "-"}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-coral">-{preciseCurrency.format(tx.amount)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {monthlyReportFilteredTx.length === 0 ? <p className="px-3 py-4 text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
+            </div>
+          </Panel>
         </section>
 
         <section className={activeTab === "transactions" || activeTab === "budgets" || activeTab === "recurring" ? "mt-4 grid gap-4" : "hidden"}>
