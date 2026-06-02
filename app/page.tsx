@@ -1744,15 +1744,15 @@ export default function ExpenseTrackerPage() {
           </div>
         </section>
 
-        <section id="reports" className={activeTab === "reports" ? "mt-4 grid gap-4" : "hidden"}>
+        <section id="reports" className={activeTab === "reports" ? "mt-4 grid min-w-0 gap-4" : "hidden"}>
           <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
-            <div className="mb-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
               <MonthField label={ui.month} month={monthlyReportMonth} onChange={setMonthlyReportMonth} />
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-3">
                 <select
                   value={monthlyReportCategoryId}
                   onChange={(event) => setMonthlyReportCategoryId(event.target.value)}
-                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  className="h-10 w-full min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                   aria-label="Report category"
                 >
                   <option value="all">All categories</option>
@@ -1763,7 +1763,7 @@ export default function ExpenseTrackerPage() {
                 <select
                   value={monthlyReportAccountId}
                   onChange={(event) => setMonthlyReportAccountId(event.target.value)}
-                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  className="h-10 w-full min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                   aria-label="Report account"
                 >
                   <option value="all">All accounts</option>
@@ -1774,7 +1774,7 @@ export default function ExpenseTrackerPage() {
                 <select
                   value={monthlyReportRecurringFilter}
                   onChange={(event) => setMonthlyReportRecurringFilter(event.target.value as "all" | "recurring" | "manual")}
-                  className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  className="h-10 w-full min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                   aria-label="Report recurring filter"
                 >
                   <option value="all">All entries</option>
@@ -1791,15 +1791,15 @@ export default function ExpenseTrackerPage() {
               <ActivityStat label="Transactions" value={`${monthlyReportFilteredTx.length}`} sub={`${monthlyReportCategoryRows.length} categories`} tone="ink" />
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-              <div className="rounded-lg border border-ink/10 bg-white p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">Daily expenses</h3>
-                  <span className="text-xs font-semibold text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</span>
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+              <div className="min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="min-w-0 text-sm font-semibold uppercase text-ink/55">Daily expenses</h3>
+                  <span className="shrink-0 text-xs font-semibold text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</span>
                 </div>
-                <div className="h-64">
+                <div className="h-56 min-w-0 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={monthlyReportDaily}>
+                    <AreaChart data={monthlyReportDaily} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
                       <defs>
                         <linearGradient id="monthlyReportDailyGradient" x1="0" x2="0" y1="0" y2="1">
                           <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.32} />
@@ -1816,14 +1816,14 @@ export default function ExpenseTrackerPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-ink/10 bg-white p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase text-ink/55">6-month expense trend</h3>
-                  <span className="text-xs font-semibold text-ink/45">{currency.format(monthlyReportTrendSeries.reduce((sum, item) => sum + item.expenses, 0))}</span>
+              <div className="min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="min-w-0 text-sm font-semibold uppercase text-ink/55">6-month expense trend</h3>
+                  <span className="shrink-0 text-xs font-semibold text-ink/45">{currency.format(monthlyReportTrendSeries.reduce((sum, item) => sum + item.expenses, 0))}</span>
                 </div>
-                <div className="h-64">
+                <div className="h-56 min-w-0 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyReportTrendSeries}>
+                    <BarChart data={monthlyReportTrendSeries} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
                       <XAxis dataKey="month" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
@@ -1835,8 +1835,8 @@ export default function ExpenseTrackerPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-3">
-              <div className="rounded-lg border border-ink/10 bg-white p-3">
+            <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-3">
+              <div className="min-w-0 rounded-lg border border-ink/10 bg-white p-3">
                 <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Top categories</h3>
                 <div className="space-y-3">
                   {monthlyReportCategoryRows.slice(0, 6).map((row) => {
@@ -1845,11 +1845,11 @@ export default function ExpenseTrackerPage() {
                     return (
                       <div key={row.id}>
                         <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                          <span className="inline-flex min-w-0 items-center gap-2">
+                          <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                             <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                             <span className="truncate font-medium">{categoryLabel(row.name)}</span>
                           </span>
-                          <span className="shrink-0 font-semibold">{currency.format(row.spent)}</span>
+                          <span className="shrink-0 text-right font-semibold">{currency.format(row.spent)}</span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-ink/10">
                           <div className="h-full rounded-full bg-coral" style={{ width: `${Math.min(share, 100)}%` }} />
@@ -1861,38 +1861,38 @@ export default function ExpenseTrackerPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-ink/10 bg-white p-3">
+              <div className="min-w-0 rounded-lg border border-ink/10 bg-white p-3">
                 <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Top subcategories</h3>
                 <div className="space-y-3">
                   {monthlyReportSubcategoryRows.slice(0, 6).map((row) => (
                     <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="inline-flex min-w-0 items-center gap-2">
+                      <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                         <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{row.name}</span>
                           <span className="block truncate text-xs text-ink/45">{categoryLabel(row.categoryName)} - {row.count} entries</span>
                         </span>
                       </span>
-                      <strong className="shrink-0">{currency.format(row.spent)}</strong>
+                      <strong className="shrink-0 text-right">{currency.format(row.spent)}</strong>
                     </div>
                   ))}
                   {monthlyReportSubcategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-ink/10 bg-white p-3">
+              <div className="min-w-0 rounded-lg border border-ink/10 bg-white p-3">
                 <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Accounts used</h3>
                 <div className="space-y-3">
                   {monthlyReportAccountRows.slice(0, 6).map((row) => (
                     <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="inline-flex min-w-0 items-center gap-2">
+                      <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                         <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{row.name}</span>
                           <span className="block text-xs text-ink/45">{row.count} entries</span>
                         </span>
                       </span>
-                      <strong className="shrink-0">{currency.format(row.spent)}</strong>
+                      <strong className="shrink-0 text-right">{currency.format(row.spent)}</strong>
                     </div>
                   ))}
                   {monthlyReportAccountRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
@@ -1900,12 +1900,32 @@ export default function ExpenseTrackerPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg border border-ink/10 bg-white">
+            <div className="mt-4 min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-3 py-3">
                 <h3 className="text-sm font-semibold uppercase text-ink/55">Monthly transactions</h3>
                 <span className="text-xs font-semibold text-ink/45">{monthlyReportFilteredTx.length} entries</span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="divide-y divide-ink/10 md:hidden">
+                {monthlyReportFilteredTx.slice(0, 50).map((tx) => {
+                  const category = displayCategories.find((item) => item.id === tx.categoryId);
+                  const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+                  const account = accounts.find((item) => item.id === tx.accountId);
+
+                  return (
+                    <article key={tx.id} className="grid gap-2 px-3 py-3 text-sm">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-ink">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</p>
+                          <p className="text-xs text-ink/45">{format(parseISO(tx.occurredOn), "MMM d")} - {account?.name ?? "-"}</p>
+                        </div>
+                        <strong className="shrink-0 text-right text-coral">-{preciseCurrency.format(tx.amount)}</strong>
+                      </div>
+                      <p className="truncate text-xs text-ink/55">{tx.notes || tx.merchant || "-"}</p>
+                    </article>
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="min-w-[760px] w-full text-left text-sm">
                   <thead className="bg-ink/[0.03] text-xs uppercase text-ink/45">
                     <tr>
@@ -2509,10 +2529,10 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
-        <span className="text-sm text-ink/55">{action}</span>
+    <section id={id} className="min-w-0 rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h2 className="min-w-0 text-base font-semibold sm:text-lg">{title}</h2>
+        <span className="shrink-0 text-sm text-ink/55">{action}</span>
       </div>
       {children}
     </section>
@@ -2540,9 +2560,9 @@ function ActivityStat({
   }[tone];
 
   return (
-    <div className={compact ? "" : "rounded-lg border border-ink/10 bg-white p-3"}>
-      <p className="text-xs uppercase text-ink/45">{label}</p>
-      <p className={`font-semibold ${compact ? "text-sm" : "text-base"} ${toneClass}`}>{value}</p>
+    <div className={compact ? "min-w-0" : "min-w-0 rounded-lg border border-ink/10 bg-white p-3"}>
+      <p className="truncate text-xs uppercase text-ink/45">{label}</p>
+      <p className={`break-words font-semibold leading-tight ${compact ? "text-sm" : "text-base"} ${toneClass}`}>{value}</p>
       {sub ? <p className="text-xs text-ink/45">{sub}</p> : null}
     </div>
   );
@@ -2558,13 +2578,13 @@ function MonthField({
   onChange: (month: Date) => void;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 text-sm text-ink/55">
+    <label className="flex w-full flex-col gap-1 text-sm text-ink/55 sm:inline-flex sm:w-auto sm:flex-row sm:items-center sm:gap-2">
       <span className="font-medium">{label}</span>
       <input
         type="month"
         value={format(month, "yyyy-MM")}
         onChange={(event) => onChange(parseISO(`${event.target.value}-01`))}
-        className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+        className="h-9 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink sm:w-auto"
       />
     </label>
   );
