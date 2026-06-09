@@ -392,8 +392,10 @@ export default function ExpenseTrackerPage() {
   const [dashboardCashflowMonth, setDashboardCashflowMonth] = useState(startOfMonth(new Date()));
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(startOfMonth(new Date()));
   const [monthlyReportCategoryId, setMonthlyReportCategoryId] = useState("all");
+  const [monthlyReportSubcategoryId, setMonthlyReportSubcategoryId] = useState("all");
   const [monthlyReportAccountId, setMonthlyReportAccountId] = useState("all");
   const [monthlyReportRecurringFilter, setMonthlyReportRecurringFilter] = useState<"all" | "recurring" | "manual">("all");
+  const [monthlyReportQuery, setMonthlyReportQuery] = useState("");
   const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
   const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
   const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
@@ -585,16 +587,25 @@ export default function ExpenseTrackerPage() {
   const dashboardWeekdayTx = useMemo(() => monthTransactions(transactions, dashboardWeekdayMonth), [transactions, dashboardWeekdayMonth]);
   const weekday = useMemo(() => weekdaySpend(dashboardWeekdayTx), [dashboardWeekdayTx]);
   const monthlyReportCategories = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, monthlyReportMonthKey), [displayCategories, budgets, monthlyReportMonthKey]);
+  const monthlyReportSubcategories = useMemo(() => subcategories.filter((subcategory) => (
+    monthlyReportCategoryId === "all" || subcategory.categoryId === monthlyReportCategoryId
+  )), [monthlyReportCategoryId, subcategories]);
   const monthlyReportTx = useMemo(() => monthTransactions(transactions, monthlyReportMonth).filter((tx) => tx.type === "expense"), [transactions, monthlyReportMonth]);
   const monthlyReportFilteredTx = useMemo(() => monthlyReportTx.filter((tx) => {
+    const category = displayCategories.find((item) => item.id === tx.categoryId);
+    const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+    const account = accounts.find((item) => item.id === tx.accountId);
+    const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
     const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
+    const matchesSubcategory = monthlyReportSubcategoryId === "all" || tx.subcategoryId === monthlyReportSubcategoryId;
     const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
     const matchesRecurring =
       monthlyReportRecurringFilter === "all" ||
       (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
+    const matchesQuery = haystack.includes(monthlyReportQuery.trim().toLowerCase());
 
-    return matchesCategory && matchesAccount && matchesRecurring;
-  }).sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)), [monthlyReportAccountId, monthlyReportCategoryId, monthlyReportRecurringFilter, monthlyReportTx]);
+    return matchesCategory && matchesSubcategory && matchesAccount && matchesRecurring && matchesQuery;
+  }).sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)), [accounts, displayCategories, monthlyReportAccountId, monthlyReportCategoryId, monthlyReportQuery, monthlyReportRecurringFilter, monthlyReportSubcategoryId, monthlyReportTx, subcategories]);
   const monthlyReportTotal = useMemo(() => monthlyReportFilteredTx.reduce((sum, tx) => sum + tx.amount, 0), [monthlyReportFilteredTx]);
   const monthlyReportDays = useMemo(() => eachDayOfInterval({ start: startOfMonth(monthlyReportMonth), end: endOfMonth(monthlyReportMonth) }).length, [monthlyReportMonth]);
   const monthlyReportActiveDays = useMemo(() => new Set(monthlyReportFilteredTx.map((tx) => tx.occurredOn)).size, [monthlyReportFilteredTx]);
@@ -684,6 +695,26 @@ export default function ExpenseTrackerPage() {
       return matchesQuery && matchesDate;
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
+
+  function openMonthlyCategoryReport(categoryId: string, month: Date) {
+    setMonthlyReportMonth(month);
+    setMonthlyReportCategoryId(categoryId);
+    setMonthlyReportSubcategoryId("all");
+    setMonthlyReportAccountId("all");
+    setMonthlyReportRecurringFilter("all");
+    setMonthlyReportQuery("");
+    setActiveTab("reports");
+    window.requestAnimationFrame(() => document.getElementById("reports")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  function clearMonthlyReportFilters() {
+    setMonthlyReportCategoryId("all");
+    setMonthlyReportSubcategoryId("all");
+    setMonthlyReportAccountId("all");
+    setMonthlyReportRecurringFilter("all");
+    setMonthlyReportQuery("");
+  }
+
   const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate || visibleRecurringPayments[rule.id]?.occurredOn === selectedRecurringDate : true);
   const recurringDueLabel = (daysUntilDue: number) => {
     const dayLabel = Math.abs(daysUntilDue) === 1 ? "day" : "days";
@@ -1608,13 +1639,19 @@ export default function ExpenseTrackerPage() {
                 </div>
                 <div className="space-y-3">
                   {budgetRows.slice(0, 5).map((row) => (
-                    <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => openMonthlyCategoryReport(row.id, dashboardCategoryMonth)}
+                      className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-river/10 focus:outline-none focus:ring-2 focus:ring-river/30"
+                      aria-label={`View ${categoryLabel(row.name)} expenses for ${format(dashboardCategoryMonth, "MMMM yyyy")}`}
+                    >
                       <span className="flex items-center gap-2">
                         <span className="size-3 rounded-full" style={{ background: row.color }} />
                         {categoryLabel(row.name)}
                       </span>
                       <strong>{currency.format(row.spent)}</strong>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1748,16 +1785,30 @@ export default function ExpenseTrackerPage() {
           <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
             <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
               <MonthField label={ui.month} month={monthlyReportMonth} onChange={setMonthlyReportMonth} />
-              <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <select
                   value={monthlyReportCategoryId}
-                  onChange={(event) => setMonthlyReportCategoryId(event.target.value)}
+                  onChange={(event) => {
+                    setMonthlyReportCategoryId(event.target.value);
+                    setMonthlyReportSubcategoryId("all");
+                  }}
                   className="h-10 w-full min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
                   aria-label="Report category"
                 >
                   <option value="all">All categories</option>
                   {displayCategories.filter((category) => category.kind === "expense").map((category) => (
                     <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                  ))}
+                </select>
+                <select
+                  value={monthlyReportSubcategoryId}
+                  onChange={(event) => setMonthlyReportSubcategoryId(event.target.value)}
+                  className="h-10 w-full min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                  aria-label="Report subcategory"
+                >
+                  <option value="all">All subcategories</option>
+                  {monthlyReportSubcategories.map((subcategory) => (
+                    <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
                   ))}
                 </select>
                 <select
@@ -1782,6 +1833,26 @@ export default function ExpenseTrackerPage() {
                   <option value="manual">Manual only</option>
                 </select>
               </div>
+            </div>
+
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+              <label className="relative block min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" size={18} />
+                <input
+                  value={monthlyReportQuery}
+                  onChange={(event) => setMonthlyReportQuery(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-ink/10 bg-white pl-10 pr-3 text-sm"
+                  placeholder="Search merchant, note, category, subcategory, account"
+                  aria-label="Search monthly expenses"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={clearMonthlyReportFilters}
+                className="h-10 rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink/60 transition hover:bg-ink/[0.04] hover:text-ink"
+              >
+                Clear filters
+              </button>
             </div>
 
             <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
