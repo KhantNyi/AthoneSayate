@@ -1319,7 +1319,7 @@ export default function ExpenseTrackerPage() {
         amount: rule.amount,
         occurredOn: format(new Date(), "yyyy-MM-dd"),
         merchant: rule.merchant,
-        notes: `Recorded from recurring item due ${rule.nextDueOn}`,
+        notes: recurringPaymentNote(rule.nextDueOn),
         isRecurring: true
       });
       const updatedRule = await updateRecurringRule(rule.id, {
@@ -3457,18 +3457,40 @@ function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], 
   const dueOn = recurringPaymentDueOnForStatus(rule, referenceDate);
   const window = recurringPaymentWindow(rule, dueOn);
   const tolerance = Math.max(rule.amount * 0.1, 10);
+  const baseMatches = (transaction: Transaction) => {
+    const sameType = transaction.type === rule.type;
+    const sameAccount = transaction.accountId === rule.accountId;
+    const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
+    const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
+    const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
+    const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
+
+    return sameType && sameAccount && sameCategory && sameSubcategory && sameMerchant && amountMatches;
+  };
+
+  const exactGeneratedPayment = transactions
+    .filter((transaction) => transaction.isRecurring && transaction.notes === recurringPaymentNote(dueOn) && baseMatches(transaction))
+    .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))[0];
+
+  if (exactGeneratedPayment) {
+    return exactGeneratedPayment;
+  }
 
   return transactions
     .filter((transaction) => {
-      const sameType = transaction.type === rule.type;
-      const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
-      const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
-      const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
       const inWindow = transaction.occurredOn >= window.start && transaction.occurredOn <= window.end;
 
-      return sameType && sameCategory && sameSubcategory && amountMatches && inWindow;
+      return baseMatches(transaction) && inWindow;
     })
     .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(dueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(dueOn).getTime()))[0];
+}
+
+function recurringPaymentNote(dueOn: string) {
+  return `Recorded from recurring item due ${dueOn}`;
+}
+
+function normalizeRecurringText(value?: string) {
+  return (value ?? "").trim().toLowerCase();
 }
 
 function recurringPaymentDueOnForStatus(rule: RecurringRule, referenceDate: Date) {
