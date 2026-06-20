@@ -11,12 +11,14 @@ import {
   CircleDollarSign,
   Languages,
   LayoutDashboard,
+  MoreHorizontal,
   Pencil,
   PiggyBank,
   Plus,
   ReceiptText,
   Search,
   Settings,
+  SlidersHorizontal,
   Target,
   Trash2,
   WalletCards,
@@ -366,6 +368,7 @@ export default function ExpenseTrackerPage() {
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -398,6 +401,7 @@ export default function ExpenseTrackerPage() {
   const [monthlyReportAccountId, setMonthlyReportAccountId] = useState("all");
   const [monthlyReportRecurringFilter, setMonthlyReportRecurringFilter] = useState<"all" | "recurring" | "manual">("all");
   const [monthlyReportQuery, setMonthlyReportQuery] = useState("");
+  const [monthlyReportFiltersOpen, setMonthlyReportFiltersOpen] = useState(false);
   const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
   const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
   const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
@@ -539,6 +543,11 @@ export default function ExpenseTrackerPage() {
   useEffect(() => {
     setBudgetMonth(format(visibleMonth, "yyyy-MM"));
   }, [visibleMonth]);
+
+  useEffect(() => {
+    setMobileMoreOpen(false);
+    setMonthlyReportFiltersOpen(false);
+  }, [activeTab]);
 
   const visibleMonthKey = format(visibleMonth, "yyyy-MM");
   const dashboardCategoryMonthKey = format(dashboardCategoryMonth, "yyyy-MM");
@@ -764,6 +773,27 @@ export default function ExpenseTrackerPage() {
   const ui = uiTranslations[language];
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
+  const activeNavItem = navItems.find((item) => item.key === activeTab) ?? navItems[0];
+  const mobilePrimaryNavItems = navItems.filter((item) => ["dashboard", "transactions", "reports", "recurring"].includes(item.key));
+  const mobileMoreNavItems = navItems.filter((item) => ["budgets", "goals", "settings"].includes(item.key));
+  const mobileMoreActive = mobileMoreNavItems.some((item) => item.key === activeTab);
+  const monthlyReportSelectedCategory = displayCategories.find((category) => category.id === monthlyReportCategoryId);
+  const monthlyReportSelectedSubcategory = subcategories.find((subcategory) => subcategory.id === monthlyReportSubcategoryId);
+  const monthlyReportSelectedAccount = accounts.find((account) => account.id === monthlyReportAccountId);
+  const monthlyReportFilterCount = [
+    monthlyReportCategoryId !== "all",
+    monthlyReportSubcategoryId !== "all",
+    monthlyReportAccountId !== "all",
+    monthlyReportRecurringFilter !== "all",
+    monthlyReportQuery.trim().length > 0
+  ].filter(Boolean).length;
+  const monthlyReportFilterChips = [
+    monthlyReportCategoryId !== "all" ? categoryLabel(monthlyReportSelectedCategory?.name) ?? "Category" : "",
+    monthlyReportSubcategoryId !== "all" ? monthlyReportSelectedSubcategory?.name ?? "Subcategory" : "",
+    monthlyReportAccountId !== "all" ? monthlyReportSelectedAccount?.name ?? "Account" : "",
+    monthlyReportRecurringFilter !== "all" ? (monthlyReportRecurringFilter === "recurring" ? "Recurring" : "Manual") : "",
+    monthlyReportQuery.trim() ? `"${monthlyReportQuery.trim()}"` : ""
+  ].filter(Boolean);
   const selectedCategory = displayCategories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
   const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
@@ -798,6 +828,11 @@ export default function ExpenseTrackerPage() {
     const previousDefault = subMonths(monthlyReportMonth, 1);
     setMonthlyReportMonth(month);
     setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(month, 1) : current));
+  }
+
+  function chooseTab(tab: TabKey) {
+    setActiveTab(tab);
+    setMobileMoreOpen(false);
   }
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
@@ -1644,12 +1679,12 @@ export default function ExpenseTrackerPage() {
       </aside>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] xl:hidden">
-        <div className="mx-auto grid max-w-3xl grid-cols-6 gap-1">
-          {navItems.filter((item) => ["dashboard", "transactions", "reports", "budgets", "recurring", "settings"].includes(item.key)).map((item) => (
+        <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">
+          {mobilePrimaryNavItems.map((item) => (
             <button
               key={item.key}
               type="button"
-              onClick={() => setActiveTab(item.key)}
+              onClick={() => chooseTab(item.key)}
               className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
                 activeTab === item.key ? "bg-river text-white shadow-[0_8px_18px_rgba(37,99,235,0.16)]" : "text-ink/65"
               }`}
@@ -1658,21 +1693,65 @@ export default function ExpenseTrackerPage() {
               <span className="max-w-full truncate">{t[item.label]}</span>
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen((current) => !current)}
+            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
+              mobileMoreOpen || mobileMoreActive ? "bg-river text-white shadow-[0_8px_18px_rgba(37,99,235,0.16)]" : "text-ink/65"
+            }`}
+          >
+            <MoreHorizontal size={18} />
+            <span className="max-w-full truncate">More</span>
+          </button>
         </div>
       </nav>
 
-      <section className="px-3 pb-10 pt-3 sm:px-6 sm:pt-4 lg:px-8 xl:ml-64">
-        <header className="mb-6 flex flex-col gap-4 rounded-none border-b border-ink/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-river">{t.snapshot}</p>
-            <h1 className="text-2xl font-semibold tracking-normal text-ink sm:text-4xl">{t.expenseTracker}</h1>
+      {mobileMoreOpen ? (
+        <div className="fixed inset-x-3 bottom-20 z-40 rounded-lg border border-ink/10 bg-white p-2 shadow-soft xl:hidden">
+          <div className="grid gap-1">
+            {mobileMoreNavItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => chooseTab(item.key)}
+                className={`flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${
+                  activeTab === item.key ? "bg-river/10 text-river" : "text-ink/70 hover:bg-ink/[0.04]"
+                }`}
+              >
+                <item.icon size={18} />
+                {t[item.label]}
+              </button>
+            ))}
+            <div className="mt-1 border-t border-ink/10 pt-2">
+              <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+        </div>
+      ) : null}
+
+      <section className="px-3 pb-10 pt-3 sm:px-6 sm:pt-4 lg:px-8 xl:ml-64">
+        <header className="mb-4 flex items-center justify-between gap-3 rounded-none border-b border-ink/10 pb-3 sm:mb-6 sm:pb-5">
+          <div className="min-w-0">
+            <p className="hidden text-sm font-medium text-river sm:block">{t.snapshot}</p>
+            <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
+            <h1 className="truncate text-xl font-semibold tracking-normal text-ink sm:text-4xl">
+              <span className="sm:hidden">athonesayate</span>
+              <span className="hidden sm:inline">{t.expenseTracker}</span>
+            </h1>
+          </div>
+          <div className="hidden flex-wrap items-center gap-2 sm:flex">
             <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
             <StatusPill tone="river" label={`${currency.format(dailyAllowance)} ${t.safeToSpendDay}`} />
             <StatusPill tone="moss" label={`${currentMonthTotals.savingsRate.toFixed(1)}% ${t.savingsRate}`} />
           </div>
         </header>
+
+        {activeTab === "dashboard" ? (
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:hidden">
+            <ActivityStat label={t.safeToSpendDay} value={currency.format(dailyAllowance)} tone="river" />
+            <ActivityStat label={t.savingsRate} value={`${currentMonthTotals.savingsRate.toFixed(1)}%`} tone="moss" />
+          </div>
+        ) : null}
 
         {(isLoading || dataError || dataNotice) && (
           <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
@@ -1889,7 +1968,7 @@ export default function ExpenseTrackerPage() {
 
         <section id="reports" className={activeTab === "reports" ? "mt-4 grid min-w-0 gap-4" : "hidden"}>
           <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
-            <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="mb-4 hidden min-w-0 gap-3 md:grid lg:grid-cols-[220px_minmax(0,1fr)]">
               <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
               <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <select
@@ -1941,7 +2020,41 @@ export default function ExpenseTrackerPage() {
               </div>
             </div>
 
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+            <div className="mb-4 grid gap-3 md:hidden">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+                <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
+                <button
+                  type="button"
+                  onClick={() => setMonthlyReportFiltersOpen(true)}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold text-ink/65"
+                >
+                  <SlidersHorizontal size={17} />
+                  Filters{monthlyReportFilterCount ? ` ${monthlyReportFilterCount}` : ""}
+                </button>
+              </div>
+              <label className="relative block min-w-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" size={18} />
+                <input
+                  value={monthlyReportQuery}
+                  onChange={(event) => setMonthlyReportQuery(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-ink/10 bg-white pl-10 pr-3 text-sm"
+                  placeholder="Search expenses"
+                  aria-label="Search monthly expenses"
+                />
+              </label>
+              {monthlyReportFilterChips.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {monthlyReportFilterChips.map((chip) => (
+                    <span key={chip} className="rounded-lg bg-river/10 px-2.5 py-1 text-xs font-semibold text-river">{chip}</span>
+                  ))}
+                  <button type="button" onClick={clearMonthlyReportFilters} className="rounded-lg px-2.5 py-1 text-xs font-semibold text-ink/55">
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mb-4 hidden flex-col gap-2 md:flex sm:flex-row">
               <label className="relative block min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" size={18} />
                 <input
@@ -1960,6 +2073,114 @@ export default function ExpenseTrackerPage() {
                 Clear filters
               </button>
             </div>
+
+            {monthlyReportFiltersOpen ? (
+              <div className="fixed inset-0 z-50 md:hidden">
+                <button
+                  type="button"
+                  aria-label="Close report filters"
+                  onClick={() => setMonthlyReportFiltersOpen(false)}
+                  className="absolute inset-0 bg-ink/25"
+                />
+                <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-lg border border-ink/10 bg-white p-4 shadow-soft">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold">Report filters</h3>
+                      <p className="text-xs text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Close report filters"
+                      onClick={() => setMonthlyReportFiltersOpen(false)}
+                      className="grid size-10 place-items-center rounded-lg text-ink/45"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="grid gap-3">
+                    <label className="grid gap-1 text-sm font-medium text-ink/55">
+                      Category
+                      <select
+                        value={monthlyReportCategoryId}
+                        onChange={(event) => {
+                          setMonthlyReportCategoryId(event.target.value);
+                          setMonthlyReportSubcategoryId("all");
+                        }}
+                        className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+                      >
+                        <option value="all">All categories</option>
+                        {displayCategories.filter((category) => category.kind === "expense").map((category) => (
+                          <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-sm font-medium text-ink/55">
+                      Subcategory
+                      <select
+                        value={monthlyReportSubcategoryId}
+                        onChange={(event) => setMonthlyReportSubcategoryId(event.target.value)}
+                        className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+                      >
+                        <option value="all">All subcategories</option>
+                        {monthlyReportSubcategories.map((subcategory) => (
+                          <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-sm font-medium text-ink/55">
+                      Account
+                      <select
+                        value={monthlyReportAccountId}
+                        onChange={(event) => setMonthlyReportAccountId(event.target.value)}
+                        className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+                      >
+                        <option value="all">All accounts</option>
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>{account.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid gap-1 text-sm font-medium text-ink/55">
+                      Entries
+                      <div className="grid grid-cols-3 gap-1 rounded-lg border border-ink/10 bg-white p-1">
+                        {([
+                          ["all", "All"],
+                          ["recurring", "Recurring"],
+                          ["manual", "Manual"]
+                        ] as const).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setMonthlyReportRecurringFilter(value)}
+                            className={`h-9 rounded-md text-xs font-semibold transition ${
+                              monthlyReportRecurringFilter === value ? "bg-river text-white" : "text-ink/55"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={clearMonthlyReportFilters}
+                        className="h-11 rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink/60"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMonthlyReportFiltersOpen(false)}
+                        className="h-11 rounded-lg bg-river px-4 text-sm font-semibold text-white"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="inline-flex h-10 w-full items-center rounded-lg border border-ink/10 bg-white p-1 sm:w-auto">
@@ -2878,14 +3099,15 @@ function ActivityStat({
   label: string;
   value: string;
   sub?: string;
-  tone: "coral" | "moss" | "amber" | "ink";
+  tone: "coral" | "moss" | "amber" | "ink" | "river";
   compact?: boolean;
 }) {
   const toneClass = {
     amber: "text-amber",
     coral: "text-coral",
     ink: "text-ink",
-    moss: "text-moss"
+    moss: "text-moss",
+    river: "text-river"
   }[tone];
 
   return (
