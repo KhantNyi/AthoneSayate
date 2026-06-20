@@ -391,6 +391,8 @@ export default function ExpenseTrackerPage() {
   const [dashboardWeekdayMonth, setDashboardWeekdayMonth] = useState(startOfMonth(new Date()));
   const [dashboardCashflowMonth, setDashboardCashflowMonth] = useState(startOfMonth(new Date()));
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(startOfMonth(new Date()));
+  const [monthlyReportMode, setMonthlyReportMode] = useState<"overview" | "compare">("overview");
+  const [monthlyCompareMonth, setMonthlyCompareMonth] = useState(startOfMonth(subMonths(new Date(), 1)));
   const [monthlyReportCategoryId, setMonthlyReportCategoryId] = useState("all");
   const [monthlyReportSubcategoryId, setMonthlyReportSubcategoryId] = useState("all");
   const [monthlyReportAccountId, setMonthlyReportAccountId] = useState("all");
@@ -655,6 +657,102 @@ export default function ExpenseTrackerPage() {
       expenses: monthExpenseTransactions.reduce((sum, tx) => sum + tx.amount, 0)
     };
   }), [monthlyReportAccountId, monthlyReportCategoryId, monthlyReportRecurringFilter, monthlyReportTrendMonths, transactions]);
+  const monthlyCompareFilteredTx = useMemo(() => monthTransactions(transactions, monthlyCompareMonth).filter((tx) => {
+    const category = displayCategories.find((item) => item.id === tx.categoryId);
+    const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
+    const account = accounts.find((item) => item.id === tx.accountId);
+    const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
+    const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
+    const matchesSubcategory = monthlyReportSubcategoryId === "all" || tx.subcategoryId === monthlyReportSubcategoryId;
+    const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
+    const matchesRecurring =
+      monthlyReportRecurringFilter === "all" ||
+      (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
+    const matchesQuery = haystack.includes(monthlyReportQuery.trim().toLowerCase());
+
+    return tx.type === "expense" && matchesCategory && matchesSubcategory && matchesAccount && matchesRecurring && matchesQuery;
+  }), [accounts, displayCategories, monthlyCompareMonth, monthlyReportAccountId, monthlyReportCategoryId, monthlyReportQuery, monthlyReportRecurringFilter, monthlyReportSubcategoryId, subcategories, transactions]);
+  const monthlyReportComparisonRows = useMemo(() => {
+    if (monthlyReportCategoryId === "all") {
+      return monthlyReportCategories
+        .filter((category) => category.kind === "expense")
+        .map((category) => {
+          const currentSpent = monthlyReportFilteredTx
+            .filter((tx) => tx.categoryId === category.id)
+            .reduce((sum, tx) => sum + tx.amount, 0);
+          const compareSpent = monthlyCompareFilteredTx
+            .filter((tx) => tx.categoryId === category.id)
+            .reduce((sum, tx) => sum + tx.amount, 0);
+
+          return {
+            id: category.id,
+            name: category.name,
+            color: category.color,
+            currentSpent,
+            compareSpent,
+            deltaAmount: currentSpent - compareSpent,
+            deltaPercent: percentDelta(currentSpent, compareSpent)
+          };
+        })
+        .filter((row) => row.currentSpent > 0 || row.compareSpent > 0)
+        .sort((a, b) => Math.max(b.currentSpent, b.compareSpent) - Math.max(a.currentSpent, a.compareSpent));
+    }
+
+    const selectedCategoryForReport = monthlyReportCategories.find((category) => category.id === monthlyReportCategoryId);
+    const sourceSubcategories = subcategories.filter((subcategory) => (
+      subcategory.categoryId === monthlyReportCategoryId &&
+      (monthlyReportSubcategoryId === "all" || subcategory.id === monthlyReportSubcategoryId)
+    ));
+    const rows = sourceSubcategories.map((subcategory) => {
+      const currentSpent = monthlyReportFilteredTx
+        .filter((tx) => tx.subcategoryId === subcategory.id)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+      const compareSpent = monthlyCompareFilteredTx
+        .filter((tx) => tx.subcategoryId === subcategory.id)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+      return {
+        id: subcategory.id,
+        name: subcategory.name,
+        color: selectedCategoryForReport?.color ?? "#64748b",
+        currentSpent,
+        compareSpent,
+        deltaAmount: currentSpent - compareSpent,
+        deltaPercent: percentDelta(currentSpent, compareSpent)
+      };
+    });
+    const hasUncategorizedSpend = monthlyReportSubcategoryId === "all" && [...monthlyReportFilteredTx, ...monthlyCompareFilteredTx].some((tx) => (
+      tx.categoryId === monthlyReportCategoryId && !tx.subcategoryId
+    ));
+
+    if (hasUncategorizedSpend) {
+      const currentSpent = monthlyReportFilteredTx
+        .filter((tx) => tx.categoryId === monthlyReportCategoryId && !tx.subcategoryId)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+      const compareSpent = monthlyCompareFilteredTx
+        .filter((tx) => tx.categoryId === monthlyReportCategoryId && !tx.subcategoryId)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+      rows.push({
+        id: `${monthlyReportCategoryId}-uncategorized`,
+        name: "No subcategory",
+        color: selectedCategoryForReport?.color ?? "#64748b",
+        currentSpent,
+        compareSpent,
+        deltaAmount: currentSpent - compareSpent,
+        deltaPercent: percentDelta(currentSpent, compareSpent)
+      });
+    }
+
+    return rows
+      .filter((row) => row.currentSpent > 0 || row.compareSpent > 0)
+      .sort((a, b) => Math.max(b.currentSpent, b.compareSpent) - Math.max(a.currentSpent, a.compareSpent));
+  }, [monthlyCompareFilteredTx, monthlyReportCategories, monthlyReportCategoryId, monthlyReportFilteredTx, monthlyReportSubcategoryId, subcategories]);
+  const monthlyComparisonCurrentTotal = useMemo(() => monthlyReportComparisonRows.reduce((sum, row) => sum + row.currentSpent, 0), [monthlyReportComparisonRows]);
+  const monthlyComparisonCompareTotal = useMemo(() => monthlyReportComparisonRows.reduce((sum, row) => sum + row.compareSpent, 0), [monthlyReportComparisonRows]);
+  const monthlyComparisonDelta = monthlyComparisonCurrentTotal - monthlyComparisonCompareTotal;
+  const monthlyComparisonDeltaPercent = percentDelta(monthlyComparisonCurrentTotal, monthlyComparisonCompareTotal);
+  const monthlyComparisonMaxSpend = Math.max(...monthlyReportComparisonRows.map((row) => Math.max(row.currentSpent, row.compareSpent)), 1);
   const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
   const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
@@ -696,8 +794,16 @@ export default function ExpenseTrackerPage() {
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
 
+  function changeMonthlyReportMonth(month: Date) {
+    const previousDefault = subMonths(monthlyReportMonth, 1);
+    setMonthlyReportMonth(month);
+    setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(month, 1) : current));
+  }
+
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
     setMonthlyReportMonth(month);
+    setMonthlyCompareMonth(subMonths(month, 1));
+    setMonthlyReportMode("compare");
     setMonthlyReportCategoryId(categoryId);
     setMonthlyReportSubcategoryId("all");
     setMonthlyReportAccountId("all");
@@ -1784,7 +1890,7 @@ export default function ExpenseTrackerPage() {
         <section id="reports" className={activeTab === "reports" ? "mt-4 grid min-w-0 gap-4" : "hidden"}>
           <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
             <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-              <MonthField label={ui.month} month={monthlyReportMonth} onChange={setMonthlyReportMonth} />
+              <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
               <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <select
                   value={monthlyReportCategoryId}
@@ -1855,6 +1961,28 @@ export default function ExpenseTrackerPage() {
               </button>
             </div>
 
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex h-10 w-full items-center rounded-lg border border-ink/10 bg-white p-1 sm:w-auto">
+                {(["overview", "compare"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setMonthlyReportMode(mode)}
+                    className={`h-8 flex-1 rounded-md px-4 text-sm font-semibold capitalize transition sm:flex-none ${
+                      monthlyReportMode === mode ? "bg-river text-white" : "text-ink/55 hover:bg-river/10 hover:text-river"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              {monthlyReportMode === "compare" ? (
+                <MonthField label="Compare to" month={monthlyCompareMonth} onChange={setMonthlyCompareMonth} />
+              ) : null}
+            </div>
+
+            {monthlyReportMode === "overview" ? (
+              <Fragment>
             <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <ActivityStat label="Total expenses" value={currency.format(monthlyReportTotal)} tone="coral" />
               <ActivityStat label="Average/day" value={currency.format(monthlyReportTotal / Math.max(monthlyReportDays, 1))} sub={`${monthlyReportActiveDays} active days`} tone="ink" />
@@ -2033,6 +2161,136 @@ export default function ExpenseTrackerPage() {
               </div>
               {monthlyReportFilteredTx.length === 0 ? <p className="px-3 py-4 text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
             </div>
+              </Fragment>
+            ) : (
+              <Fragment>
+                <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <ActivityStat label={format(monthlyReportMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCurrentTotal)} sub="Current month" tone="coral" />
+                  <ActivityStat label={format(monthlyCompareMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCompareTotal)} sub="Comparison month" tone="ink" />
+                  <ActivityStat
+                    label="Difference"
+                    value={`${monthlyComparisonDelta >= 0 ? "+" : ""}${currency.format(monthlyComparisonDelta)}`}
+                    sub={`${monthlyComparisonDeltaPercent >= 0 ? "+" : ""}${monthlyComparisonDeltaPercent.toFixed(0)}%`}
+                    tone={monthlyComparisonDelta > 0 ? "coral" : monthlyComparisonDelta < 0 ? "moss" : "ink"}
+                  />
+                  <ActivityStat
+                    label={monthlyReportCategoryId === "all" ? "Compared categories" : "Compared subcategories"}
+                    value={`${monthlyReportComparisonRows.length}`}
+                    sub={monthlyReportCategoryId === "all" ? "category rows" : "subcategory rows"}
+                    tone="ink"
+                  />
+                </div>
+
+                <div className="min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-3 py-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold uppercase text-ink/55">
+                        {monthlyReportCategoryId === "all" ? "Category comparison" : "Subcategory comparison"}
+                      </h3>
+                      <p className="mt-1 text-xs text-ink/45">
+                        {format(monthlyReportMonth, "MMM yyyy")} vs {format(monthlyCompareMonth, "MMM yyyy")}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-ink/45">{monthlyReportComparisonRows.length} rows</span>
+                  </div>
+
+                  <div className="divide-y divide-ink/10 md:hidden">
+                    {monthlyReportComparisonRows.map((row) => {
+                      const currentWidth = (row.currentSpent / monthlyComparisonMaxSpend) * 100;
+                      const compareWidth = (row.compareSpent / monthlyComparisonMaxSpend) * 100;
+                      const deltaTone = row.deltaAmount > 0 ? "text-coral" : row.deltaAmount < 0 ? "text-moss" : "text-ink/55";
+                      const deltaLabel = row.compareSpent === 0 && row.currentSpent > 0 ? "New" : `${row.deltaPercent >= 0 ? "+" : ""}${row.deltaPercent.toFixed(0)}%`;
+
+                      return (
+                        <article key={row.id} className="grid gap-3 px-3 py-3 text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                              <span className="truncate font-semibold">{categoryLabel(row.name)}</span>
+                            </span>
+                            <span className={`shrink-0 text-right font-semibold ${deltaTone}`}>
+                              {row.deltaAmount >= 0 ? "+" : ""}{currency.format(row.deltaAmount)}
+                            </span>
+                          </div>
+                          <div className="grid gap-2">
+                            <div>
+                              <div className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
+                                <span>{format(monthlyReportMonth, "MMM")}</span>
+                                <span>{currency.format(row.currentSpent)}</span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                                <div className="h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
+                                <span>{format(monthlyCompareMonth, "MMM")}</span>
+                                <span>{currency.format(row.compareSpent)}</span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                                <div className="h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                          <p className={`text-xs font-semibold ${deltaTone}`}>{deltaLabel}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="min-w-[820px] w-full text-left text-sm">
+                      <thead className="bg-ink/[0.03] text-xs uppercase text-ink/45">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold">{monthlyReportCategoryId === "all" ? "Category" : "Subcategory"}</th>
+                          <th className="px-3 py-2 text-right font-semibold">{format(monthlyReportMonth, "MMM yyyy")}</th>
+                          <th className="px-3 py-2 text-right font-semibold">{format(monthlyCompareMonth, "MMM yyyy")}</th>
+                          <th className="px-3 py-2 text-right font-semibold">Difference</th>
+                          <th className="px-3 py-2 text-right font-semibold">Change</th>
+                          <th className="px-3 py-2 font-semibold">Spend shape</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monthlyReportComparisonRows.map((row) => {
+                          const currentWidth = (row.currentSpent / monthlyComparisonMaxSpend) * 100;
+                          const compareWidth = (row.compareSpent / monthlyComparisonMaxSpend) * 100;
+                          const deltaTone = row.deltaAmount > 0 ? "text-coral" : row.deltaAmount < 0 ? "text-moss" : "text-ink/55";
+                          const deltaLabel = row.compareSpent === 0 && row.currentSpent > 0 ? "New" : `${row.deltaPercent >= 0 ? "+" : ""}${row.deltaPercent.toFixed(0)}%`;
+
+                          return (
+                            <tr key={row.id} className="border-t border-ink/10">
+                              <td className="px-3 py-2">
+                                <span className="inline-flex min-w-0 items-center gap-2">
+                                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.color }} />
+                                  <span className="truncate font-medium">{categoryLabel(row.name)}</span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-semibold text-coral">{currency.format(row.currentSpent)}</td>
+                              <td className="px-3 py-2 text-right text-ink/65">{currency.format(row.compareSpent)}</td>
+                              <td className={`px-3 py-2 text-right font-semibold ${deltaTone}`}>
+                                {row.deltaAmount >= 0 ? "+" : ""}{currency.format(row.deltaAmount)}
+                              </td>
+                              <td className={`px-3 py-2 text-right font-semibold ${deltaTone}`}>{deltaLabel}</td>
+                              <td className="px-3 py-2">
+                                <div className="grid gap-1">
+                                  <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                                    <div className="h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} />
+                                  </div>
+                                  <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                                    <div className="h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {monthlyReportComparisonRows.length === 0 ? <p className="px-3 py-4 text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+                </div>
+              </Fragment>
+            )}
           </Panel>
         </section>
 
