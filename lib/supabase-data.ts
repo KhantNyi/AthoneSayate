@@ -30,6 +30,8 @@ export type NewTransactionInput = {
   merchant?: string;
   notes?: string;
   isRecurring?: boolean;
+  recurringRuleId?: string;
+  recurringDueOn?: string;
 };
 
 export type UpdateTransactionInput = NewTransactionInput;
@@ -130,6 +132,28 @@ function isMissingRecurringSubcategoryError(error: { message?: string; details?:
   return text.includes("'subcategory_id'") && text.includes("'recurring_rules'");
 }
 
+function isMissingRecurringLinkError(error: { message?: string; details?: string } | null) {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""}`;
+  return text.includes("recurring_rule_id") || text.includes("recurring_due_on");
+}
+
+function mapTransaction(data: Record<string, unknown> & { id: string }): Transaction {
+  return {
+    id: data.id,
+    accountId: data.account_id as string,
+    categoryId: (data.category_id as string | null) ?? undefined,
+    subcategoryId: (data.subcategory_id as string | null) ?? undefined,
+    type: data.type as TransactionType,
+    amount: Number(data.amount),
+    occurredOn: data.occurred_on as string,
+    merchant: data.merchant as string | undefined,
+    notes: data.notes as string | undefined,
+    isRecurring: data.is_recurring as boolean | undefined,
+    recurringRuleId: (data.recurring_rule_id as string | null | undefined) ?? undefined,
+    recurringDueOn: (data.recurring_due_on as string | null | undefined) ?? undefined
+  };
+}
+
 function mapRecurringRule(data: RecurringRuleRow): RecurringRule {
   return {
     id: data.id,
@@ -202,18 +226,7 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
       categoryId: row.category_id,
       name: row.name
     })),
-    transactions: (transactionsResult.data ?? []).map((row) => ({
-      id: row.id,
-      accountId: row.account_id,
-      categoryId: row.category_id ?? undefined,
-      subcategoryId: row.subcategory_id ?? undefined,
-      type: row.type,
-      amount: Number(row.amount),
-      occurredOn: row.occurred_on,
-      merchant: row.merchant,
-      notes: row.notes,
-      isRecurring: row.is_recurring
-    })),
+    transactions: (transactionsResult.data ?? []).map(mapTransaction),
     recurringRules: (recurringResult.data ?? []).map((row) => ({
       id: row.id,
       accountId: row.account_id,
@@ -244,39 +257,54 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
     throw new Error("Missing Supabase environment variables.");
   }
 
-  const { data, error } = await supabase
+  type TransactionPayload = {
+    user_id: string;
+    account_id: string;
+    category_id?: string;
+    subcategory_id?: string;
+    type: TransactionType;
+    amount: number;
+    occurred_on: string;
+    merchant: string;
+    notes: string;
+    is_recurring: boolean;
+    recurring_rule_id?: string;
+    recurring_due_on?: string;
+  };
+
+  const basePayload: TransactionPayload = {
+    user_id: DEMO_USER_ID,
+    account_id: input.accountId,
+    category_id: input.categoryId,
+    subcategory_id: input.subcategoryId,
+    type: input.type,
+    amount: input.amount,
+    occurred_on: input.occurredOn,
+    merchant: input.merchant ?? "",
+    notes: input.notes ?? "",
+    is_recurring: input.isRecurring ?? false
+  };
+  const linkedPayload: TransactionPayload = input.recurringRuleId
+    ? { ...basePayload, recurring_rule_id: input.recurringRuleId, recurring_due_on: input.recurringDueOn }
+    : basePayload;
+
+  let { data, error } = await supabase
     .from("transactions")
-    .insert({
-      user_id: DEMO_USER_ID,
-      account_id: input.accountId,
-      category_id: input.categoryId,
-      subcategory_id: input.subcategoryId,
-      type: input.type,
-      amount: input.amount,
-      occurred_on: input.occurredOn,
-      merchant: input.merchant ?? "",
-      notes: input.notes ?? "",
-      is_recurring: input.isRecurring ?? false
-    })
+    .insert(linkedPayload)
     .select("*")
     .single();
+
+  // Databases that haven't run 005_recurring_payment_links.sql yet fall back
+  // to the legacy note-based linkage.
+  if (input.recurringRuleId && isMissingRecurringLinkError(error)) {
+    ({ data, error } = await supabase.from("transactions").insert(basePayload).select("*").single());
+  }
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return {
-    id: data.id,
-    accountId: data.account_id,
-    categoryId: data.category_id ?? undefined,
-    subcategoryId: data.subcategory_id ?? undefined,
-    type: data.type,
-    amount: Number(data.amount),
-    occurredOn: data.occurred_on,
-    merchant: data.merchant,
-    notes: data.notes,
-    isRecurring: data.is_recurring
-  };
+  return mapTransaction(data);
 }
 
 export async function updateTransaction(id: string, input: UpdateTransactionInput): Promise<Transaction> {
@@ -306,18 +334,7 @@ export async function updateTransaction(id: string, input: UpdateTransactionInpu
     throw new Error(error.message);
   }
 
-  return {
-    id: data.id,
-    accountId: data.account_id,
-    categoryId: data.category_id ?? undefined,
-    subcategoryId: data.subcategory_id ?? undefined,
-    type: data.type,
-    amount: Number(data.amount),
-    occurredOn: data.occurred_on,
-    merchant: data.merchant,
-    notes: data.notes,
-    isRecurring: data.is_recurring
-  };
+  return mapTransaction(data);
 }
 
 export async function updateAccount(id: string, input: UpdateAccountInput): Promise<Account> {

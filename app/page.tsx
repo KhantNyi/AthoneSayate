@@ -859,7 +859,10 @@ export default function ExpenseTrackerPage() {
   const monthlyComparisonDelta = monthlyComparisonCurrentTotal - monthlyComparisonCompareTotal;
   const monthlyComparisonDeltaPercent = percentDelta(monthlyComparisonCurrentTotal, monthlyComparisonCompareTotal);
   const monthlyComparisonMaxSpend = Math.max(...monthlyReportComparisonRows.map((row) => Math.max(row.currentSpent, row.compareSpent)), 1);
-  const upcoming = useMemo(() => upcomingRules(recurringRules), [recurringRules]);
+  // Recurring rules with stale due dates caught up to the present, so a bill
+  // that slipped into a past month still shows (and pays) as this month's.
+  const scheduledRules = useMemo(() => recurringRules.map((rule) => ({ ...rule, nextDueOn: normalizedNextDueOn(rule) })), [recurringRules]);
+  const upcoming = useMemo(() => upcomingRules(scheduledRules), [scheduledRules]);
   const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
     [rule.id]: findRecurringPayment(rule, transactions)
@@ -933,14 +936,14 @@ export default function ExpenseTrackerPage() {
   }), {}), [transactions, upcoming, visibleMonth]);
   const recurringCalendarDays = useMemo(() => summarizeRecurringCalendarByDay(upcoming, transactions, visibleRecurringPayments, visibleMonthKey), [transactions, upcoming, visibleMonthKey, visibleRecurringPayments]);
   const dashboardCalendarTransactionDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(dashboardCalendarMonthKey))), [transactions, dashboardCalendarMonthKey]);
-  const dashboardCalendarRecurringDays = useMemo(() => summarizeRecurringByDay(recurringRules.filter((rule) => rule.nextDueOn.startsWith(dashboardCalendarMonthKey))), [recurringRules, dashboardCalendarMonthKey]);
+  const dashboardCalendarRecurringDays = useMemo(() => summarizeRecurringByDay(scheduledRules.filter((rule) => rule.nextDueOn.startsWith(dashboardCalendarMonthKey))), [scheduledRules, dashboardCalendarMonthKey]);
   const dashboardCalendarDays = useMemo(() => mergeCalendarSummaries(dashboardCalendarTransactionDays, dashboardCalendarRecurringDays), [dashboardCalendarTransactionDays, dashboardCalendarRecurringDays]);
   const dashboardSelectedSummary = selectedDashboardDate ? dashboardCalendarDays[selectedDashboardDate] : undefined;
-  const dashboardMonthSummary = useMemo(() => summarizeActivityRange(transactions, recurringRules, startOfMonth(dashboardCalendarMonth), endOfMonth(dashboardCalendarMonth)), [transactions, recurringRules, dashboardCalendarMonth]);
+  const dashboardMonthSummary = useMemo(() => summarizeActivityRange(transactions, scheduledRules, startOfMonth(dashboardCalendarMonth), endOfMonth(dashboardCalendarMonth)), [transactions, scheduledRules, dashboardCalendarMonth]);
   const dashboardWeekSummary = useMemo(() => {
     const selectedDay = selectedDashboardDate ? parseISO(selectedDashboardDate) : new Date();
-    return summarizeActivityRange(transactions, recurringRules, startOfWeek(selectedDay), endOfWeek(selectedDay));
-  }, [transactions, recurringRules, selectedDashboardDate]);
+    return summarizeActivityRange(transactions, scheduledRules, startOfWeek(selectedDay), endOfWeek(selectedDay));
+  }, [transactions, scheduledRules, selectedDashboardDate]);
   const filteredTransactions = transactions
     .filter((tx) => {
       const category = displayCategories.find((item) => item.id === tx.categoryId);
@@ -1452,6 +1455,9 @@ export default function ExpenseTrackerPage() {
       setDataError("");
       setDataNotice("");
       setSavingRecurringId(rule.id);
+      // Pay the cycle currently in view (a stale schedule catches up to this
+      // month first), then advance the schedule one period past it.
+      const dueOn = normalizedNextDueOn(rule);
       const transaction = await createTransaction({
         accountId: rule.accountId,
         categoryId: rule.categoryId,
@@ -1460,8 +1466,10 @@ export default function ExpenseTrackerPage() {
         amount: rule.amount,
         occurredOn: format(new Date(), "yyyy-MM-dd"),
         merchant: rule.merchant,
-        notes: recurringPaymentNote(rule.nextDueOn),
-        isRecurring: true
+        notes: recurringPaymentNote(dueOn),
+        isRecurring: true,
+        recurringRuleId: rule.id,
+        recurringDueOn: dueOn
       });
       const updatedRule = await updateRecurringRule(rule.id, {
         accountId: rule.accountId,
@@ -1471,7 +1479,7 @@ export default function ExpenseTrackerPage() {
         amount: rule.amount,
         merchant: rule.merchant,
         frequency: rule.frequency,
-        nextDueOn: nextRecurringDueOn(rule),
+        nextDueOn: format(advanceRecurringDate(parseISO(dueOn), rule.frequency), "yyyy-MM-dd"),
         autoCreate: rule.autoCreate
       });
 
@@ -3838,70 +3846,109 @@ function upsertBudgetInState(budgets: Budget[], updated: Budget) {
   return [updated, ...budgets];
 }
 
-function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date()) {
+function advanceRecurringDate(date: Date, frequency: RecurringRule["frequency"]) {
+  switch (frequency) {
+    case "weekly":
+      return addDays(date, 7);
+    case "biweekly":
+      return addDays(date, 14);
+    case "monthly":
+      return addMonths(date, 1);
+    case "quarterly":
+      return addMonths(date, 3);
+    case "yearly":
+      return addMonths(date, 12);
+  }
+}
+
+function retreatRecurringDate(date: Date, frequency: RecurringRule["frequency"]) {
+  switch (frequency) {
+    case "weekly":
+      return addDays(date, -7);
+    case "biweekly":
+      return addDays(date, -14);
+    case "monthly":
+      return subMonths(date, 1);
+    case "quarterly":
+      return subMonths(date, 3);
+    case "yearly":
+      return subMonths(date, 12);
+  }
+}
+
+// Catches a stale schedule up to the present: a monthly bill whose due date
+// slipped into a past month resolves to this month's occurrence, and other
+// frequencies resolve to the most recent occurrence not after the reference.
+function normalizedNextDueOn(rule: RecurringRule, referenceDate = new Date()) {
+  let due = parseISO(rule.nextDueOn);
+
   if (rule.frequency === "monthly") {
-    return findMonthlyRecurringPayment(rule, transactions, referenceDate);
+    const monthStart = startOfMonth(referenceDate);
+    while (due < monthStart) {
+      due = addMonths(due, 1);
+    }
+  } else {
+    while (advanceRecurringDate(due, rule.frequency) <= referenceDate) {
+      due = advanceRecurringDate(due, rule.frequency);
+    }
   }
 
-  const dueOn = recurringPaymentDueOnForStatus(rule, referenceDate);
-  const window = recurringPaymentWindow(rule, dueOn);
-  const tolerance = Math.max(rule.amount * 0.1, 10);
-  const baseMatches = (transaction: Transaction) => {
-    const sameType = transaction.type === rule.type;
-    const sameAccount = transaction.accountId === rule.accountId;
-    const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
-    const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
-    const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
-    const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
+  return format(due, "yyyy-MM-dd");
+}
 
-    return sameType && sameAccount && sameCategory && sameSubcategory && sameMerchant && amountMatches;
-  };
+// Payments settle a cycle, identified by the cycle's due date: calendar month
+// for monthly/quarterly/yearly bills, the exact due date for weekly/biweekly.
+function recurringCycleKey(frequency: RecurringRule["frequency"], dueOn: string) {
+  return frequency === "weekly" || frequency === "biweekly" ? dueOn : dueOn.slice(0, 7);
+}
 
-  const exactGeneratedPayment = transactions
-    .filter((transaction) => transaction.isRecurring && transaction.notes === recurringPaymentNote(dueOn) && baseMatches(transaction))
-    .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))[0];
+// Which cycle a transaction pays for this rule, or undefined if unrelated.
+// Prefers the explicit link; falls back to the legacy note format for
+// payments recorded before links existed.
+function paidCycleDueOn(rule: RecurringRule, transaction: Transaction) {
+  if (transaction.recurringRuleId) {
+    return transaction.recurringRuleId === rule.id ? transaction.recurringDueOn ?? transaction.occurredOn : undefined;
+  }
 
-  if (exactGeneratedPayment) {
-    return exactGeneratedPayment;
+  if (!transaction.isRecurring) {
+    return undefined;
+  }
+
+  const noteDueOn = recurringPaymentNoteDueOn(transaction.notes);
+
+  if (!noteDueOn) {
+    return undefined;
+  }
+
+  const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
+
+  return sameMerchant && transaction.accountId === rule.accountId && transaction.type === rule.type ? noteDueOn : undefined;
+}
+
+function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date()) {
+  const cycleKeys = new Set<string>();
+
+  if (rule.frequency === "monthly") {
+    // Month-scoped: paid this calendar month or not. Resets on the 1st.
+    cycleKeys.add(format(referenceDate, "yyyy-MM"));
+  } else {
+    const due = parseISO(normalizedNextDueOn(rule, referenceDate));
+    cycleKeys.add(recurringCycleKey(rule.frequency, format(due, "yyyy-MM-dd")));
+
+    // A schedule sitting ahead of the reference means the previous cycle was
+    // just settled (or paid early) — keep showing it as paid until its date passes.
+    const previous = retreatRecurringDate(due, rule.frequency);
+    if (previous > referenceDate) {
+      cycleKeys.add(recurringCycleKey(rule.frequency, format(previous, "yyyy-MM-dd")));
+    }
   }
 
   return transactions
     .filter((transaction) => {
-      const inWindow = transaction.occurredOn >= window.start && transaction.occurredOn <= window.end;
-      const generatedDueOn = recurringPaymentNoteDueOn(transaction.notes);
-      const generatedForAnotherCycle = Boolean(generatedDueOn && generatedDueOn !== dueOn);
-
-      return baseMatches(transaction) && inWindow && !generatedForAnotherCycle;
+      const paidFor = paidCycleDueOn(rule, transaction);
+      return paidFor !== undefined && cycleKeys.has(recurringCycleKey(rule.frequency, paidFor));
     })
-    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(dueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(dueOn).getTime()))[0];
-}
-
-function findMonthlyRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate: Date) {
-  const monthKey = format(referenceDate, "yyyy-MM");
-  const tolerance = Math.max(rule.amount * 0.1, 10);
-  const baseMatches = (transaction: Transaction) => {
-    const sameType = transaction.type === rule.type;
-    const sameAccount = transaction.accountId === rule.accountId;
-    const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
-    const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
-    const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
-    const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
-
-    return sameType && sameAccount && sameCategory && sameSubcategory && sameMerchant && amountMatches;
-  };
-  const paidInCycleMonth = (transaction: Transaction) => {
-    if (!transaction.isRecurring) {
-      return false;
-    }
-
-    const generatedDueOn = recurringPaymentNoteDueOn(transaction.notes);
-
-    return generatedDueOn?.startsWith(monthKey) ?? false;
-  };
-
-  return transactions
-    .filter((transaction) => baseMatches(transaction) && paidInCycleMonth(transaction))
-    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || b.occurredOn.localeCompare(a.occurredOn))[0];
+    .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))[0];
 }
 
 const recurringPaymentNotePrefix = "Recorded from recurring item due ";
@@ -3916,55 +3963,6 @@ function recurringPaymentNoteDueOn(notes?: string) {
 
 function normalizeRecurringText(value?: string) {
   return (value ?? "").trim().toLowerCase();
-}
-
-function recurringPaymentDueOnForStatus(rule: RecurringRule, referenceDate: Date) {
-  const nextDueDate = parseISO(rule.nextDueOn);
-  const previousDueDate = previousRecurringDueDate(rule);
-  const isPaidCycleInView = nextDueDate > endOfMonth(referenceDate) && (isSameMonth(previousDueDate, referenceDate) || previousDueDate > referenceDate);
-
-  return format(isPaidCycleInView ? previousDueDate : nextDueDate, "yyyy-MM-dd");
-}
-
-function recurringPaymentWindow(rule: RecurringRule, dueOn = rule.nextDueOn) {
-  const dueDate = parseISO(dueOn);
-  const days = {
-    weekly: 3,
-    biweekly: 5,
-    monthly: 14,
-    quarterly: 21,
-    yearly: 30
-  }[rule.frequency];
-
-  return {
-    start: format(addDays(dueDate, -days), "yyyy-MM-dd"),
-    end: format(addDays(dueDate, days), "yyyy-MM-dd")
-  };
-}
-
-function previousRecurringDueDate(rule: RecurringRule) {
-  const dueDate = parseISO(rule.nextDueOn);
-
-  return {
-    weekly: addDays(dueDate, -7),
-    biweekly: addDays(dueDate, -14),
-    monthly: subMonths(dueDate, 1),
-    quarterly: subMonths(dueDate, 3),
-    yearly: subMonths(dueDate, 12)
-  }[rule.frequency];
-}
-
-function nextRecurringDueOn(rule: RecurringRule) {
-  const dueDate = parseISO(rule.nextDueOn);
-  const nextDate = {
-    weekly: addDays(dueDate, 7),
-    biweekly: addDays(dueDate, 14),
-    monthly: addMonths(dueDate, 1),
-    quarterly: addMonths(dueDate, 3),
-    yearly: addMonths(dueDate, 12)
-  }[rule.frequency];
-
-  return format(nextDate, "yyyy-MM-dd");
 }
 
 function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {

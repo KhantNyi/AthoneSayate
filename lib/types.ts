@@ -49,6 +49,10 @@ export type Transaction = {
   merchant?: string;
   notes?: string;
   isRecurring?: boolean;
+  /** Rule this payment settles, when recorded via "Mark paid". */
+  recurringRuleId?: string;
+  /** Due date of the billing cycle this payment covers. */
+  recurringDueOn?: string;
 };
 
 export type RecurringRule = {
