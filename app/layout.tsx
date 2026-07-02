@@ -1,10 +1,40 @@
 import type { Metadata } from "next";
+import { Inter, Noto_Sans_Myanmar, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap"
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap"
+});
+
+const notoSansMyanmar = Noto_Sans_Myanmar({
+  subsets: ["myanmar"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-myanmar",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   title: "athonesayate Expense Tracker",
   description: "A practical expense tracker dashboard built with Next.js and Supabase."
 };
+
+const themeInitScript = `
+(function () {
+  try {
+    var stored = localStorage.getItem("athonesayate-theme");
+    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (dark) document.documentElement.classList.add("dark");
+  } catch (e) {}
+})();
+`;
 
 export default function RootLayout({
   children
@@ -12,7 +42,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${spaceGrotesk.variable} ${notoSansMyanmar.variable}`}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

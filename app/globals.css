@@ -4,36 +4,111 @@
 
 :root {
   color-scheme: light;
-  background: #f8fafc;
-  color: #172033;
+  /* R G B triplets consumed by Tailwind via rgb(var(--x) / <alpha-value>) */
+  --paper: 246 248 252;
+  --surface: 255 255 255;
+  --ink: 23 32 51;
+  --river: 37 99 235;
+  --moss: 22 163 74;
+  --amber: 217 119 6;
+  --coral: 234 76 46;
+  --shadow-soft: 0 16px 36px rgba(15, 23, 42, 0.07);
+  --shadow-lift: 0 20px 44px rgba(15, 23, 42, 0.12);
+  --page-glow-a: rgba(37, 99, 235, 0.07);
+  --page-glow-b: rgba(22, 163, 74, 0.05);
+}
+
+.dark {
+  color-scheme: dark;
+  --paper: 9 13 26;
+  --surface: 18 25 44;
+  --ink: 226 233 246;
+  --river: 96 148 255;
+  --moss: 62 200 116;
+  --amber: 245 173 46;
+  --coral: 255 110 84;
+  --shadow-soft: 0 16px 36px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 20px 44px rgba(0, 0, 0, 0.5);
+  --page-glow-a: rgba(96, 148, 255, 0.09);
+  --page-glow-b: rgba(62, 200, 116, 0.05);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: rgb(var(--paper));
+}
+
 body {
   min-height: 100vh;
   margin: 0;
-  background: #f8fafc;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  color: rgb(var(--ink));
+  background:
+    radial-gradient(1100px 480px at 85% -10%, var(--page-glow-a), transparent 65%),
+    radial-gradient(900px 420px at -10% 30%, var(--page-glow-b), transparent 60%),
+    rgb(var(--paper));
+  background-attachment: fixed;
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/* Burmese text gets a proper Myanmar face instead of OS fallback */
+[lang="my"] {
+  font-family: var(--font-myanmar), var(--font-body), "Myanmar Text", "Noto Sans Myanmar",
+    ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+.font-display {
+  letter-spacing: -0.02em;
+}
+
+/* Money reads best when digits line up */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: rgb(var(--surface));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--ink) / 0.38);
+  }
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid rgb(var(--river));
   outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--river) / 0.22);
 }
 
 ::-webkit-scrollbar {
@@ -42,6 +117,46 @@ textarea:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(37, 99, 235, 0.28);
+  background: rgb(var(--river) / 0.3);
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Recharts text inherits the theme */
+.recharts-text {
+  fill: rgb(var(--ink) / 0.55);
+}
+
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    100deg,
+    rgb(var(--ink) / 0.05) 40%,
+    rgb(var(--ink) / 0.11) 50%,
+    rgb(var(--ink) / 0.05) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

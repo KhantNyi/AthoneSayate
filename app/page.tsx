@@ -5,12 +5,15 @@ import {
   ArrowUpCircle,
   BadgeDollarSign,
   Banknote,
+  CalendarCheck,
   CalendarClock,
   CheckCircle2,
   CircleAlert,
   CircleDollarSign,
+  Flame,
   Languages,
   LayoutDashboard,
+  Moon,
   MoreHorizontal,
   Pencil,
   PiggyBank,
@@ -19,8 +22,12 @@ import {
   Search,
   Settings,
   SlidersHorizontal,
+  Sparkles,
+  Sun,
   Target,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   WalletCards,
   X
 } from "lucide-react";
@@ -52,7 +59,7 @@ import {
   startOfWeek,
   subMonths
 } from "date-fns";
-import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveAccount,
   archiveCategory,
@@ -104,6 +111,11 @@ const translations = {
     amount: "Amount",
     avgDay: "Avg/day",
     balances: "Balances",
+    biggestExpense: "Biggest expense",
+    noSpendDays: "No-spend days",
+    ofSpending: "of spending",
+    quickAdd: "Quick add",
+    topCategory: "Top category",
     budgetHealth: "Budget health",
     budgets: "Budgets",
     category: "Category",
@@ -169,6 +181,11 @@ const translations = {
     allTimeNet: "စုစုပေါင်း အသားတင်",
     amount: "ပမာဏ",
     balances: "လက်ကျန်များ",
+    biggestExpense: "အကြီးဆုံး အသုံးစရိတ်",
+    noSpendDays: "အသုံးစရိတ်မရှိသောနေ့",
+    ofSpending: "စုစုပေါင်း၏",
+    quickAdd: "အမြန်ထည့်ရန်",
+    topCategory: "အသုံးအများဆုံး အမျိုးအစား",
     budgetHealth: "ဘတ်ဂျက် အခြေအနေ",
     budgets: "ဘတ်ဂျက်များ",
     category: "အမျိုးအစား",
@@ -440,6 +457,48 @@ export default function ExpenseTrackerPage() {
   const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
   const [transactionDrafts, setTransactionDrafts] = useState<Record<string, TransactionDraft>>({});
   const [lastRecurringPayment, setLastRecurringPayment] = useState<LastRecurringPayment | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setQuickAddOpen(false);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (target && (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)) {
+        return;
+      }
+      if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        setQuickAddOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = quickAddOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [quickAddOpen]);
+
+  useEffect(() => {
+    if (!dataNotice) {
+      return;
+    }
+    const hasUndo = Boolean(lastRecurringPayment && dataNotice === lastRecurringPayment.notice);
+    const timeout = window.setTimeout(() => setDataNotice(""), hasUndo ? 12000 : 6000);
+    return () => window.clearTimeout(timeout);
+  }, [dataNotice, lastRecurringPayment]);
 
   useEffect(() => {
     let ignore = false;
@@ -593,6 +652,44 @@ export default function ExpenseTrackerPage() {
     };
   }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [dashboardConcentrationTotal, dashboardConcentrationTx, displayCategories]);
   const comparison = useMemo(() => monthlyComparisonForMonth(transactions, dashboardStatsMonth), [transactions, dashboardStatsMonth]);
+  const dashboardInsights = useMemo(() => {
+    const expenses = dashboardStatsTx.filter((tx) => tx.type === "expense");
+    const totalSpent = expenses.reduce((sum, tx) => sum + tx.amount, 0);
+    const byCategory = new Map<string, number>();
+
+    for (const tx of expenses) {
+      if (tx.categoryId) {
+        byCategory.set(tx.categoryId, (byCategory.get(tx.categoryId) ?? 0) + tx.amount);
+      }
+    }
+
+    let topCategoryId = "";
+    let topCategorySpent = 0;
+    byCategory.forEach((spent, id) => {
+      if (spent > topCategorySpent) {
+        topCategorySpent = spent;
+        topCategoryId = id;
+      }
+    });
+
+    const biggest = expenses.reduce<Transaction | null>((max, tx) => (tx.amount > (max?.amount ?? 0) ? tx : max), null);
+    const monthStart = startOfMonth(dashboardStatsMonth);
+    const monthEnd = endOfMonth(dashboardStatsMonth);
+    const today = new Date();
+    const lastCountedDay = today < monthEnd ? today : monthEnd;
+    const elapsedDays = lastCountedDay >= monthStart ? eachDayOfInterval({ start: monthStart, end: lastCountedDay }).length : 0;
+    const spendDays = new Set(expenses.map((tx) => tx.occurredOn)).size;
+
+    return {
+      totalSpent,
+      topCategoryId,
+      topCategorySpent,
+      topShare: totalSpent > 0 ? (topCategorySpent / totalSpent) * 100 : 0,
+      biggest,
+      noSpendDays: Math.max(elapsedDays - spendDays, 0),
+      hasElapsedDays: elapsedDays > 0
+    };
+  }, [dashboardStatsTx, dashboardStatsMonth]);
   const dashboardPaceTx = useMemo(() => monthTransactions(transactions, dashboardPaceMonth), [transactions, dashboardPaceMonth]);
   const daily = useMemo(() => dailySeries(dashboardPaceTx, dashboardPaceMonth), [dashboardPaceTx, dashboardPaceMonth]);
   const dashboardWeekdayTx = useMemo(() => monthTransactions(transactions, dashboardWeekdayMonth), [transactions, dashboardWeekdayMonth]);
@@ -771,6 +868,36 @@ export default function ExpenseTrackerPage() {
   const dailyAllowance = safeToSpend(currentMonthTotals.income, currentMonthTotals.expenses, recurringDue);
   const t = translations[language];
   const ui = uiTranslations[language];
+  const isDark = theme === "dark";
+  const chart = useMemo(() => ({
+    expense: isDark ? "#ff6e54" : "#ea4c2e",
+    income: isDark ? "#3ec874" : "#16a34a",
+    grid: isDark ? "rgba(226,233,246,0.08)" : "rgba(23,32,51,0.08)",
+    tooltip: {
+      contentStyle: {
+        background: isDark ? "#1b2542" : "#ffffff",
+        border: isDark ? "1px solid rgba(226,233,246,0.14)" : "1px solid rgba(23,32,51,0.08)",
+        borderRadius: 12,
+        boxShadow: isDark ? "0 16px 40px rgba(0,0,0,0.5)" : "0 16px 40px rgba(15,23,42,0.14)",
+        color: isDark ? "#e2e9f6" : "#172033",
+        fontSize: 13
+      },
+      labelStyle: { color: isDark ? "#e2e9f6" : "#172033", fontWeight: 600 },
+      itemStyle: { color: isDark ? "#e2e9f6" : "#172033" }
+    }
+  }), [isDark]);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+    try {
+      localStorage.setItem("athonesayate-theme", next);
+    } catch {
+      // private mode: theme just won't persist
+    }
+  }
+
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
   const activeNavItem = navItems.find((item) => item.key === activeTab) ?? navItems[0];
@@ -797,6 +924,8 @@ export default function ExpenseTrackerPage() {
   const selectedCategory = displayCategories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
   const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
+  const insightTopCategory = displayCategories.find((category) => category.id === dashboardInsights.topCategoryId);
+  const insightBiggestCategory = displayCategories.find((category) => category.id === dashboardInsights.biggest?.categoryId);
   const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
   const visibleRecurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
@@ -875,7 +1004,7 @@ export default function ExpenseTrackerPage() {
     event.preventDefault();
     const parsedAmount = Number(amount);
     if (!parsedAmount || !categoryId || !accountId) {
-      return;
+      return false;
     }
 
     try {
@@ -896,10 +1025,22 @@ export default function ExpenseTrackerPage() {
       setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
       setAmount("");
       setNotes("");
+      return true;
     } catch (error) {
       setDataError(error instanceof Error ? error.message : "Unable to save transaction.");
+      return false;
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleQuickAdd(event: FormEvent<HTMLFormElement>) {
+    const savedType = type;
+    const saved = await handleSubmit(event);
+
+    if (saved) {
+      setQuickAddOpen(false);
+      setDataNotice(savedType === "income" ? "Income recorded." : "Expense recorded.");
     }
   }
 
@@ -1570,7 +1711,7 @@ export default function ExpenseTrackerPage() {
           ))}
         </select>
         <input type="date" value={draft.occurredOn} onChange={(event) => updateTransactionDraft(transaction.id, { occurredOn: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-        <button disabled={!canSave} className="inline-flex h-10 items-center justify-center rounded-lg bg-river px-4 text-sm font-semibold text-white transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
+        <button disabled={!canSave} className="inline-flex h-10 items-center justify-center rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
           {savingTransactionId === transaction.id ? "Saving" : "Update"}
         </button>
         <button type="button" aria-label="Cancel edit" onClick={() => cancelEditingTransaction(transaction)} className="inline-grid h-10 place-items-center rounded-lg border border-ink/10 bg-white px-3 text-ink/55 transition hover:bg-ink/5 hover:text-ink">
@@ -1628,7 +1769,7 @@ export default function ExpenseTrackerPage() {
           <option value="yearly">Yearly</option>
         </select>
         <input type="date" value={draft.nextDueOn} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, nextDueOn: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingRecurringId === rule.id}>
+        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingRecurringId === rule.id}>
           {savingRecurringId === rule.id ? "Saving" : "Update"}
         </button>
         <button type="button" aria-label="Cancel recurring edit" onClick={() => cancelEditingRecurring(rule)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
@@ -1653,11 +1794,11 @@ export default function ExpenseTrackerPage() {
     <main className="min-h-screen pb-20 text-ink xl:pb-0" lang={language === "my" ? "my" : "en"}>
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-white px-4 py-5 xl:block">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="grid size-11 place-items-center rounded-lg bg-river text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)]">
+          <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
             <WalletCards size={22} />
           </div>
           <div>
-            <p className="text-lg font-semibold">athonesayate</p>
+            <p className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text font-display text-lg font-bold tracking-tight text-transparent">athonesayate</p>
             <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
           </div>
         </div>
@@ -1667,8 +1808,10 @@ export default function ExpenseTrackerPage() {
               key={item.key}
               type="button"
               onClick={() => setActiveTab(item.key)}
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition ${
-                activeTab === item.key ? "bg-river text-white shadow-[0_10px_22px_rgba(37,99,235,0.16)]" : "text-ink/70 hover:bg-white hover:text-river"
+              className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition duration-200 ${
+                activeTab === item.key
+                  ? "bg-gradient-to-r from-river to-indigo-500 text-bright shadow-glow"
+                  : "text-ink/70 hover:translate-x-0.5 hover:bg-river/10 hover:text-river"
               }`}
             >
               <item.icon size={18} />
@@ -1676,6 +1819,13 @@ export default function ExpenseTrackerPage() {
             </button>
           ))}
         </nav>
+        <div className="absolute inset-x-4 bottom-5 rounded-xl border border-ink/10 bg-gradient-to-br from-river/[0.07] to-transparent p-3 text-xs text-ink/55">
+          <p className="mb-1 font-semibold text-ink/70">{t.quickAdd}</p>
+          <p>
+            <kbd className="rounded border border-ink/20 bg-white px-1.5 py-0.5 font-sans text-[11px] font-semibold text-ink/70">N</kbd>
+            {" "}&rarr; {t.add}
+          </p>
+        </div>
       </aside>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] xl:hidden">
@@ -1685,8 +1835,8 @@ export default function ExpenseTrackerPage() {
               key={item.key}
               type="button"
               onClick={() => chooseTab(item.key)}
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
-                activeTab === item.key ? "bg-river text-white shadow-[0_8px_18px_rgba(37,99,235,0.16)]" : "text-ink/65"
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium transition ${
+                activeTab === item.key ? "bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow" : "text-ink/65"
               }`}
             >
               <item.icon size={18} />
@@ -1696,8 +1846,8 @@ export default function ExpenseTrackerPage() {
           <button
             type="button"
             onClick={() => setMobileMoreOpen((current) => !current)}
-            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium ${
-              mobileMoreOpen || mobileMoreActive ? "bg-river text-white shadow-[0_8px_18px_rgba(37,99,235,0.16)]" : "text-ink/65"
+            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium transition ${
+              mobileMoreOpen || mobileMoreActive ? "bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow" : "text-ink/65"
             }`}
           >
             <MoreHorizontal size={18} />
@@ -1722,8 +1872,9 @@ export default function ExpenseTrackerPage() {
                 {t[item.label]}
               </button>
             ))}
-            <div className="mt-1 border-t border-ink/10 pt-2">
+            <div className="mt-1 flex items-center gap-2 border-t border-ink/10 pt-2">
               <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
             </div>
           </div>
         </div>
@@ -1732,14 +1883,18 @@ export default function ExpenseTrackerPage() {
       <section className="px-3 pb-10 pt-3 sm:px-6 sm:pt-4 lg:px-8 xl:ml-64">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-none border-b border-ink/10 pb-3 sm:mb-6 sm:pb-5">
           <div className="min-w-0">
-            <p className="hidden text-sm font-medium text-river sm:block">{t.snapshot}</p>
+            <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
             <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
-            <h1 className="truncate text-xl font-semibold tracking-normal text-ink sm:text-4xl">
-              <span className="sm:hidden">athonesayate</span>
+            <h1 className="truncate font-display text-xl font-semibold tracking-tight text-ink sm:text-4xl">
+              <span className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text text-transparent sm:hidden">athonesayate</span>
               <span className="hidden sm:inline">{t.expenseTracker}</span>
             </h1>
           </div>
+          <div className="flex items-center gap-2 sm:hidden">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          </div>
           <div className="hidden flex-wrap items-center gap-2 sm:flex">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
             <StatusPill tone="river" label={`${currency.format(dailyAllowance)} ${t.safeToSpendDay}`} />
             <StatusPill tone="moss" label={`${currentMonthTotals.savingsRate.toFixed(1)}% ${t.savingsRate}`} />
@@ -1753,34 +1908,65 @@ export default function ExpenseTrackerPage() {
           </div>
         ) : null}
 
-        {(isLoading || dataError || dataNotice) && (
-          <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
-            dataError ? "border-coral/25 bg-coral/10 text-coral" : "border-river/20 bg-river/10 text-river"
-          }`}>
-            <span>{dataError || dataNotice || "Loading Supabase data..."}</span>
-            {!dataError && lastRecurringPayment && dataNotice === lastRecurringPayment.notice ? (
-              <button
-                type="button"
-                onClick={handleUndoRecurringPaid}
-                disabled={undoingRecurringPaymentId === lastRecurringPayment.transaction.id}
-                className="h-9 rounded-lg border border-river/25 bg-white px-3 text-sm font-semibold text-river transition hover:bg-river/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {undoingRecurringPaymentId === lastRecurringPayment.transaction.id ? "Undoing" : "Undo"}
-              </button>
-            ) : null}
+        {dataError && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-coral/25 bg-coral/10 px-4 py-3 text-sm text-coral">
+            <CircleAlert size={17} className="shrink-0" />
+            <span>{dataError}</span>
           </div>
         )}
 
+        <div key={activeTab} className="animate-tab-in">
+
         <section id="dashboard" className={activeTab === "dashboard" ? "grid gap-4" : "hidden"}>
+          {isLoading ? <DashboardSkeleton /> : <>
           <div className="flex justify-end">
             <MonthField label={`${ui.month} - ${t.dashboard}`} month={dashboardStatsMonth} onChange={setDashboardStatsMonth} />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={currency.format(monthTotals.income)} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
-            <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={currency.format(monthTotals.expenses)} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
-            <MetricCard icon={PiggyBank} label={t.netCashFlow} value={currency.format(monthTotals.net)} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="river" />
-            <MetricCard icon={Banknote} label={t.accountBalance} value={currency.format(balances.reduce((sum, account) => sum + account.balance, 0))} sub={`${balances.length} ${t.activeAccounts}`} tone="river" />
+            <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={monthTotals.income} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
+            <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={monthTotals.expenses} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
+            <MetricCard icon={PiggyBank} label={t.netCashFlow} value={monthTotals.net} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="river" />
+            <MetricCard icon={Banknote} label={t.accountBalance} value={balances.reduce((sum, account) => sum + account.balance, 0)} sub={`${balances.length} ${t.activeAccounts}`} tone="river" />
           </div>
+
+          {dashboardInsights.totalSpent > 0 ? (
+            <div className="flex snap-x gap-2 overflow-x-auto pb-1">
+              {insightTopCategory ? (
+                <InsightCard
+                  icon={Sparkles}
+                  label={t.topCategory}
+                  value={`${categoryLabel(insightTopCategory.name)} · ${currency.format(dashboardInsights.topCategorySpent)}`}
+                  sub={`${dashboardInsights.topShare.toFixed(0)}% ${t.ofSpending}`}
+                  tone="river"
+                />
+              ) : null}
+              {dashboardInsights.biggest ? (
+                <InsightCard
+                  icon={Flame}
+                  label={t.biggestExpense}
+                  value={preciseCurrency.format(dashboardInsights.biggest.amount)}
+                  sub={`${categoryLabel(insightBiggestCategory?.name) ?? ""} · ${format(parseISO(dashboardInsights.biggest.occurredOn), "MMM d")}`}
+                  tone="coral"
+                />
+              ) : null}
+              {dashboardInsights.hasElapsedDays ? (
+                <InsightCard
+                  icon={CalendarCheck}
+                  label={t.noSpendDays}
+                  value={`${dashboardInsights.noSpendDays}`}
+                  sub={format(dashboardStatsMonth, "MMMM yyyy")}
+                  tone="moss"
+                />
+              ) : null}
+              <InsightCard
+                icon={comparison.expenseDelta <= 0 ? TrendingDown : TrendingUp}
+                label={t.monthExpenses}
+                value={`${comparison.expenseDelta >= 0 ? "+" : ""}${comparison.expenseDelta.toFixed(1)}%`}
+                sub={t.vsLastMonth}
+                tone={comparison.expenseDelta <= 0 ? "moss" : "amber"}
+              />
+            </div>
+          ) : null}
 
           <div className="grid gap-4 2xl:grid-cols-[1.55fr_1fr]">
             <Panel title={t.spendingPace} action={t.dailyExpenseTrend}>
@@ -1792,15 +1978,15 @@ export default function ExpenseTrackerPage() {
                   <AreaChart data={daily}>
                     <defs>
                       <linearGradient id="spentGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.38} />
-                        <stop offset="95%" stopColor="#f97316" stopOpacity={0.03} />
+                        <stop offset="5%" stopColor={chart.expense} stopOpacity={0.38} />
+                        <stop offset="95%" stopColor={chart.expense} stopOpacity={0.03} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                     <XAxis dataKey="day" tickLine={false} axisLine={false} />
                     <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={48} />
-                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                    <Area type="monotone" dataKey="spent" stroke="#f97316" fill="url(#spentGradient)" strokeWidth={3} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
+                    <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#spentGradient)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1814,11 +2000,12 @@ export default function ExpenseTrackerPage() {
                 <div className="h-44">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie innerRadius={45} outerRadius={70} paddingAngle={3} data={budgetRows.filter((row) => row.spent > 0)} dataKey="spent">
+                      <Pie innerRadius={45} outerRadius={70} paddingAngle={3} data={budgetRows.filter((row) => row.spent > 0)} dataKey="spent" nameKey="name" stroke="none">
                         {budgetRows.filter((row) => row.spent > 0).map((entry) => (
                           <Cell key={entry.id} fill={entry.color} />
                         ))}
                       </Pie>
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -1928,20 +2115,20 @@ export default function ExpenseTrackerPage() {
                   <AreaChart data={reportMonthlySeries}>
                     <defs>
                       <linearGradient id="reportIncomeGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.28} />
-                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0.03} />
+                        <stop offset="5%" stopColor={chart.income} stopOpacity={0.28} />
+                        <stop offset="95%" stopColor={chart.income} stopOpacity={0.03} />
                       </linearGradient>
                       <linearGradient id="reportExpenseGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.28} />
-                        <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
+                        <stop offset="5%" stopColor={chart.expense} stopOpacity={0.28} />
+                        <stop offset="95%" stopColor={chart.expense} stopOpacity={0.03} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                     <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={48} />
-                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                    <Area type="monotone" dataKey="income" stroke="#16a34a" fill="url(#reportIncomeGradient)" strokeWidth={2.5} />
-                    <Area type="monotone" dataKey="expenses" stroke="#f05a3f" fill="url(#reportExpenseGradient)" strokeWidth={2.5} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={48} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
+                    <Area type="monotone" dataKey="income" stroke={chart.income} fill="url(#reportIncomeGradient)" strokeWidth={2.5} />
+                    <Area type="monotone" dataKey="expenses" stroke={chart.expense} fill="url(#reportExpenseGradient)" strokeWidth={2.5} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1954,16 +2141,17 @@ export default function ExpenseTrackerPage() {
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weekday}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                     <XAxis dataKey="weekday" tickLine={false} axisLine={false} />
-                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `เธฟ${value}`} width={44} />
-                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                    <Bar dataKey="spent" fill="#f97316" radius={[6, 6, 0, 0]} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `฿${value}`} width={44} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} cursor={{ fill: chart.grid }} {...chart.tooltip} />
+                    <Bar dataKey="spent" fill={chart.expense} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </Panel>
           </div>
+          </>}
         </section>
 
         <section id="reports" className={activeTab === "reports" ? "mt-4 grid min-w-0 gap-4" : "hidden"}>
@@ -2153,7 +2341,7 @@ export default function ExpenseTrackerPage() {
                             type="button"
                             onClick={() => setMonthlyReportRecurringFilter(value)}
                             className={`h-9 rounded-md text-xs font-semibold transition ${
-                              monthlyReportRecurringFilter === value ? "bg-river text-white" : "text-ink/55"
+                              monthlyReportRecurringFilter === value ? "bg-river text-bright" : "text-ink/55"
                             }`}
                           >
                             {label}
@@ -2172,7 +2360,7 @@ export default function ExpenseTrackerPage() {
                       <button
                         type="button"
                         onClick={() => setMonthlyReportFiltersOpen(false)}
-                        className="h-11 rounded-lg bg-river px-4 text-sm font-semibold text-white"
+                        className="h-11 rounded-lg bg-river px-4 text-sm font-semibold text-bright"
                       >
                         Apply
                       </button>
@@ -2190,7 +2378,7 @@ export default function ExpenseTrackerPage() {
                     type="button"
                     onClick={() => setMonthlyReportMode(mode)}
                     className={`h-8 flex-1 rounded-md px-4 text-sm font-semibold capitalize transition sm:flex-none ${
-                      monthlyReportMode === mode ? "bg-river text-white" : "text-ink/55 hover:bg-river/10 hover:text-river"
+                      monthlyReportMode === mode ? "bg-river text-bright" : "text-ink/55 hover:bg-river/10 hover:text-river"
                     }`}
                   >
                     {mode}
@@ -2222,15 +2410,15 @@ export default function ExpenseTrackerPage() {
                     <AreaChart data={monthlyReportDaily} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
                       <defs>
                         <linearGradient id="monthlyReportDailyGradient" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="5%" stopColor="#f05a3f" stopOpacity={0.32} />
-                          <stop offset="95%" stopColor="#f05a3f" stopOpacity={0.03} />
+                          <stop offset="5%" stopColor={chart.expense} stopOpacity={0.32} />
+                          <stop offset="95%" stopColor={chart.expense} stopOpacity={0.03} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                       <XAxis dataKey="day" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
-                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                      <Area type="monotone" dataKey="spent" stroke="#f05a3f" fill="url(#monthlyReportDailyGradient)" strokeWidth={3} />
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
+                      <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#monthlyReportDailyGradient)" strokeWidth={3} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -2244,11 +2432,11 @@ export default function ExpenseTrackerPage() {
                 <div className="h-56 min-w-0 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthlyReportTrendSeries} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,28,0.1)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                       <XAxis dataKey="month" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
-                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} />
-                      <Bar dataKey="expenses" fill="#f05a3f" radius={[6, 6, 0, 0]} />
+                      <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} cursor={{ fill: chart.grid }} {...chart.tooltip} />
+                      <Bar dataKey="expenses" fill={chart.expense} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -2560,7 +2748,7 @@ export default function ExpenseTrackerPage() {
                     ))}
                   </select>
                   <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                  <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
+                  <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
                     <Plus size={17} />
                     {isSaving ? "Saving" : t.add}
                   </button>
@@ -2720,7 +2908,7 @@ export default function ExpenseTrackerPage() {
                     inputMode="decimal"
                     placeholder="Amount"
                   />
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-1" disabled={savingBudgetId === budgetCategoryId}>
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright disabled:opacity-50 sm:col-span-2 lg:col-span-1" disabled={savingBudgetId === budgetCategoryId}>
                     <Plus size={17} />
                     {savingBudgetId === budgetCategoryId ? "Saving budget" : "Save monthly budget"}
                   </button>
@@ -2748,7 +2936,7 @@ export default function ExpenseTrackerPage() {
                             inputMode="decimal"
                             placeholder="Budget"
                           />
-                          <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingBudgetId === row.id}>
+                          <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingBudgetId === row.id}>
                             {savingBudgetId === row.id ? "Saving" : "Update"}
                           </button>
                           <button type="button" aria-label="Cancel budget edit" onClick={() => {
@@ -2778,7 +2966,7 @@ export default function ExpenseTrackerPage() {
                         <span>{currency.format(row.remaining)} left</span>
                       </div>
                       <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "#f05a3f" : "#f97316" }} />
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(row.progress, 100)}%`, background: row.spent > (row.monthlyBudget ?? Infinity) ? "rgb(var(--coral))" : "rgb(var(--amber))" }} />
                       </div>
                     </div>
                   </article>
@@ -2834,7 +3022,7 @@ export default function ExpenseTrackerPage() {
                     <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
                     Auto-create
                   </label>
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2 lg:col-span-1">
+                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright sm:col-span-2 lg:col-span-1">
                     <Plus size={17} />
                     Add
                   </button>
@@ -2927,7 +3115,7 @@ export default function ExpenseTrackerPage() {
                 <input value={goalTargetAmount} onChange={(event) => setGoalTargetAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
                 <input value={goalCurrentAmount} onChange={(event) => setGoalCurrentAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved now" />
                 <input type="date" value={goalTargetDate} onChange={(event) => setGoalTargetDate(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2 lg:col-span-full">
+                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright sm:col-span-2 lg:col-span-full">
                   <Plus size={17} />
                   Add goal
                 </button>
@@ -2952,7 +3140,7 @@ export default function ExpenseTrackerPage() {
                         <input value={draft.targetAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetAmount: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Target" />
                         <input value={draft.currentAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, currentAmount: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved" />
                         <input type="date" value={draft.targetDate} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetDate: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-                        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingGoalId === goal.id}>
+                        <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingGoalId === goal.id}>
                           {savingGoalId === goal.id ? "Saving" : "Update"}
                         </button>
                         <button type="button" aria-label="Cancel goal edit" onClick={() => cancelEditingGoal(goal)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
@@ -3013,7 +3201,7 @@ export default function ExpenseTrackerPage() {
                               </select>
                               <input value={draft.openingBalance} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Opening" />
                               <input type="color" value={draft.color} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, color: event.target.value } }))} className="h-10 w-full rounded-lg border border-ink/10 bg-white px-2" aria-label="Account color" />
-                              <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingAccountId === account.id}>
+                              <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingAccountId === account.id}>
                                 {savingAccountId === account.id ? "Saving" : "Update"}
                               </button>
                               <button type="button" aria-label="Cancel account edit" onClick={() => cancelEditingAccount(account)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
@@ -3062,7 +3250,192 @@ export default function ExpenseTrackerPage() {
           )}
 
         </section>
+        </div>
       </section>
+
+      <button
+        type="button"
+        onClick={() => setQuickAddOpen(true)}
+        aria-label={t.quickAdd}
+        className="group fixed bottom-24 right-4 z-40 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8"
+      >
+        <Plus size={26} className="transition duration-300 group-hover:rotate-90" />
+      </button>
+
+      {quickAddOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-ink/45 backdrop-blur-sm sm:items-center sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setQuickAddOpen(false);
+            }
+          }}
+        >
+          <form
+            onSubmit={handleQuickAdd}
+            className="max-h-[92vh] w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 bg-white p-5 shadow-lift sm:rounded-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-lg font-semibold">{t.quickAdd}</h2>
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(false)}
+                aria-label="Close quick add"
+                className="grid size-9 place-items-center rounded-lg text-ink/50 transition hover:bg-ink/5 hover:text-ink"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-ink/10 bg-ink/[0.03] p-1">
+              {(["expense", "income"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setType(kind)}
+                  className={`h-10 rounded-lg text-sm font-semibold transition ${
+                    type === kind
+                      ? kind === "income"
+                        ? "bg-moss text-bright shadow"
+                        : "bg-coral text-bright shadow"
+                      : "text-ink/55 hover:text-ink"
+                  }`}
+                >
+                  {kind === "income" ? t.income : t.expense}
+                </button>
+              ))}
+            </div>
+
+            <label className="mb-5 block">
+              <span className="mb-1 block text-xs font-semibold uppercase text-ink/45">{t.amount}</span>
+              <div className="flex items-baseline gap-2 border-b-2 border-ink/10 pb-1 transition focus-within:border-river">
+                <span className="font-display text-3xl font-semibold text-ink/35">฿</span>
+                <input
+                  autoFocus
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0"
+                  aria-label={t.amount}
+                  className="tnum w-full border-none bg-transparent font-display text-4xl font-semibold outline-none"
+                />
+              </div>
+            </label>
+
+            <div className="mb-4">
+              <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">{t.category}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {displayCategories.filter((category) => category.kind === type).map((category) => {
+                  const active = category.id === categoryId;
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => setCategoryId(category.id)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                        active ? "border-transparent text-bright shadow" : "border-ink/15 text-ink/70 hover:border-ink/35"
+                      }`}
+                      style={active ? { background: category.color } : undefined}
+                    >
+                      <span className="size-2 rounded-full" style={{ background: active ? "rgba(255,255,255,0.85)" : category.color }} />
+                      {categoryLabel(category.name)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {subcategories.some((subcategory) => subcategory.categoryId === categoryId) ? (
+              <div className="mb-4">
+                <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">Subcategory</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => {
+                    const active = subcategory.id === subcategoryId;
+                    return (
+                      <button
+                        key={subcategory.id}
+                        type="button"
+                        onClick={() => setSubcategoryId(subcategory.id)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                          active ? "border-river/30 bg-river/12 text-river" : "border-ink/15 text-ink/60 hover:border-ink/35"
+                        }`}
+                      >
+                        {subcategory.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase text-ink/45">{t.account}</span>
+                <select
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                >
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>{account.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase text-ink/45">{t.date}</span>
+                <input
+                  type="date"
+                  value={occurredOn}
+                  onChange={(event) => setOccurredOn(event.target.value)}
+                  className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                />
+              </label>
+            </div>
+
+            <input
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder={t.optionalNote}
+              className="mb-5 h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
+            />
+
+            <button
+              disabled={!canAddTransaction}
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-river to-indigo-500 text-sm font-semibold text-bright shadow-glow transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Plus size={18} />
+              {isSaving ? "Saving..." : Number(amount) > 0 ? `${t.add} · ${preciseCurrency.format(Number(amount))}` : t.add}
+            </button>
+          </form>
+        </div>
+      ) : null}
+
+      {dataNotice ? (
+        <div className="pointer-events-none fixed inset-x-3 bottom-24 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
+          <div className="pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-ink/10 bg-white py-2.5 pl-4 pr-2 text-sm font-medium shadow-lift">
+            <CheckCircle2 size={18} className="shrink-0 text-moss" />
+            <span className="min-w-0">{dataNotice}</span>
+            {lastRecurringPayment && dataNotice === lastRecurringPayment.notice ? (
+              <button
+                type="button"
+                onClick={handleUndoRecurringPaid}
+                disabled={undoingRecurringPaymentId === lastRecurringPayment.transaction.id}
+                className="shrink-0 rounded-lg border border-river/25 px-2.5 py-1 text-xs font-semibold text-river transition hover:bg-river/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {undoingRecurringPaymentId === lastRecurringPayment.transaction.id ? "Undoing" : "Undo"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setDataNotice("")}
+              aria-label="Dismiss notification"
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-ink/40 transition hover:bg-ink/5 hover:text-ink"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -3079,7 +3452,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="min-w-0 rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
+    <section id={id} className="min-w-0 rounded-xl border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
       <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h2 className="min-w-0 text-base font-semibold sm:text-lg">{title}</h2>
         <span className="shrink-0 text-sm text-ink/55">{action}</span>
@@ -3162,6 +3535,10 @@ function MonthCalendar({
 }) {
   const days = buildCalendarGrid(month);
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const maxDailyExpense = days.reduce((max, day) => {
+    const expense = summaries[format(day, "yyyy-MM-dd")]?.expense ?? 0;
+    return expense > max ? expense : max;
+  }, 0);
   const selectedSummary = selectedDate ? summaries[selectedDate] : undefined;
   const selectedWeekStart = selectedDate ? startOfWeek(parseISO(selectedDate)) : undefined;
   const selectedWeekEnd = selectedDate ? endOfWeek(parseISO(selectedDate)) : undefined;
@@ -3211,7 +3588,7 @@ function MonthCalendar({
           const selected = selectedDate === key;
           const inMonth = isSameMonth(day, month);
           const hasData = Boolean(summary?.count || summary?.recurringCount || summary?.paidRecurringCount);
-          const intensity = summary?.expense ? Math.min(summary.expense / 50000, 1) : 0;
+          const intensity = summary?.expense && maxDailyExpense > 0 ? Math.sqrt(summary.expense / maxDailyExpense) : 0;
           const inSelectedWeek = Boolean(selectedWeekStart && selectedWeekEnd && day >= selectedWeekStart && day <= selectedWeekEnd);
 
           return (
@@ -3228,9 +3605,9 @@ function MonthCalendar({
                     ? "border-ink/10 bg-white hover:border-river/35 hover:bg-river/5"
                     : "border-transparent bg-ink/[0.025] hover:bg-ink/[0.04]"
               } ${inMonth ? "text-ink" : "text-ink/30"}`}
-              style={variant === "activity" && intensity > 0 && !selected ? { background: `rgba(249, 115, 22, ${0.08 + intensity * 0.26})` } : undefined}
+              style={variant === "activity" && intensity > 0 && !selected ? { background: `rgb(var(--coral) / ${(0.06 + intensity * 0.3).toFixed(3)})` } : undefined}
             >
-              <span className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${isToday(day) ? "bg-ink text-white" : ""}`}>
+              <span className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${isToday(day) ? "bg-ink text-paper" : ""}`}>
                 {format(day, "d")}
               </span>
               {variant === "activity" ? (
@@ -3594,7 +3971,80 @@ function accountToDraft(account: Account): AccountDraft {
   };
 }
 
+function AnimatedNumber({ value, format: formatValue }: { value: number; format: (value: number) => string }) {
+  const [display, setDisplay] = useState(value);
+  const previousValue = useRef(value);
+
+  useEffect(() => {
+    const from = previousValue.current;
+    previousValue.current = value;
+
+    if (from === value || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplay(value);
+      return;
+    }
+
+    const duration = 750;
+    const start = performance.now();
+    let frame = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(from + (value - from) * eased);
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  return <span className="tnum">{formatValue(display)}</span>;
+}
+
 function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone,
+  format: formatValue = (amount) => currency.format(amount)
+}: {
+  icon: typeof BadgeDollarSign;
+  label: string;
+  value: number;
+  sub: string;
+  tone: "moss" | "river" | "coral";
+  format?: (value: number) => string;
+}) {
+  const tones = {
+    moss: { chip: "bg-moss/12 text-moss", wash: "from-moss/[0.08]" },
+    river: { chip: "bg-river/12 text-river", wash: "from-river/[0.08]" },
+    coral: { chip: "bg-coral/12 text-coral", wash: "from-coral/[0.08]" }
+  };
+
+  return (
+    <article className="relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3 shadow-soft transition duration-300 hover:-translate-y-0.5 hover:shadow-lift sm:p-4">
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tones[tone].wash} to-transparent`} />
+      <div className="relative">
+        <div className="mb-4 flex items-center justify-between">
+          <span className={`grid size-10 place-items-center rounded-xl ${tones[tone].chip}`}>
+            <Icon size={20} />
+          </span>
+          <span className="text-xs font-medium uppercase tracking-normal text-ink/45">{label}</span>
+        </div>
+        <p className="font-display text-xl font-semibold sm:text-2xl">
+          <AnimatedNumber value={value} format={formatValue} />
+        </p>
+        <p className="mt-1 text-sm text-ink/55">{sub}</p>
+      </div>
+    </article>
+  );
+}
+
+function InsightCard({
   icon: Icon,
   label,
   value,
@@ -3604,26 +4054,78 @@ function MetricCard({
   icon: typeof BadgeDollarSign;
   label: string;
   value: string;
-  sub: string;
-  tone: "moss" | "river" | "coral";
+  sub?: string;
+  tone: "moss" | "river" | "coral" | "amber";
 }) {
   const tones = {
     moss: "bg-moss/12 text-moss",
     river: "bg-river/12 text-river",
-    coral: "bg-coral/12 text-coral"
+    coral: "bg-coral/12 text-coral",
+    amber: "bg-amber/12 text-amber"
   };
 
   return (
-    <article className="rounded-lg border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <span className={`grid size-10 place-items-center rounded-lg ${tones[tone]}`}>
-          <Icon size={20} />
-        </span>
-        <span className="text-xs font-medium uppercase tracking-normal text-ink/45">{label}</span>
+    <div className="flex min-w-56 shrink-0 snap-start items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2.5 shadow-soft">
+      <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tones[tone]}`}>
+        <Icon size={17} />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-semibold uppercase text-ink/45">{label}</p>
+        <p className="truncate text-sm font-semibold">{value}</p>
+        {sub ? <p className="truncate text-xs text-ink/50">{sub}</p> : null}
       </div>
-      <p className="text-xl font-semibold sm:text-2xl">{value}</p>
-      <p className="mt-1 text-sm text-ink/55">{sub}</p>
-    </article>
+    </div>
+  );
+}
+
+function ThemeToggle({ theme, onToggle }: { theme: "light" | "dark"; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      className="grid h-10 w-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/60 transition hover:border-river/30 hover:text-river"
+    >
+      {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+    </button>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid animate-fade-in gap-4" aria-hidden>
+      <div className="flex justify-end">
+        <div className="skeleton h-9 w-48" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="skeleton size-10" />
+              <div className="skeleton h-3 w-24" />
+            </div>
+            <div className="skeleton mb-2 h-7 w-32" />
+            <div className="skeleton h-4 w-40" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 2xl:grid-cols-[1.55fr_1fr]">
+        {Array.from({ length: 2 }, (_, index) => (
+          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="skeleton mb-4 h-5 w-40" />
+            <div className="skeleton h-56 w-full" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 2xl:grid-cols-2">
+        {Array.from({ length: 2 }, (_, index) => (
+          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+            <div className="skeleton mb-4 h-5 w-48" />
+            <div className="skeleton h-72 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3722,7 +4224,7 @@ function CategoryManager({
               inputMode="decimal"
               placeholder="Monthly budget, optional"
             />
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white sm:col-span-2">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright sm:col-span-2">
               <Plus size={17} />
               Create category
             </button>
@@ -3748,7 +4250,7 @@ function CategoryManager({
               className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
               placeholder="Subcategory name, e.g. Electricity"
             />
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-white">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright">
               <Plus size={17} />
               Create subcategory
             </button>
@@ -3826,7 +4328,7 @@ function CategoryManager({
                       <option value="income">Income</option>
                     </select>
                     <input value={categoryDraft.monthlyBudget} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, monthlyBudget: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Budget" />
-                    <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-white">Update</button>
+                    <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright">Update</button>
                     <button type="button" aria-label="Cancel category edit" onClick={() => {
                       setEditingCategoryId("");
                       setCategoryDrafts((current) => ({ ...current, [category.id]: { name: category.name, kind: category.kind, monthlyBudget: String(category.monthlyBudget ?? "") } }));
@@ -3865,7 +4367,7 @@ function CategoryManager({
                               <option key={item.id} value={item.id}>{item.name}</option>
                             ))}
                           </select>
-                          <button className="h-9 rounded-lg bg-river px-3 text-sm font-semibold text-white">Update</button>
+                          <button className="h-9 rounded-lg bg-river px-3 text-sm font-semibold text-bright">Update</button>
                           <button type="button" aria-label="Cancel subcategory edit" onClick={() => {
                             setEditingSubcategoryId("");
                             setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { categoryId: subcategory.categoryId, name: subcategory.name } }));
@@ -3917,7 +4419,7 @@ function LanguageToggle({
           type="button"
           onClick={() => onChange(item)}
           className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
-            language === item ? "bg-river text-white" : "text-ink/55 hover:bg-river/10 hover:text-river"
+            language === item ? "bg-river text-bright" : "text-ink/55 hover:bg-river/10 hover:text-river"
           }`}
         >
           {item === "en" ? "EN" : "မြန်မာ"}
