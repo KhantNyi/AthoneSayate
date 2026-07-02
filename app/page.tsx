@@ -3479,14 +3479,22 @@ function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], 
   return transactions
     .filter((transaction) => {
       const inWindow = transaction.occurredOn >= window.start && transaction.occurredOn <= window.end;
+      const generatedDueOn = recurringPaymentNoteDueOn(transaction.notes);
+      const generatedForAnotherCycle = Boolean(generatedDueOn && generatedDueOn !== dueOn);
 
-      return baseMatches(transaction) && inWindow;
+      return baseMatches(transaction) && inWindow && !generatedForAnotherCycle;
     })
     .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(dueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(dueOn).getTime()))[0];
 }
 
+const recurringPaymentNotePrefix = "Recorded from recurring item due ";
+
 function recurringPaymentNote(dueOn: string) {
-  return `Recorded from recurring item due ${dueOn}`;
+  return `${recurringPaymentNotePrefix}${dueOn}`;
+}
+
+function recurringPaymentNoteDueOn(notes?: string) {
+  return notes?.startsWith(recurringPaymentNotePrefix) ? notes.slice(recurringPaymentNotePrefix.length) : undefined;
 }
 
 function normalizeRecurringText(value?: string) {
