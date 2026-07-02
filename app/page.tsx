@@ -862,11 +862,12 @@ export default function ExpenseTrackerPage() {
   // Recurring rules with stale due dates caught up to the present, so a bill
   // that slipped into a past month still shows (and pays) as this month's.
   const scheduledRules = useMemo(() => recurringRules.map((rule) => ({ ...rule, nextDueOn: normalizedNextDueOn(rule) })), [recurringRules]);
+  const liveRecurringIds = useMemo(() => new Set(recurringRules.map((rule) => rule.id)), [recurringRules]);
   const upcoming = useMemo(() => upcomingRules(scheduledRules), [scheduledRules]);
   const recurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
-    [rule.id]: findRecurringPayment(rule, transactions)
-  }), {}), [transactions, upcoming]);
+    [rule.id]: findRecurringPayment(rule, transactions, new Date(), liveRecurringIds)
+  }), {}), [transactions, upcoming, liveRecurringIds]);
   const recurringDue = upcoming.filter((rule) => rule.type === "expense" && !recurringPayments[rule.id] && parseISO(rule.nextDueOn) <= endOfMonth(new Date())).reduce((sum, rule) => sum + rule.amount, 0);
   const dailyAllowance = safeToSpend(currentMonthTotals.income, currentMonthTotals.expenses, recurringDue);
   const t = translations[language];
@@ -932,8 +933,8 @@ export default function ExpenseTrackerPage() {
   const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
   const visibleRecurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
-    [rule.id]: findRecurringPayment(rule, transactions, visibleMonth)
-  }), {}), [transactions, upcoming, visibleMonth]);
+    [rule.id]: findRecurringPayment(rule, transactions, visibleMonth, liveRecurringIds)
+  }), {}), [transactions, upcoming, visibleMonth, liveRecurringIds]);
   const recurringCalendarDays = useMemo(() => summarizeRecurringCalendarByDay(upcoming, transactions, visibleRecurringPayments, visibleMonthKey), [transactions, upcoming, visibleMonthKey, visibleRecurringPayments]);
   const dashboardCalendarTransactionDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(dashboardCalendarMonthKey))), [transactions, dashboardCalendarMonthKey]);
   const dashboardCalendarRecurringDays = useMemo(() => summarizeRecurringByDay(scheduledRules.filter((rule) => rule.nextDueOn.startsWith(dashboardCalendarMonthKey))), [scheduledRules, dashboardCalendarMonthKey]);
@@ -3903,29 +3904,39 @@ function recurringCycleKey(frequency: RecurringRule["frequency"], dueOn: string)
 }
 
 // Which cycle a transaction pays for this rule, or undefined if unrelated.
-// Prefers the explicit link; falls back to the legacy note format for
-// payments recorded before links existed.
-function paidCycleDueOn(rule: RecurringRule, transaction: Transaction) {
-  if (transaction.recurringRuleId) {
-    return transaction.recurringRuleId === rule.id ? transaction.recurringDueOn ?? transaction.occurredOn : undefined;
+// The explicit link is authoritative when it points at this rule (or at a
+// deleted rule); a payment still owned by a *different, existing* rule is left
+// to that rule. Otherwise fall back to identity matching (merchant + account +
+// type), which covers payments recorded before links existed and bills that
+// were deleted and recreated with a new id.
+function paidCycleDueOn(rule: RecurringRule, transaction: Transaction, liveRuleIds: Set<string>) {
+  if (transaction.recurringRuleId === rule.id) {
+    return transaction.recurringDueOn ?? transaction.occurredOn;
+  }
+
+  if (transaction.recurringRuleId && liveRuleIds.has(transaction.recurringRuleId)) {
+    return undefined;
   }
 
   if (!transaction.isRecurring) {
     return undefined;
   }
 
-  const noteDueOn = recurringPaymentNoteDueOn(transaction.notes);
+  const cycleDueOn = recurringPaymentNoteDueOn(transaction.notes) ?? transaction.recurringDueOn;
 
-  if (!noteDueOn) {
+  if (!cycleDueOn) {
     return undefined;
   }
 
-  const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
+  const sameIdentity =
+    normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant) &&
+    transaction.accountId === rule.accountId &&
+    transaction.type === rule.type;
 
-  return sameMerchant && transaction.accountId === rule.accountId && transaction.type === rule.type ? noteDueOn : undefined;
+  return sameIdentity ? cycleDueOn : undefined;
 }
 
-function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date()) {
+function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date(), liveRuleIds: Set<string> = new Set()) {
   const cycleKeys = new Set<string>();
 
   if (rule.frequency === "monthly") {
@@ -3945,7 +3956,7 @@ function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], 
 
   return transactions
     .filter((transaction) => {
-      const paidFor = paidCycleDueOn(rule, transaction);
+      const paidFor = paidCycleDueOn(rule, transaction, liveRuleIds);
       return paidFor !== undefined && cycleKeys.has(recurringCycleKey(rule.frequency, paidFor));
     })
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))[0];
