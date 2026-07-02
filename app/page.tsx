@@ -513,15 +513,13 @@ export default function ExpenseTrackerPage() {
           return;
         }
 
-        const recurringRules = data.recurringRules.map(normalizeMonthlyRecurringRule);
-
         setAccounts(data.accounts);
         setAccountDrafts(Object.fromEntries(data.accounts.map((account) => [account.id, accountToDraft(account)])));
         setBudgets(data.budgets);
         setCategories(data.categories);
         setSubcategories(data.subcategories);
         setGoals(data.goals);
-        setRecurringRules(recurringRules);
+        setRecurringRules(data.recurringRules);
         setTransactions(data.transactions);
         setTransactionDrafts(Object.fromEntries(data.transactions.map((transaction) => [transaction.id, transactionToDraft(transaction)])));
         setAccountId(data.accounts[0]?.id ?? "");
@@ -536,7 +534,7 @@ export default function ExpenseTrackerPage() {
         setBudgetAmount(String(data.budgets.find((budget) => budget.categoryId === data.categories.find((category) => category.kind === "expense")?.id && budget.month.startsWith(format(new Date(), "yyyy-MM")))?.amount ?? data.categories.find((category) => category.kind === "expense")?.monthlyBudget ?? ""));
         setRecurringAccountId(data.accounts[0]?.id ?? "");
         setRecurringCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
-        setRecurringDrafts(Object.fromEntries(recurringRules.map((rule) => [rule.id, recurringRuleToDraft(rule)])));
+        setRecurringDrafts(Object.fromEntries(data.recurringRules.map((rule) => [rule.id, recurringRuleToDraft(rule)])));
         setGoalDrafts(Object.fromEntries(data.goals.map((goal) => [goal.id, goalToDraft(goal)])));
       } catch (error) {
         if (!ignore) {
@@ -1297,7 +1295,7 @@ export default function ExpenseTrackerPage() {
         amount: parsedAmount,
         merchant: recurringName.trim(),
         frequency: recurringFrequency,
-        nextDueOn: normalizedRecurringNextDueOn(recurringFrequency, recurringNextDueOn),
+        nextDueOn: recurringNextDueOn,
         autoCreate: recurringAutoCreate
       });
       setRecurringRules((current) => [...current, rule]);
@@ -1431,7 +1429,7 @@ export default function ExpenseTrackerPage() {
         amount: parsedAmount,
         merchant: draft.merchant.trim(),
         frequency: draft.frequency,
-        nextDueOn: normalizedRecurringNextDueOn(draft.frequency, draft.nextDueOn),
+        nextDueOn: draft.nextDueOn,
         autoCreate: draft.autoCreate
       });
       setRecurringRules((current) => current.map((rule) => (rule.id === updated.id ? updated : rule)));
@@ -3889,9 +3887,8 @@ function findMonthlyRecurringPayment(rule: RecurringRule, transactions: Transact
     }
 
     const generatedDueOn = recurringPaymentNoteDueOn(transaction.notes);
-    const occurredInMonth = transaction.occurredOn.startsWith(monthKey);
 
-    return generatedDueOn ? generatedDueOn.startsWith(monthKey) && occurredInMonth : occurredInMonth;
+    return generatedDueOn?.startsWith(monthKey) ?? false;
   };
 
   return transactions
@@ -3954,31 +3951,12 @@ function nextRecurringDueOn(rule: RecurringRule) {
   const nextDate = {
     weekly: addDays(dueDate, 7),
     biweekly: addDays(dueDate, 14),
-    monthly: startOfMonth(addMonths(dueDate, 1)),
+    monthly: addMonths(dueDate, 1),
     quarterly: addMonths(dueDate, 3),
     yearly: addMonths(dueDate, 12)
   }[rule.frequency];
 
   return format(nextDate, "yyyy-MM-dd");
-}
-
-function normalizeMonthlyRecurringRule(rule: RecurringRule): RecurringRule {
-  if (rule.frequency !== "monthly") {
-    return rule;
-  }
-
-  return {
-    ...rule,
-    nextDueOn: normalizedRecurringNextDueOn(rule.frequency, rule.nextDueOn)
-  };
-}
-
-function normalizedRecurringNextDueOn(frequency: RecurringRule["frequency"], nextDueOn: string) {
-  if (frequency !== "monthly") {
-    return nextDueOn;
-  }
-
-  return format(startOfMonth(parseISO(nextDueOn)), "yyyy-MM-dd");
 }
 
 function recurringRuleToDraft(rule: RecurringRule): RecurringDraft {
