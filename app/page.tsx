@@ -1768,7 +1768,15 @@ export default function ExpenseTrackerPage() {
           <option value="quarterly">Quarterly</option>
           <option value="yearly">Yearly</option>
         </select>
-        <input type="date" value={draft.nextDueOn} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, nextDueOn: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+        <label className="flex flex-col gap-1 text-xs font-semibold uppercase text-ink/45">
+          Due date
+          <input
+            type="date"
+            value={draft.nextDueOn}
+            onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...(current[rule.id] ?? draft), nextDueOn: event.target.value } }))}
+            className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm font-normal normal-case text-ink"
+          />
+        </label>
         <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingRecurringId === rule.id}>
           {savingRecurringId === rule.id ? "Saving" : "Update"}
         </button>
