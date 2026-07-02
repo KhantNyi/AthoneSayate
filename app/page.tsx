@@ -3937,21 +3937,28 @@ function paidCycleDueOn(rule: RecurringRule, transaction: Transaction, liveRuleI
 }
 
 function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date(), liveRuleIds: Set<string> = new Set()) {
-  const cycleKeys = new Set<string>();
-
+  // Monthly bills are scoped to the calendar month the payment was recorded in:
+  // marking one paid covers that month and it resets on the 1st, regardless of
+  // the exact due day. Keying on when the payment happened (not on a due-date
+  // tag) means a payment made in one month never counts toward another.
   if (rule.frequency === "monthly") {
-    // Month-scoped: paid this calendar month or not. Resets on the 1st.
-    cycleKeys.add(format(referenceDate, "yyyy-MM"));
-  } else {
-    const due = parseISO(normalizedNextDueOn(rule, referenceDate));
-    cycleKeys.add(recurringCycleKey(rule.frequency, format(due, "yyyy-MM-dd")));
+    const monthKey = format(referenceDate, "yyyy-MM");
+    return transactions
+      .filter((transaction) =>
+        paidCycleDueOn(rule, transaction, liveRuleIds) !== undefined && transaction.occurredOn.startsWith(monthKey)
+      )
+      .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn))[0];
+  }
 
-    // A schedule sitting ahead of the reference means the previous cycle was
-    // just settled (or paid early) — keep showing it as paid until its date passes.
-    const previous = retreatRecurringDate(due, rule.frequency);
-    if (previous > referenceDate) {
-      cycleKeys.add(recurringCycleKey(rule.frequency, format(previous, "yyyy-MM-dd")));
-    }
+  const cycleKeys = new Set<string>();
+  const due = parseISO(normalizedNextDueOn(rule, referenceDate));
+  cycleKeys.add(recurringCycleKey(rule.frequency, format(due, "yyyy-MM-dd")));
+
+  // A schedule sitting ahead of the reference means the previous cycle was
+  // just settled (or paid early) — keep showing it as paid until its date passes.
+  const previous = retreatRecurringDate(due, rule.frequency);
+  if (previous > referenceDate) {
+    cycleKeys.add(recurringCycleKey(rule.frequency, format(previous, "yyyy-MM-dd")));
   }
 
   return transactions
