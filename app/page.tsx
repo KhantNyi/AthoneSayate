@@ -3831,6 +3831,10 @@ function upsertBudgetInState(budgets: Budget[], updated: Budget) {
 }
 
 function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate = new Date()) {
+  if (rule.frequency === "monthly") {
+    return findMonthlyRecurringPayment(rule, transactions, referenceDate);
+  }
+
   const dueOn = recurringPaymentDueOnForStatus(rule, referenceDate);
   const window = recurringPaymentWindow(rule, dueOn);
   const tolerance = Math.max(rule.amount * 0.1, 10);
@@ -3862,6 +3866,30 @@ function findRecurringPayment(rule: RecurringRule, transactions: Transaction[], 
       return baseMatches(transaction) && inWindow && !generatedForAnotherCycle;
     })
     .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || Math.abs(parseISO(a.occurredOn).getTime() - parseISO(dueOn).getTime()) - Math.abs(parseISO(b.occurredOn).getTime() - parseISO(dueOn).getTime()))[0];
+}
+
+function findMonthlyRecurringPayment(rule: RecurringRule, transactions: Transaction[], referenceDate: Date) {
+  const monthKey = format(referenceDate, "yyyy-MM");
+  const tolerance = Math.max(rule.amount * 0.1, 10);
+  const baseMatches = (transaction: Transaction) => {
+    const sameType = transaction.type === rule.type;
+    const sameAccount = transaction.accountId === rule.accountId;
+    const sameCategory = rule.categoryId ? transaction.categoryId === rule.categoryId : true;
+    const sameSubcategory = rule.subcategoryId ? transaction.subcategoryId === rule.subcategoryId : true;
+    const sameMerchant = normalizeRecurringText(transaction.merchant) === normalizeRecurringText(rule.merchant);
+    const amountMatches = Math.abs(transaction.amount - rule.amount) <= tolerance;
+
+    return sameType && sameAccount && sameCategory && sameSubcategory && sameMerchant && amountMatches;
+  };
+  const paidInCycleMonth = (transaction: Transaction) => {
+    const generatedDueOn = recurringPaymentNoteDueOn(transaction.notes);
+
+    return generatedDueOn ? generatedDueOn.startsWith(monthKey) : transaction.occurredOn.startsWith(monthKey);
+  };
+
+  return transactions
+    .filter((transaction) => baseMatches(transaction) && paidInCycleMonth(transaction))
+    .sort((a, b) => Number(Boolean(b.isRecurring)) - Number(Boolean(a.isRecurring)) || b.occurredOn.localeCompare(a.occurredOn))[0];
 }
 
 const recurringPaymentNotePrefix = "Recorded from recurring item due ";
@@ -3919,7 +3947,7 @@ function nextRecurringDueOn(rule: RecurringRule) {
   const nextDate = {
     weekly: addDays(dueDate, 7),
     biweekly: addDays(dueDate, 14),
-    monthly: addMonths(dueDate, 1),
+    monthly: startOfMonth(addMonths(dueDate, 1)),
     quarterly: addMonths(dueDate, 3),
     yearly: addMonths(dueDate, 12)
   }[rule.frequency];
