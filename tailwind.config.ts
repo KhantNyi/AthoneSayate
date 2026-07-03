@@ -36,8 +36,8 @@ const config: Config = {
       },
       keyframes: {
         "tab-in": {
-          from: { opacity: "0", transform: "translateY(10px)" },
-          to: { opacity: "1", transform: "translateY(0)" }
+          from: { opacity: "0", transform: "translateY(14px) scale(0.985)", filter: "blur(8px)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)", filter: "blur(0)" }
         },
         "toast-in": {
           from: { opacity: "0", transform: "translateY(16px) scale(0.97)" },
@@ -57,7 +57,7 @@ const config: Config = {
         }
       },
       animation: {
-        "tab-in": "tab-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "tab-in": "tab-in 0.46s cubic-bezier(0.16, 1, 0.3, 1) both",
         "toast-in": "toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both",
         "sheet-in": "sheet-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both",
         "fade-in": "fade-in 0.25s ease-out both",
