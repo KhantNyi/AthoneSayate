@@ -7,7 +7,10 @@ import {
   Banknote,
   CalendarCheck,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   CircleDollarSign,
   Flame,
@@ -963,6 +966,18 @@ export default function ExpenseTrackerPage() {
     setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(month, 1) : current));
   }
 
+  function changeDashboardMonth(month: Date) {
+    const normalized = startOfMonth(month);
+    setDashboardStatsMonth(normalized);
+    setDashboardPaceMonth(normalized);
+    setDashboardCategoryMonth(normalized);
+    setDashboardCalendarMonth(normalized);
+    setDashboardConcentrationMonth(normalized);
+    setDashboardWeekdayMonth(normalized);
+    setDashboardCashflowMonth(normalized);
+    setSelectedDashboardDate("");
+  }
+
   function chooseTab(tab: TabKey) {
     setActiveTab(tab);
     setMobileMoreOpen(false);
@@ -1807,10 +1822,248 @@ export default function ExpenseTrackerPage() {
     );
   };
 
+  const renderDashboardCockpit = () => {
+    const accountTotal = balances.reduce((sum, account) => sum + account.balance, 0);
+    const recurringDashboardItems = upcoming.filter((rule) => !recurringPayments[rule.id]);
+    const recurringExpenseTotal = recurringDashboardItems.reduce((sum, rule) => sum + (rule.type === "expense" ? rule.amount : 0), 0);
+    const categoryMixRows = budgetRows.filter((row) => row.spent > 0).slice(0, 6);
+
+    return (
+      <div className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={monthTotals.income} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
+          <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={monthTotals.expenses} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
+          <MetricCard icon={PiggyBank} label={t.netCashFlow} value={monthTotals.net} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="river" />
+          <MetricCard icon={Banknote} label={t.accountBalance} value={accountTotal} sub={`${balances.length} ${t.activeAccounts}`} tone="river" />
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <DashboardPanel title={t.spendingPace} action="This month">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_116px]">
+              <div className="h-56 min-w-0 lg:h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={daily} margin={{ bottom: 4, left: -12, right: 10, top: 16 }}>
+                    <defs>
+                      <linearGradient id="liquidSpentGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="5%" stopColor={chart.expense} stopOpacity={0.34} />
+                        <stop offset="95%" stopColor={chart.expense} stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={46} />
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
+                    <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#liquidSpentGradient)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid gap-2 text-sm lg:content-center">
+                <ActivityStat label="Projected" value={currency.format(monthTotals.expenses + recurringDue)} tone="ink" compact />
+                <ActivityStat label="Budget" value={currency.format(budgetRows.reduce((sum, row) => sum + (row.monthlyBudget ?? 0), 0))} tone="ink" compact />
+                <ActivityStat label="Spent" value={currency.format(monthTotals.expenses)} tone="river" compact />
+              </div>
+            </div>
+          </DashboardPanel>
+
+          <DashboardPanel title={t.categoryMix} action="By amount">
+            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
+              <div className="relative h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie innerRadius={48} outerRadius={74} paddingAngle={3} data={categoryMixRows} dataKey="spent" nameKey="name" stroke="rgb(var(--surface) / 0.72)" strokeWidth={2}>
+                      {categoryMixRows.map((entry) => (
+                        <Cell key={entry.id} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                  <div>
+                    <p className="tnum text-sm font-semibold">{currency.format(monthTotals.expenses)}</p>
+                    <p className="text-[11px] uppercase text-ink/45">Total</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                {categoryMixRows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => openMonthlyCategoryReport(row.id, dashboardCategoryMonth)}
+                    className="grid grid-cols-[minmax(0,1fr)_42px_82px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-river/10"
+                  >
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.color }} />
+                      <span className="truncate">{categoryLabel(row.name)}</span>
+                    </span>
+                    <span className="text-right text-ink/55">{dashboardInsights.totalSpent > 0 ? `${((row.spent / dashboardInsights.totalSpent) * 100).toFixed(0)}%` : "0%"}</span>
+                    <span className="tnum text-right text-ink/65">{currency.format(row.spent)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </DashboardPanel>
+        </div>
+
+        <DashboardPanel title={ui.activityCalendar} action={format(dashboardCalendarMonth, "MMM yyyy")}>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <ActivityStat label={ui.monthSpent} value={currency.format(dashboardMonthSummary.expense)} tone="coral" />
+            <ActivityStat label={ui.monthIncome} value={currency.format(dashboardMonthSummary.income)} tone="moss" />
+            <ActivityStat label="Net" value={currency.format(dashboardMonthSummary.income - dashboardMonthSummary.expense)} tone={dashboardMonthSummary.income - dashboardMonthSummary.expense >= 0 ? "moss" : "coral"} />
+            <ActivityStat label={ui.dueThisMonth} value={`${dashboardMonthSummary.recurringCount}`} sub={currency.format(dashboardMonthSummary.dueAmount)} tone="amber" />
+          </div>
+          <MonthCalendar
+            month={dashboardCalendarMonth}
+            selectedDate={selectedDashboardDate}
+            summaries={dashboardCalendarDays}
+            variant="activity"
+            labels={ui}
+            embedded
+            onMonthChange={(month) => {
+              setDashboardCalendarMonth(month);
+              setSelectedDashboardDate("");
+            }}
+            onDateSelect={setSelectedDashboardDate}
+            onClearDate={() => setSelectedDashboardDate("")}
+          />
+          <div className="mt-3 grid gap-2 text-sm lg:grid-cols-2">
+            <div className="rounded-xl border border-ink/10 bg-white/45 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-ink/45">{ui.selectedWeek}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <ActivityStat label={ui.spending} value={currency.format(dashboardWeekSummary.expense)} tone="coral" compact />
+                <ActivityStat label={t.income} value={currency.format(dashboardWeekSummary.income)} tone="moss" compact />
+                <ActivityStat label={ui.avgDay} value={currency.format(dashboardWeekSummary.expense / 7)} tone="ink" compact />
+                <ActivityStat label={t.entries} value={`${dashboardWeekSummary.count}`} tone="ink" compact />
+              </div>
+            </div>
+            <div className="rounded-xl border border-ink/10 bg-white/45 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-ink/45">{ui.selectedDay}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs uppercase text-ink/45">{t.date}</p>
+                  <p className="truncate font-semibold">{selectedDashboardDate ? format(parseISO(selectedDashboardDate), "MMM d") : ui.none}</p>
+                </div>
+                <ActivityStat label={ui.spending} value={currency.format(dashboardSelectedSummary?.expense ?? 0)} tone="coral" compact />
+                <ActivityStat label={t.income} value={currency.format(dashboardSelectedSummary?.income ?? 0)} tone="moss" compact />
+                <ActivityStat label={ui.due} value={`${dashboardSelectedSummary?.recurringCount ?? 0}`} tone="amber" compact />
+              </div>
+            </div>
+          </div>
+        </DashboardPanel>
+
+        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr_1fr]">
+          <DashboardPanel title="Category concentration" action={format(dashboardConcentrationMonth, "MMM yyyy")}>
+            <div className="grid gap-4">
+              {dashboardConcentrationRows.slice(0, 6).map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => openMonthlyCategoryReport(row.id, dashboardConcentrationMonth)}
+                  className="rounded-xl px-1 py-1 text-left transition hover:bg-river/10"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+                      <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                      <span className="truncate">{categoryLabel(row.name)}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <strong>{row.share.toFixed(0)}%</strong>
+                      <span className="ml-2 text-xs text-ink/45">{currency.format(row.spent)}</span>
+                    </span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-ink/10">
+                    <div className="h-full rounded-full bg-gradient-to-r from-river to-blue-500" style={{ width: `${Math.min(row.share, 100)}%` }} />
+                  </div>
+                </button>
+              ))}
+              {dashboardConcentrationRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
+              <p className="text-xs text-ink/45">Share is based on actual spending by category this month.</p>
+            </div>
+          </DashboardPanel>
+
+          <DashboardPanel
+            title={ui.recurringDue}
+            action={
+              <button
+                type="button"
+                onClick={() => chooseTab("recurring")}
+                className="rounded-lg border border-ink/10 bg-white/55 px-3 py-1.5 text-xs font-medium text-ink/60 transition hover:bg-river/10 hover:text-river"
+              >
+                View all
+              </button>
+            }
+          >
+            <div className="grid gap-2">
+              <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+                {recurringDashboardItems.length > 0 ? recurringDashboardItems.map((rule) => {
+                const ruleCategory = displayCategories.find((category) => category.id === rule.categoryId);
+                const ruleSubcategory = subcategories.find((subcategory) => subcategory.id === rule.subcategoryId);
+
+                return (
+                  <article key={rule.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-ink/10 bg-white/60 px-3 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{rule.merchant}</p>
+                      <p className="truncate text-xs text-ink/45">{ruleSubcategory?.name ?? categoryLabel(ruleCategory?.name) ?? t.recurring}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`tnum font-semibold ${rule.type === "income" ? "text-moss" : "text-coral"}`}>{rule.type === "income" ? "+" : "-"}{currency.format(rule.amount)}</p>
+                      <p className="text-xs text-amber">{recurringDueLabel(rule.daysUntilDue)}</p>
+                    </div>
+                  </article>
+                );
+              }) : (
+                <p className="rounded-xl border border-ink/10 bg-white/50 p-3 text-sm text-ink/50">No recurring items due this month.</p>
+              )}
+              </div>
+              <div className="flex items-center justify-between pt-2 text-sm">
+                <span className="font-semibold">Expense due</span>
+                <strong className="tnum">{currency.format(recurringExpenseTotal)}</strong>
+              </div>
+            </div>
+          </DashboardPanel>
+
+          <DashboardPanel title={t.quickAdd} action={type === "income" ? t.income : t.expense}>
+            <form onSubmit={handleSubmit} className="grid gap-3">
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink/10 bg-white/45 p-1">
+                {(["expense", "income"] as const).map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => setType(kind)}
+                    className={`h-9 rounded-lg text-xs font-semibold transition ${
+                      type === kind ? "bg-river text-bright shadow-glow" : "text-ink/55 hover:bg-river/10 hover:text-river"
+                    }`}
+                  >
+                    {kind === "income" ? t.income : t.expense}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2" placeholder="Coffee, Groceries" />
+                <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={preciseCurrency.format(0)} />
+                <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+                <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2">
+                  {categories.filter((category) => category.kind === type).map((category) => (
+                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                  ))}
+                </select>
+              </div>
+              <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-river to-blue-600 text-sm font-semibold text-bright shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45">
+                <Plus size={17} />
+                {isSaving ? "Saving" : type === "income" ? "Add income" : "Add expense"}
+              </button>
+            </form>
+          </DashboardPanel>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <main className="min-h-screen pb-20 text-ink xl:pb-0" lang={language === "my" ? "my" : "en"}>
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-ink/10 bg-white px-4 py-5 xl:block">
-        <div className="mb-8 flex items-center gap-3 px-2">
+    <main className="liquid-ui min-h-screen overflow-x-clip pb-36 text-ink xl:grid xl:grid-cols-[16rem_minmax(0,1fr)] xl:pb-0" lang={language === "my" ? "my" : "en"}>
+      <aside className="liquid-chrome sticky top-0 z-20 hidden h-screen min-h-0 w-64 grid-rows-[auto_minmax(0,1fr)_auto] border-r border-ink/10 bg-white px-4 py-5 xl:grid">
+        <div className="mb-7 flex items-center gap-3 px-2">
           <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
             <WalletCards size={22} />
           </div>
@@ -1819,7 +2072,7 @@ export default function ExpenseTrackerPage() {
             <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
           </div>
         </div>
-        <nav className="space-y-1">
+        <nav className="min-h-0 space-y-1 overflow-y-auto pr-1">
           {navItems.map((item) => (
             <button
               key={item.key}
@@ -1836,45 +2089,61 @@ export default function ExpenseTrackerPage() {
             </button>
           ))}
         </nav>
-        <div className="absolute inset-x-4 bottom-5 rounded-xl border border-ink/10 bg-gradient-to-br from-river/[0.07] to-transparent p-3 text-xs text-ink/55">
-          <p className="mb-1 font-semibold text-ink/70">{t.quickAdd}</p>
-          <p>
-            <kbd className="rounded border border-ink/20 bg-white px-1.5 py-0.5 font-sans text-[11px] font-semibold text-ink/70">N</kbd>
-            {" "}&rarr; {t.add}
-          </p>
+        <div className="mt-4 grid gap-3">
+          <div className="liquid-control flex items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold text-bright">A</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">athonesayate</span>
+              <span className="block text-xs text-ink/45">Free plan</span>
+            </span>
+            <ChevronRight className="ml-auto shrink-0 text-ink/45" size={17} />
+          </div>
+          <div className="liquid-card rounded-xl border border-ink/10 bg-white p-4 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-ink/55">{t.accountBalance}</span>
+              <ChevronRight className="shrink-0 text-ink/40" size={16} />
+            </div>
+            <p className="tnum mt-2 font-display text-xl font-semibold">
+              {currency.format(balances.reduce((sum, account) => sum + account.balance, 0))}
+            </p>
+            <div className="mt-7 flex items-center gap-2 text-xs text-ink/50">
+              <span className="size-2 rounded-full bg-moss" />
+              2m ago
+            </div>
+          </div>
         </div>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(23,32,28,0.08)] xl:hidden">
-        <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">
+      <nav className="ios-tabbar fixed z-30 px-1.5 py-1.5 xl:hidden" aria-label="Primary navigation">
+        <div className="grid grid-cols-5 gap-1">
           {mobilePrimaryNavItems.map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => chooseTab(item.key)}
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium transition ${
-                activeTab === item.key ? "bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow" : "text-ink/65"
+              className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
+                activeTab === item.key ? "ios-tab-active" : ""
               }`}
             >
-              <item.icon size={18} />
+              <item.icon size={20} strokeWidth={activeTab === item.key ? 2.6 : 2.2} />
               <span className="max-w-full truncate">{t[item.label]}</span>
             </button>
           ))}
           <button
             type="button"
             onClick={() => setMobileMoreOpen((current) => !current)}
-            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium transition ${
-              mobileMoreOpen || mobileMoreActive ? "bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow" : "text-ink/65"
+            className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
+              mobileMoreOpen || mobileMoreActive ? "ios-tab-active" : ""
             }`}
           >
-            <MoreHorizontal size={18} />
+            <MoreHorizontal size={20} strokeWidth={mobileMoreOpen || mobileMoreActive ? 2.6 : 2.2} />
             <span className="max-w-full truncate">More</span>
           </button>
         </div>
       </nav>
 
       {mobileMoreOpen ? (
-        <div className="fixed inset-x-3 bottom-20 z-40 rounded-lg border border-ink/10 bg-white p-2 shadow-soft xl:hidden">
+        <div className="ios-popover fixed inset-x-3 bottom-28 z-40 p-2 xl:hidden">
           <div className="grid gap-1">
             {mobileMoreNavItems.map((item) => (
               <button
@@ -1897,31 +2166,39 @@ export default function ExpenseTrackerPage() {
         </div>
       ) : null}
 
-      <section className="px-3 pb-10 pt-3 sm:px-6 sm:pt-4 lg:px-8 xl:ml-64">
-        <header className="mb-4 flex items-center justify-between gap-3 rounded-none border-b border-ink/10 pb-3 sm:mb-6 sm:pb-5">
+      <section className="min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
+        <header className="mb-5 grid items-center gap-3 xl:grid-cols-[340px_minmax(280px,1fr)_auto]">
           <div className="min-w-0">
             <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
             <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
-            <h1 className="truncate font-display text-xl font-semibold tracking-tight text-ink sm:text-4xl">
+            <h1 className="font-display text-xl font-semibold text-ink sm:whitespace-nowrap sm:text-3xl xl:text-4xl">
               <span className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text text-transparent sm:hidden">athonesayate</span>
               <span className="hidden sm:inline">{t.expenseTracker}</span>
             </h1>
           </div>
+          {activeTab === "dashboard" ? (
+            <div className="hidden justify-center xl:flex">
+              <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
+            </div>
+          ) : null}
           <div className="flex items-center gap-2 sm:hidden">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
-          <div className="hidden flex-wrap items-center gap-2 sm:flex">
+          <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
-            <StatusPill tone="river" label={`${currency.format(dailyAllowance)} ${t.safeToSpendDay}`} />
-            <StatusPill tone="moss" label={`${currentMonthTotals.savingsRate.toFixed(1)}% ${t.savingsRate}`} />
+            <StatusPill tone="moss" label="On track" />
+            <StatusPill tone="river" label={`${Math.max(0, endOfMonth(new Date()).getDate() - new Date().getDate() + 1)} days left`} />
           </div>
         </header>
 
         {activeTab === "dashboard" ? (
-          <div className="mb-4 grid grid-cols-2 gap-2 sm:hidden">
-            <ActivityStat label={t.safeToSpendDay} value={currency.format(dailyAllowance)} tone="river" />
-            <ActivityStat label={t.savingsRate} value={`${currentMonthTotals.savingsRate.toFixed(1)}%`} tone="moss" />
+          <div className="mb-4 grid gap-3 xl:hidden">
+            <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
+            <div className="grid grid-cols-2 gap-2 sm:hidden">
+              <ActivityStat label={t.safeToSpendDay} value={currency.format(dailyAllowance)} tone="river" />
+              <ActivityStat label={t.savingsRate} value={`${currentMonthTotals.savingsRate.toFixed(1)}%`} tone="moss" />
+            </div>
           </div>
         ) : null}
 
@@ -1935,7 +2212,8 @@ export default function ExpenseTrackerPage() {
         <div key={activeTab} className="animate-tab-in">
 
         <section id="dashboard" className={activeTab === "dashboard" ? "grid gap-4" : "hidden"}>
-          {isLoading ? <DashboardSkeleton /> : <>
+          {isLoading ? <DashboardSkeleton /> : renderDashboardCockpit()}
+          {false ? <>
           <div className="flex justify-end">
             <MonthField label={`${ui.month} - ${t.dashboard}`} month={dashboardStatsMonth} onChange={setDashboardStatsMonth} />
           </div>
@@ -1952,7 +2230,7 @@ export default function ExpenseTrackerPage() {
                 <InsightCard
                   icon={Sparkles}
                   label={t.topCategory}
-                  value={`${categoryLabel(insightTopCategory.name)} · ${currency.format(dashboardInsights.topCategorySpent)}`}
+                  value={`${categoryLabel(insightTopCategory?.name) ?? ""} · ${currency.format(dashboardInsights.topCategorySpent)}`}
                   sub={`${dashboardInsights.topShare.toFixed(0)}% ${t.ofSpending}`}
                   tone="river"
                 />
@@ -1961,8 +2239,8 @@ export default function ExpenseTrackerPage() {
                 <InsightCard
                   icon={Flame}
                   label={t.biggestExpense}
-                  value={preciseCurrency.format(dashboardInsights.biggest.amount)}
-                  sub={`${categoryLabel(insightBiggestCategory?.name) ?? ""} · ${format(parseISO(dashboardInsights.biggest.occurredOn), "MMM d")}`}
+                  value={preciseCurrency.format(dashboardInsights.biggest?.amount ?? 0)}
+                  sub={`${categoryLabel(insightBiggestCategory?.name) ?? ""} · ${dashboardInsights.biggest?.occurredOn ? format(parseISO(dashboardInsights.biggest?.occurredOn ?? "1970-01-01"), "MMM d") : ""}`}
                   tone="coral"
                 />
               ) : null}
@@ -2168,7 +2446,7 @@ export default function ExpenseTrackerPage() {
               </div>
             </Panel>
           </div>
-          </>}
+          </> : null}
         </section>
 
         <section id="reports" className={activeTab === "reports" ? "mt-4 grid min-w-0 gap-4" : "hidden"}>
@@ -3274,14 +3552,14 @@ export default function ExpenseTrackerPage() {
         type="button"
         onClick={() => setQuickAddOpen(true)}
         aria-label={t.quickAdd}
-        className="group fixed bottom-24 right-4 z-40 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8"
+        className="liquid-fab group fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8"
       >
-        <Plus size={26} className="transition duration-300 group-hover:rotate-90" />
+        <Plus size={30} strokeWidth={2.6} className="transition duration-300 group-hover:rotate-90" />
       </button>
 
       {quickAddOpen ? (
         <div
-          className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-ink/45 backdrop-blur-sm sm:items-center sm:p-6"
+          className="liquid-overlay fixed inset-0 z-50 flex animate-fade-in items-end justify-center sm:items-center sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setQuickAddOpen(false);
@@ -3290,7 +3568,7 @@ export default function ExpenseTrackerPage() {
         >
           <form
             onSubmit={handleQuickAdd}
-            className="max-h-[92vh] w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 bg-white p-5 shadow-lift sm:rounded-2xl"
+            className="liquid-sheet liquid-scroll max-h-[92vh] w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 bg-white p-5 shadow-lift sm:rounded-2xl"
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold">{t.quickAdd}</h2>
@@ -3428,8 +3706,8 @@ export default function ExpenseTrackerPage() {
       ) : null}
 
       {dataNotice ? (
-        <div className="pointer-events-none fixed inset-x-3 bottom-24 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
-          <div className="pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-ink/10 bg-white py-2.5 pl-4 pr-2 text-sm font-medium shadow-lift">
+        <div className="pointer-events-none fixed inset-x-3 bottom-32 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
+          <div className="liquid-toast pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-ink/10 bg-white py-2.5 pl-4 pr-2 text-sm font-medium shadow-lift">
             <CheckCircle2 size={18} className="shrink-0 text-moss" />
             <span className="min-w-0">{dataNotice}</span>
             {lastRecurringPayment && dataNotice === lastRecurringPayment.notice ? (
@@ -3469,13 +3747,71 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="min-w-0 rounded-xl border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
+    <section id={id} className="liquid-panel min-w-0 rounded-xl border border-ink/10 bg-white p-3 shadow-soft sm:p-4">
       <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h2 className="min-w-0 text-base font-semibold sm:text-lg">{title}</h2>
         <span className="shrink-0 text-sm text-ink/55">{action}</span>
       </div>
       {children}
     </section>
+  );
+}
+
+function DashboardPanel({
+  title,
+  action,
+  children,
+  className = ""
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`liquid-panel min-w-0 rounded-2xl border border-ink/10 bg-white p-4 shadow-soft ${className}`}>
+      <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+        <h2 className="min-w-0 truncate text-base font-semibold">{title}</h2>
+        {typeof action === "string" || typeof action === "number" ? (
+          <span className="shrink-0 rounded-lg border border-ink/10 bg-white/55 px-3 py-1.5 text-xs font-medium text-ink/60">{action}</span>
+        ) : action ? (
+          <span className="shrink-0">{action}</span>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DashboardMonthControl({
+  month,
+  onChange
+}: {
+  month: Date;
+  onChange: (month: Date) => void;
+}) {
+  const changeBy = (offset: number) => onChange(startOfMonth(addMonths(month, offset)));
+
+  return (
+    <div className="liquid-control mx-auto grid h-12 w-full max-w-sm grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center rounded-2xl border border-ink/10 bg-white px-1.5 text-sm shadow-soft">
+      <button type="button" onClick={() => changeBy(-1)} className="grid size-9 place-items-center rounded-xl text-ink/65 transition hover:bg-river/10 hover:text-river" aria-label="Previous month">
+        <ChevronLeft size={18} />
+      </button>
+      <span className="truncate text-center font-semibold">{format(month, "MMMM yyyy")}</span>
+      <button type="button" onClick={() => changeBy(1)} className="grid size-9 place-items-center rounded-xl text-ink/65 transition hover:bg-river/10 hover:text-river" aria-label="Next month">
+        <ChevronRight size={18} />
+      </button>
+      <label className="relative grid size-9 place-items-center rounded-xl border border-ink/10 bg-white/60 text-ink/55 transition hover:bg-river/10 hover:text-river" aria-label="Choose month">
+        <CalendarDays size={17} />
+        <input
+          type="month"
+          value={format(month, "yyyy-MM")}
+          onChange={(event) => onChange(parseISO(`${event.target.value}-01`))}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label="Choose month"
+        />
+      </label>
+    </div>
   );
 }
 
@@ -3501,7 +3837,7 @@ function ActivityStat({
   }[tone];
 
   return (
-    <div className={compact ? "min-w-0" : "min-w-0 rounded-lg border border-ink/10 bg-white p-3"}>
+    <div className={compact ? "min-w-0" : "liquid-card min-w-0 rounded-lg border border-ink/10 bg-white p-3"}>
       <p className="truncate text-xs uppercase text-ink/45">{label}</p>
       <p className={`break-words font-semibold leading-tight ${compact ? "text-sm" : "text-base"} ${toneClass}`}>{value}</p>
       {sub ? <p className="text-xs text-ink/45">{sub}</p> : null}
@@ -3537,6 +3873,7 @@ function MonthCalendar({
   summaries,
   variant,
   labels,
+  embedded = false,
   onMonthChange,
   onDateSelect,
   onClearDate
@@ -3546,6 +3883,7 @@ function MonthCalendar({
   summaries: Record<string, CalendarDaySummary>;
   variant: "transactions" | "recurring" | "activity";
   labels: Record<keyof typeof uiTranslations.en, string>;
+  embedded?: boolean;
   onMonthChange: (month: Date) => void;
   onDateSelect: (date: string) => void;
   onClearDate: () => void;
@@ -3561,7 +3899,7 @@ function MonthCalendar({
   const selectedWeekEnd = selectedDate ? endOfWeek(parseISO(selectedDate)) : undefined;
 
   return (
-    <section className="rounded-lg border border-ink/10 bg-white p-3">
+    <section className={embedded ? "rounded-xl border border-ink/10 bg-white/45 p-3" : "liquid-card rounded-lg border border-ink/10 bg-white p-3"}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold uppercase text-ink/65">{variant === "recurring" ? labels.recurringDue : labels.monthlyActivity}</h3>
@@ -3572,11 +3910,13 @@ function MonthCalendar({
           </p>
         </div>
         <div className="inline-flex items-center gap-1">
-          <button type="button" onClick={() => onMonthChange(startOfMonth(subMonths(month, 1)))} className="grid size-9 place-items-center rounded-lg border border-ink/10 text-ink/55 transition hover:bg-river/10 hover:text-river" aria-label="Previous month">
+          <button type="button" onClick={() => onMonthChange(startOfMonth(subMonths(month, 1)))} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Previous month">
+            <ChevronLeft size={17} className="absolute text-ink/55" />
             ‹
           </button>
           <span className="min-w-28 text-center text-sm font-semibold">{format(month, "MMM yyyy")}</span>
-          <button type="button" onClick={() => onMonthChange(startOfMonth(addMonths(month, 1)))} className="grid size-9 place-items-center rounded-lg border border-ink/10 text-ink/55 transition hover:bg-river/10 hover:text-river" aria-label="Next month">
+          <button type="button" onClick={() => onMonthChange(startOfMonth(addMonths(month, 1)))} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Next month">
+            <ChevronRight size={17} className="absolute text-ink/55" />
             ›
           </button>
           {selectedDate ? (
@@ -3613,7 +3953,7 @@ function MonthCalendar({
               key={key}
               type="button"
               onClick={() => onDateSelect(key)}
-              className={`min-h-20 rounded-lg border p-1.5 text-left transition ${
+              className={`min-h-16 rounded-lg border p-1 text-left transition sm:min-h-20 sm:p-1.5 ${
                 selected
                   ? "border-river bg-river/10 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.14)]"
                   : variant === "activity" && inSelectedWeek
@@ -4082,7 +4422,7 @@ function MetricCard({
   };
 
   return (
-    <article className="relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3 shadow-soft transition duration-300 hover:-translate-y-0.5 hover:shadow-lift sm:p-4">
+    <article className="liquid-card relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3 shadow-soft transition duration-300 hover:-translate-y-0.5 hover:shadow-lift sm:p-4">
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tones[tone].wash} to-transparent`} />
       <div className="relative">
         <div className="mb-4 flex items-center justify-between">
@@ -4121,7 +4461,7 @@ function InsightCard({
   };
 
   return (
-    <div className="flex min-w-56 shrink-0 snap-start items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2.5 shadow-soft">
+    <div className="liquid-card flex min-w-56 shrink-0 snap-start items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2.5 shadow-soft">
       <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tones[tone]}`}>
         <Icon size={17} />
       </span>
@@ -4140,7 +4480,7 @@ function ThemeToggle({ theme, onToggle }: { theme: "light" | "dark"; onToggle: (
       type="button"
       onClick={onToggle}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      className="grid h-10 w-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/60 transition hover:border-river/30 hover:text-river"
+      className="liquid-control grid h-10 w-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/60 transition hover:border-river/30 hover:text-river"
     >
       {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
     </button>
@@ -4155,7 +4495,7 @@ function DashboardSkeleton() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+          <div key={index} className="liquid-card rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
             <div className="mb-4 flex items-center justify-between">
               <div className="skeleton size-10" />
               <div className="skeleton h-3 w-24" />
@@ -4167,7 +4507,7 @@ function DashboardSkeleton() {
       </div>
       <div className="grid gap-4 2xl:grid-cols-[1.55fr_1fr]">
         {Array.from({ length: 2 }, (_, index) => (
-          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+          <div key={index} className="liquid-card rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
             <div className="skeleton mb-4 h-5 w-40" />
             <div className="skeleton h-56 w-full" />
           </div>
@@ -4175,7 +4515,7 @@ function DashboardSkeleton() {
       </div>
       <div className="grid gap-4 2xl:grid-cols-2">
         {Array.from({ length: 2 }, (_, index) => (
-          <div key={index} className="rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
+          <div key={index} className="liquid-card rounded-xl border border-ink/10 bg-white p-4 shadow-soft">
             <div className="skeleton mb-4 h-5 w-48" />
             <div className="skeleton h-72 w-full" />
           </div>
@@ -4465,7 +4805,7 @@ function LanguageToggle({
   label: string;
 }) {
   return (
-    <div className="inline-flex h-10 items-center gap-1 rounded-lg border border-ink/10 bg-white p-1" aria-label={label}>
+    <div className="liquid-control inline-flex h-10 items-center gap-1 rounded-lg border border-ink/10 bg-white p-1" aria-label={label}>
       <span className="grid size-8 place-items-center text-ink/50">
         <Languages size={17} />
       </span>
@@ -4487,5 +4827,5 @@ function LanguageToggle({
 
 function StatusPill({ label, tone }: { label: string; tone: "moss" | "river" }) {
   const toneClass = tone === "moss" ? "border-moss/20 bg-moss/10 text-moss" : "border-river/20 bg-river/10 text-river";
-  return <span className={`rounded-lg border px-3 py-2 text-sm font-semibold ${toneClass}`}>{label}</span>;
+  return <span className={`liquid-control rounded-lg border px-3 py-2 text-sm font-semibold ${toneClass}`}>{label}</span>;
 }
