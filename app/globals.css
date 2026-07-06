@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: light;
+  /* iOS-style motion tokens: standard UIKit-ish ease-out and a soft spring */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.44, 1);
+  --ease-glide: cubic-bezier(0.21, 1, 0.32, 1);
   /* R G B triplets consumed by Tailwind via rgb(var(--x) / <alpha-value>) */
   --paper: 246 248 252;
   --surface: 255 255 255;
@@ -15,6 +19,9 @@
   --glass-alpha: 0.68;
   --glass-alpha-strong: 0.82;
   --glass-alpha-soft: 0.48;
+  /* Baked-in frost for in-flow surfaces that skip backdrop-filter */
+  --glass-solid: 0.9;
+  --glass-solid-soft: 0.68;
   --glass-border: rgba(255, 255, 255, 0.68);
   --glass-border-muted: rgba(23, 32, 51, 0.1);
   --glass-highlight: rgba(255, 255, 255, 0.82);
@@ -46,6 +53,8 @@
   --glass-alpha: 0.5;
   --glass-alpha-strong: 0.68;
   --glass-alpha-soft: 0.34;
+  --glass-solid: 0.85;
+  --glass-solid-soft: 0.58;
   --glass-border: rgba(255, 255, 255, 0.16);
   --glass-border-muted: rgba(226, 233, 246, 0.12);
   --glass-highlight: rgba(255, 255, 255, 0.18);
@@ -72,22 +81,35 @@
 html {
   background: rgb(var(--paper));
   overflow-x: clip;
+  /* Native-feeling touch: no gray tap flash, no double-tap zoom delay */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   min-height: 100vh;
+  /* Android/iOS collapsing URL bar: track the real visible viewport */
+  min-height: 100dvh;
   margin: 0;
   overflow-x: clip;
   color: rgb(var(--ink));
-  background:
-    linear-gradient(135deg, var(--page-glow-a), transparent 34%),
-    linear-gradient(225deg, transparent 34%, var(--page-glow-b) 62%, transparent 86%),
-    linear-gradient(35deg, transparent 48%, var(--page-glow-c), transparent 72%),
-    rgb(var(--paper));
-  background-attachment: fixed;
+  /* Glow gradients live on the fixed .liquid-ui::before layer instead of
+     background-attachment: fixed, which janks scrolling on iOS Safari. */
+  background: rgb(var(--paper));
   font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+button,
+a,
+label,
+select,
+[role="button"] {
+  touch-action: manipulation;
 }
 
 /* Burmese text gets a proper Myanmar face instead of OS fallback */
@@ -148,6 +170,9 @@ h3 {
   background:
     linear-gradient(115deg, rgb(var(--surface) / 0.18), transparent 26%),
     linear-gradient(285deg, rgb(var(--river) / 0.05), transparent 46%),
+    linear-gradient(135deg, var(--page-glow-a), transparent 34%),
+    linear-gradient(225deg, transparent 34%, var(--page-glow-b) 62%, transparent 86%),
+    linear-gradient(35deg, transparent 48%, var(--page-glow-c), transparent 72%),
     repeating-linear-gradient(
       135deg,
       rgb(var(--ink) / 0.018) 0,
@@ -155,17 +180,34 @@ h3 {
       transparent 1px,
       transparent 22px
     );
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.58));
+  transform: translateZ(0);
 }
 
+/* Springy press feedback on every tappable control, like UIKit's
+   highlight scale. Uses the standalone `scale` property so it composes
+   with any transform utilities already on the element. */
+:where(button:not(:disabled)) {
+  transition-property: scale;
+  transition-duration: 0.35s;
+  transition-timing-function: var(--ease-spring);
+}
+
+button:not(:disabled):active {
+  scale: 0.96;
+  transition-duration: 0.08s;
+  transition-timing-function: ease-out;
+}
+
+/* In-flow surfaces sit on a static page background, so backdrop-filter
+   there is invisible cost (a full GPU blur pass per element — with ~130
+   of them it tanks scrolling on Android). The frost is baked into the
+   fill instead; real glass is reserved for floating chrome below. */
 .liquid-ui [class~="bg-white"],
 .liquid-ui input:not([class~="bg-transparent"]),
 .liquid-ui select,
 .liquid-ui textarea {
   border-color: var(--glass-border-muted);
-  background-color: rgb(var(--surface) / var(--glass-alpha));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  background-color: rgb(var(--surface) / var(--glass-alpha-strong));
 }
 
   .liquid-ui input:not([class~="bg-transparent"]),
@@ -174,17 +216,6 @@ h3 {
     box-shadow:
       inset 0 1px 0 var(--glass-highlight),
       0 10px 24px rgb(var(--ink) / 0.04);
-  }
-
-  .liquid-ui [class~="bg-river/5"],
-  .liquid-ui [class~="bg-river/10"],
-  .liquid-ui [class~="bg-coral/10"],
-  .liquid-ui [class~="bg-moss/10"],
-  .liquid-ui [class~="bg-amber/15"],
-  .liquid-ui [class~="bg-ink/[0.025]"],
-  .liquid-ui [class~="bg-ink/[0.03]"] {
-    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
-    backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
   }
 
   .liquid-panel,
@@ -197,11 +228,21 @@ h3 {
     overflow: hidden;
     border-color: var(--glass-border);
     background:
+      linear-gradient(145deg, rgb(var(--surface) / var(--glass-solid)), rgb(var(--surface) / var(--glass-solid-soft))),
+      linear-gradient(315deg, rgb(var(--river) / 0.06), transparent 42%);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* Floating surfaces have content scrolling/dimming behind them —
+     the only place backdrop blur is actually visible. */
+  .liquid-sheet,
+  .liquid-menu,
+  .liquid-toast {
+    background:
       linear-gradient(145deg, rgb(var(--surface) / var(--glass-alpha-strong)), rgb(var(--surface) / var(--glass-alpha-soft))),
       linear-gradient(315deg, rgb(var(--river) / 0.06), transparent 42%);
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    box-shadow: var(--shadow-soft);
   }
 
   .liquid-panel:not(.fixed):not(.sticky):not(.absolute),
@@ -265,9 +306,9 @@ h3 {
 
   .liquid-card {
     transition:
-      transform 0.25s ease,
-      box-shadow 0.25s ease,
-      border-color 0.25s ease;
+      transform 0.35s var(--ease-glide),
+      box-shadow 0.35s var(--ease-glide),
+      border-color 0.35s var(--ease-glide);
   }
 
   .liquid-card:hover {
@@ -278,14 +319,14 @@ h3 {
   .liquid-control[class~="bg-moss/10"] {
     border-color: rgb(var(--moss) / 0.22);
     background:
-      linear-gradient(145deg, rgb(var(--surface) / var(--glass-alpha-strong)), rgb(var(--moss) / 0.1)),
+      linear-gradient(145deg, rgb(var(--surface) / var(--glass-solid)), rgb(var(--moss) / 0.1)),
       linear-gradient(315deg, rgb(var(--moss) / 0.08), transparent 44%);
   }
 
   .liquid-control[class~="bg-river/10"] {
     border-color: rgb(var(--river) / 0.22);
     background:
-      linear-gradient(145deg, rgb(var(--surface) / var(--glass-alpha-strong)), rgb(var(--river) / 0.1)),
+      linear-gradient(145deg, rgb(var(--surface) / var(--glass-solid)), rgb(var(--river) / 0.1)),
       linear-gradient(315deg, rgb(var(--river) / 0.08), transparent 44%);
   }
 
@@ -318,7 +359,7 @@ h3 {
       0 24px 60px rgba(0, 0, 0, 0.24),
       inset 0 1px 0 rgba(255, 255, 255, 0.34),
       inset 0 -1px 0 rgba(255, 255, 255, 0.08);
-    animation: ios-tabbar-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: ios-tabbar-rise 0.55s var(--ease-glide) both;
   }
 
   .ios-tabbar::before {
@@ -347,11 +388,10 @@ h3 {
     text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
     transform: translateZ(0);
     transition:
-      color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-      background 0.34s cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 0.34s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.34s cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: transform;
+      color 0.26s var(--ease-glide),
+      background 0.32s var(--ease-glide),
+      box-shadow 0.32s var(--ease-glide),
+      scale 0.35s var(--ease-spring);
   }
 
   .ios-tab-item::after {
@@ -364,19 +404,15 @@ h3 {
     opacity: 0;
     transform: translateY(8px) scale(0.92);
     transition:
-      opacity 0.28s ease,
-      transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity 0.26s ease,
+      transform 0.4s var(--ease-spring);
   }
 
   .ios-tab-item svg {
     filter: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.16));
     transition:
-      transform 0.34s cubic-bezier(0.16, 1, 0.3, 1),
-      filter 0.34s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .ios-tab-item:active {
-    transform: scale(0.96);
+      transform 0.35s var(--ease-spring),
+      filter 0.35s var(--ease-glide);
   }
 
   .ios-tab-active {
@@ -388,7 +424,7 @@ h3 {
       inset 0 1px 0 rgba(255, 255, 255, 0.48),
       inset 0 -1px 0 rgba(255, 255, 255, 0.12),
       0 10px 28px rgba(0, 0, 0, 0.16);
-    animation: ios-tab-pop 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: ios-tab-pop 0.45s var(--ease-glide) both;
   }
 
   .ios-tab-active::after {
@@ -415,7 +451,7 @@ h3 {
       0 24px 60px rgba(0, 0, 0, 0.22),
       inset 0 1px 0 rgba(255, 255, 255, 0.34);
     transform-origin: 50% 100%;
-    animation: ios-popover-in 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: ios-popover-in 0.4s var(--ease-spring) both;
   }
 
   .liquid-fab {
@@ -443,6 +479,9 @@ h3 {
 
   .liquid-scroll {
     scrollbar-gutter: stable;
+    /* Contained rubber-banding: scrolling a sheet never drags the page */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 button:focus-visible,
 input:focus-visible,
@@ -506,44 +545,51 @@ textarea:focus-visible {
   }
 }
 
+/* Transform + opacity only — animating filter/blur alongside
+   backdrop-filter repaints the whole glass surface every frame. */
 @keyframes ios-tabbar-rise {
   from {
     opacity: 0;
     transform: translateX(-50%) translateY(18px) scale(0.96);
-    filter: blur(8px);
   }
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 
 @keyframes ios-tab-pop {
   0% {
-    transform: scale(0.9);
-    filter: blur(2px);
+    transform: scale(0.92);
   }
-  58% {
-    transform: scale(1.04);
-    filter: blur(0);
+  55% {
+    transform: scale(1.06);
+  }
+  80% {
+    transform: scale(0.99);
   }
   100% {
     transform: scale(1);
-    filter: blur(0);
   }
 }
 
 @keyframes ios-popover-in {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.96);
-    filter: blur(6px);
+    transform: translateY(14px) scale(0.94);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0);
+  }
+}
+
+@keyframes ios-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 
@@ -558,5 +604,59 @@ textarea:focus-visible {
   .liquid-card,
   .liquid-sheet {
     --glass-blur: 18px;
+  }
+
+  /* Bottom sheets slide up from the edge like a native iOS sheet —
+     no fade, no scale — while the overlay fades independently. */
+  .liquid-sheet {
+    animation: ios-sheet-up 0.5s var(--ease-ios) both;
+  }
+
+  @supports (height: 100dvh) {
+    /* 92vh overflows when the Android URL bar is visible; dvh doesn't */
+    .liquid-sheet {
+      max-height: 92dvh;
+    }
+  }
+}
+
+/* Touch devices (Android especially) blur far slower than desktop GPUs;
+   cost scales with radius², so trimming the radius keeps the look while
+   roughly halving the work. */
+@media (pointer: coarse) {
+  .ios-tabbar,
+  .ios-popover {
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .liquid-fab {
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
+
+  .liquid-overlay {
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+  }
+}
+
+/* Old Android WebViews without backdrop-filter: fall back to nearly
+   opaque fills so floating chrome stays legible instead of see-through. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ios-tabbar,
+  .ios-popover,
+  .liquid-fab {
+    background: rgb(var(--surface) / 0.96);
+  }
+
+  .liquid-sheet,
+  .liquid-menu,
+  .liquid-toast {
+    background: rgb(var(--surface) / 0.97);
+  }
+
+  .liquid-overlay {
+    background: rgb(var(--ink) / 0.38);
   }
 }
