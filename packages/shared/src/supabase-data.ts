@@ -21,6 +21,8 @@ export type UpdateAccountInput = {
 };
 
 export type NewTransactionInput = {
+  /** Client-generated UUID so offline-queued creates keep the same id after replay. */
+  id?: string;
   accountId: string;
   categoryId?: string;
   subcategoryId?: string;
@@ -37,6 +39,7 @@ export type NewTransactionInput = {
 export type UpdateTransactionInput = NewTransactionInput;
 
 export type NewCategoryInput = {
+  id?: string;
   name: string;
   kind: TransactionType;
   monthlyBudget?: number;
@@ -45,11 +48,13 @@ export type NewCategoryInput = {
 export type UpdateCategoryInput = NewCategoryInput;
 
 export type NewSubcategoryInput = {
+  id?: string;
   categoryId: string;
   name: string;
 };
 
 export type NewRecurringRuleInput = {
+  id?: string;
   accountId: string;
   categoryId?: string;
   subcategoryId?: string;
@@ -64,6 +69,7 @@ export type NewRecurringRuleInput = {
 export type UpdateRecurringRuleInput = NewRecurringRuleInput;
 
 export type NewGoalInput = {
+  id?: string;
   name: string;
   targetAmount: number;
   currentAmount: number;
@@ -79,6 +85,7 @@ export type MonthlyBudgetInput = {
 };
 
 type RecurringRulePayload = {
+  id?: string;
   user_id?: string;
   account_id: string;
   category_id?: string;
@@ -106,6 +113,7 @@ type RecurringRuleRow = {
 
 function recurringRulePayload(input: NewRecurringRuleInput, options: { includeUser?: boolean; includeSubcategory?: boolean } = {}): RecurringRulePayload {
   const payload: RecurringRulePayload = {
+    ...(input.id && options.includeUser ? { id: input.id } : {}),
     account_id: input.accountId,
     category_id: input.categoryId,
     type: input.type,
@@ -258,6 +266,7 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
   }
 
   type TransactionPayload = {
+    id?: string;
     user_id: string;
     account_id: string;
     category_id?: string;
@@ -273,6 +282,7 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
   };
 
   const basePayload: TransactionPayload = {
+    ...(input.id ? { id: input.id } : {}),
     user_id: DEMO_USER_ID,
     account_id: input.accountId,
     category_id: input.categoryId,
@@ -393,6 +403,7 @@ export async function createCategory(input: NewCategoryInput): Promise<Category>
   const { data, error } = await supabase
     .from("categories")
     .insert({
+      ...(input.id ? { id: input.id } : {}),
       user_id: DEMO_USER_ID,
       name: input.name,
       kind: input.kind,
@@ -471,6 +482,7 @@ export async function createSubcategory(input: NewSubcategoryInput): Promise<Sub
   const { data, error } = await supabase
     .from("subcategories")
     .insert({
+      ...(input.id ? { id: input.id } : {}),
       user_id: DEMO_USER_ID,
       category_id: input.categoryId,
       name: input.name
@@ -688,6 +700,7 @@ export async function createGoal(input: NewGoalInput): Promise<Goal> {
   const { data, error } = await supabase
     .from("goals")
     .insert({
+      ...(input.id ? { id: input.id } : {}),
       user_id: DEMO_USER_ID,
       name: input.name,
       target_amount: input.targetAmount,
@@ -784,6 +797,66 @@ export async function archiveGoal(id: string) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export type PushSubscriptionRecord = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
+
+export async function savePushSubscription(input: PushSubscriptionRecord) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .upsert(
+      {
+        user_id: DEMO_USER_ID,
+        endpoint: input.endpoint,
+        p256dh: input.p256dh,
+        auth: input.auth
+      },
+      { onConflict: "endpoint" }
+    );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deletePushSubscription(endpoint: string) {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { error } = await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function fetchPushSubscriptions(): Promise<PushSubscriptionRecord[]> {
+  const supabase = createSupabaseBrowserClient();
+
+  if (!supabase) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  const { data, error } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({ endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }));
 }
 
 export async function removeTransaction(id: string) {

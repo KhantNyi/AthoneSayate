@@ -11,6 +11,15 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     background_color: "#f6f8fc",
     theme_color: "#f6f8fc",
+    shortcuts: [
+      {
+        name: "Add expense",
+        short_name: "Add",
+        description: "Jump straight to the quick-add form",
+        url: "/?action=quick-add",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }]
+      }
+    ],
     icons: [
       {
         src: "/icons/icon-192.png",
