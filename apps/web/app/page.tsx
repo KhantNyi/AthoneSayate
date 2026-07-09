@@ -85,7 +85,7 @@ import {
   upsertMonthlyBudget,
   updateRecurringRule,
   updateSubcategory
-} from "@/lib/supabase-data";
+} from "@athonesayate/shared/supabase-data";
 import {
   accountBalances,
   categorySpend,
@@ -97,8 +97,8 @@ import {
   totals,
   upcomingRules,
   weekdaySpend
-} from "@/lib/metrics";
-import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@/lib/types";
+} from "@athonesayate/shared/metrics";
+import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@athonesayate/shared/types";
 
 type Language = "en" | "my";
 

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_Myanmar, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -23,7 +23,23 @@ const notoSansMyanmar = Noto_Sans_Myanmar({
 
 export const metadata: Metadata = {
   title: "athonesayate Expense Tracker",
-  description: "A practical expense tracker dashboard built with Next.js and Supabase."
+  description: "A practical expense tracker dashboard built with Next.js and Supabase.",
+  applicationName: "Athonesayate",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Athonesayate"
+  }
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f8fc" },
+    { media: "(prefers-color-scheme: dark)", color: "#090d1a" }
+  ]
 };
 
 const themeInitScript = `
