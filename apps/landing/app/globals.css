@@ -1,0 +1,288 @@
+/* Design tokens are shared with the app — packages/shared/src/theme.css. */
+@import "@athonesayate/shared/theme.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: rgb(var(--paper));
+  overflow-x: clip;
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: clip;
+  color: rgb(var(--ink));
+  background: rgb(var(--paper));
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Burmese text gets a proper Myanmar face instead of OS fallback */
+[lang="my"] {
+  font-family: var(--font-myanmar), var(--font-body), "Myanmar Text", "Noto Sans Myanmar",
+    ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Liquid glass surfaces (same recipe as the app) ------------------- */
+
+.liquid-ui {
+  isolation: isolate;
+  overflow-x: clip;
+}
+
+.liquid-ui::before {
+  pointer-events: none;
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(115deg, rgb(var(--surface) / 0.18), transparent 26%),
+    linear-gradient(285deg, rgb(var(--river) / 0.05), transparent 46%),
+    linear-gradient(135deg, var(--page-glow-a), transparent 34%),
+    linear-gradient(225deg, transparent 34%, var(--page-glow-b) 62%, transparent 86%),
+    linear-gradient(35deg, transparent 48%, var(--page-glow-c), transparent 72%),
+    repeating-linear-gradient(
+      135deg,
+      rgb(var(--ink) / 0.018) 0,
+      rgb(var(--ink) / 0.018) 1px,
+      transparent 1px,
+      transparent 22px
+    );
+  transform: translateZ(0);
+}
+
+/* Springy press feedback, like UIKit's highlight scale */
+:where(button:not(:disabled), a[class~="press"]) {
+  transition-property: scale;
+  transition-duration: 0.35s;
+  transition-timing-function: var(--ease-spring);
+}
+
+button:not(:disabled):active,
+a[class~="press"]:active {
+  scale: 0.96;
+  transition-duration: 0.08s;
+  transition-timing-function: ease-out;
+}
+
+.liquid-panel,
+.liquid-card,
+.liquid-control {
+  overflow: hidden;
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(145deg, rgb(var(--surface) / var(--glass-solid)), rgb(var(--surface) / var(--glass-solid-soft))),
+    linear-gradient(315deg, rgb(var(--river) / 0.06), transparent 42%);
+  box-shadow: var(--shadow-soft);
+}
+
+.liquid-panel:not(.fixed):not(.sticky):not(.absolute),
+.liquid-card:not(.fixed):not(.sticky):not(.absolute),
+.liquid-control:not(.fixed):not(.sticky):not(.absolute) {
+  position: relative;
+}
+
+.liquid-panel::before,
+.liquid-card::before,
+.liquid-control::before {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, var(--glass-highlight), transparent 28%),
+    linear-gradient(225deg, rgb(var(--surface) / 0.18), transparent 32%),
+    linear-gradient(to bottom, rgb(var(--surface) / 0.14), transparent 45%);
+  opacity: 0.72;
+}
+
+.liquid-panel::after,
+.liquid-card::after {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--surface) / 0.18),
+    inset 16px 0 34px rgb(var(--river) / 0.035),
+    inset -18px -18px 38px rgb(var(--moss) / 0.035);
+  opacity: 0.92;
+}
+
+.liquid-panel > *,
+.liquid-card > *,
+.liquid-control > * {
+  position: relative;
+  z-index: 1;
+}
+
+.liquid-panel {
+  border-radius: 1rem;
+}
+
+.liquid-card {
+  transition:
+    transform 0.35s var(--ease-glide),
+    box-shadow 0.35s var(--ease-glide),
+    border-color 0.35s var(--ease-glide);
+}
+
+.liquid-card:hover {
+  border-color: rgb(var(--river) / 0.24);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-4px);
+}
+
+/* Floating chrome (header) — the one place backdrop blur is visible */
+.liquid-topbar {
+  border: 1px solid var(--glass-border);
+  background: rgb(var(--surface) / var(--glass-alpha-soft));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: 0 16px 36px rgb(var(--ink) / 0.06);
+}
+
+/* ---- Landing-only helpers --------------------------------------------- */
+
+.hero-gradient-text {
+  background: linear-gradient(
+    100deg,
+    rgb(var(--river)) 0%,
+    rgb(var(--moss)) 55%,
+    rgb(var(--amber)) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Apple-style statement text: words light up as the block scrolls through */
+.scroll-word {
+  opacity: 0.16;
+  transition: opacity 0.35s var(--ease-glide);
+}
+
+.scroll-word.is-on {
+  opacity: 1;
+}
+
+/* Horizontal phone scroller on small screens — no visible scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scroll reveal: elements start hidden, .reveal-visible transitions in */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s var(--ease-glide),
+    transform 0.7s var(--ease-glide);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgb(var(--river));
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--river) / 0.22);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--river) / 0.3);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
+  .scroll-word {
+    opacity: 1;
+  }
+}
+
+/* Cheaper blur on touch GPUs, same trade-off as the app */
+@media (pointer: coarse) {
+  .liquid-topbar {
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .liquid-topbar {
+    background: rgb(var(--surface) / 0.96);
+  }
+}

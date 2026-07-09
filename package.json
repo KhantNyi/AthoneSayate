@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @athonesayate/web",
+    "dev:landing": "npm run dev --workspace @athonesayate/landing",
     "build": "npm run build --workspace @athonesayate/web",
+    "build:landing": "npm run build --workspace @athonesayate/landing",
     "lint": "npm run lint --workspace @athonesayate/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "icons": "node scripts/generate-icons.mjs"

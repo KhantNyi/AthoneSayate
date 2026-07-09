@@ -1,0 +1,75 @@
+/* Athonesayate design tokens — single source of truth for every app in
+   the monorepo. Consumed by apps/web and apps/landing; edit here, never
+   copy these blocks into an app stylesheet. */
+
+:root {
+  color-scheme: light;
+  /* iOS-style motion tokens: standard UIKit-ish ease-out and a soft spring */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.44, 1);
+  --ease-glide: cubic-bezier(0.21, 1, 0.32, 1);
+  /* R G B triplets consumed by Tailwind via rgb(var(--x) / <alpha-value>) */
+  --paper: 246 248 252;
+  --surface: 255 255 255;
+  --ink: 23 32 51;
+  --river: 37 99 235;
+  --moss: 22 163 74;
+  --amber: 217 119 6;
+  --coral: 234 76 46;
+  --glass-alpha: 0.68;
+  --glass-alpha-strong: 0.82;
+  --glass-alpha-soft: 0.48;
+  /* Baked-in frost for in-flow surfaces that skip backdrop-filter */
+  --glass-solid: 0.9;
+  --glass-solid-soft: 0.68;
+  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-border-muted: rgba(23, 32, 51, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.82);
+  --glass-blur: 22px;
+  --glass-saturate: 170%;
+  --ios-glass-tint: rgba(255, 255, 255, 0.58);
+  --ios-glass-active: rgba(255, 255, 255, 0.66);
+  --ios-glass-stroke: rgba(255, 255, 255, 0.86);
+  --shadow-soft:
+    0 18px 42px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
+  --shadow-lift:
+    0 28px 70px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --page-glow-a: rgba(37, 99, 235, 0.1);
+  --page-glow-b: rgba(22, 163, 74, 0.08);
+  --page-glow-c: rgba(234, 76, 46, 0.045);
+}
+
+.dark {
+  color-scheme: dark;
+  --paper: 9 13 26;
+  --surface: 18 25 44;
+  --ink: 226 233 246;
+  --river: 96 148 255;
+  --moss: 62 200 116;
+  --amber: 245 173 46;
+  --coral: 255 110 84;
+  --glass-alpha: 0.5;
+  --glass-alpha-strong: 0.68;
+  --glass-alpha-soft: 0.34;
+  --glass-solid: 0.85;
+  --glass-solid-soft: 0.58;
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-muted: rgba(226, 233, 246, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.18);
+  --glass-blur: 24px;
+  --glass-saturate: 150%;
+  --ios-glass-tint: rgba(18, 18, 20, 0.52);
+  --ios-glass-active: rgba(255, 255, 255, 0.16);
+  --ios-glass-stroke: rgba(255, 255, 255, 0.2);
+  --shadow-soft:
+    0 18px 42px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-lift:
+    0 28px 70px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --page-glow-a: rgba(96, 148, 255, 0.16);
+  --page-glow-b: rgba(62, 200, 116, 0.1);
+  --page-glow-c: rgba(255, 110, 84, 0.08);
+}
