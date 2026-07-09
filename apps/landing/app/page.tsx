@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import {
   ArrowRight,
@@ -10,9 +12,12 @@ import {
   Share,
   Sparkles,
   Target,
-  Zap
+  Zap,
+  type LucideIcon
 } from "lucide-react";
 import { Parallax, ScrollWords } from "@/components/motion";
+import { useLang } from "@/components/lang-context";
+import { LangToggle } from "@/components/lang-toggle";
 import {
   DashboardScreen,
   DesktopMockup,
@@ -23,66 +28,23 @@ import {
 import { QuickAddScene } from "@/components/quick-add-scene";
 import { Reveal } from "@/components/reveal";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { APP_URL, SITE_NAME, SITE_NAME_MY, SITE_TAGLINE } from "@/lib/site";
+import { APP_URL, SITE_NAME, SITE_NAME_MY } from "@/lib/site";
 import appIcon from "./icon.png";
 
-const features = [
-  {
-    icon: Zap,
-    tone: "text-amber bg-amber/10",
-    title: "Log spending in seconds",
-    body: "A quick-add sheet that opens from anywhere — amount, category, done. No forms standing between you and getting on with your day."
-  },
-  {
-    icon: ChartLine,
-    tone: "text-river bg-river/10",
-    title: "See where money goes",
-    body: "Spending pace, category mix, month-over-month trends — live charts that answer the question before you finish asking it."
-  },
-  {
-    icon: Target,
-    tone: "text-moss bg-moss/10",
-    title: "Budgets & goals",
-    body: "Set monthly budgets per category and savings goals, then watch the progress bars keep you honest."
-  },
-  {
-    icon: BellRing,
-    tone: "text-coral bg-coral/10",
-    title: "Bill reminders",
-    body: "Recurring rent, subscriptions, utilities — get a push notification before the due date, not a late fee after it."
-  },
-  {
-    icon: CloudOff,
-    tone: "text-river bg-river/10",
-    title: "Works offline",
-    body: "It's a PWA: install it on your home screen and log expenses on the train, in a basement, anywhere. It syncs when you're back."
-  },
-  {
-    icon: MoonStar,
-    tone: "text-amber bg-amber/10",
-    title: "Light & dark, liquid glass",
-    body: "An iOS-inspired glass interface that follows your system theme — flip the toggle above to see for yourself."
-  }
+// Visual bits (icons, tones) stay in code; the words come from the dictionary
+// and are zipped together by index below.
+const featureStyles: { icon: LucideIcon; tone: string }[] = [
+  { icon: Zap, tone: "text-amber bg-amber/10" },
+  { icon: ChartLine, tone: "text-river bg-river/10" },
+  { icon: Target, tone: "text-moss bg-moss/10" },
+  { icon: BellRing, tone: "text-coral bg-coral/10" },
+  { icon: CloudOff, tone: "text-river bg-river/10" },
+  { icon: MoonStar, tone: "text-amber bg-amber/10" }
 ];
 
-const iosSteps = [
-  "Open the app in Safari",
-  "Tap the Share button",
-  "Choose “Add to Home Screen”"
-];
+const platformIcons: LucideIcon[] = [Share, MonitorSmartphone, Monitor];
 
-const androidSteps = [
-  "Open the app in Chrome",
-  "Tap the ⋮ menu",
-  "Choose “Add to Home screen” / “Install app”"
-];
-
-const desktopSteps = [
-  "Open the app in Chrome or Edge",
-  "Click the install icon in the address bar",
-  "Launch it from your dock or taskbar"
-];
-
+// Notification cards live inside the product mockup, so they stay in English.
 const reminders = [
   { title: "Rent due tomorrow", amount: "฿12,000", when: "now" },
   { title: "Netflix renews in 3 days", amount: "฿419", when: "9:00" },
@@ -99,7 +61,7 @@ function NotificationCard({
   when: string;
 }) {
   return (
-    <div className="liquid-panel w-60 border p-3 sm:w-64">
+    <div lang="en" className="liquid-panel w-60 border p-3 sm:w-64">
       <div className="flex items-start gap-2.5">
         <Image src={appIcon} alt="" width={26} height={26} className="mt-0.5 rounded-lg" />
         <div className="min-w-0">
@@ -116,6 +78,8 @@ function NotificationCard({
 }
 
 export default function LandingPage() {
+  const { t } = useLang();
+
   return (
     <main className="liquid-ui min-h-dvh">
       {/* ---- Header ------------------------------------------------------ */}
@@ -136,12 +100,13 @@ export default function LandingPage() {
             </span>
           </a>
           <div className="flex items-center gap-2">
+            <LangToggle />
             <ThemeToggle />
             <a
               href={APP_URL}
-              className="press flex items-center gap-1.5 rounded-full bg-river px-4 py-2 text-sm font-semibold text-bright shadow-glow hover:brightness-110"
+              className="press hidden items-center gap-1.5 rounded-full bg-river px-4 py-2 text-sm font-semibold text-bright shadow-glow hover:brightness-110 sm:flex"
             >
-              Open app
+              {t.openApp}
               <ArrowRight size={15} />
             </a>
           </div>
@@ -156,28 +121,21 @@ export default function LandingPage() {
         <div className="max-w-xl">
           <div className="animate-fade-rise mb-5 inline-flex items-center gap-2 rounded-full border border-river/20 bg-river/10 px-3.5 py-1.5 text-xs font-semibold text-river">
             <Sparkles size={13} />
-            Free · Installable PWA · Phone & desktop
+            {t.heroBadge}
           </div>
           <h1
             className="animate-fade-rise text-4xl font-bold leading-[1.08] sm:text-5xl lg:text-6xl"
             style={{ animationDelay: "80ms" }}
           >
-            Know where <span className="hero-gradient-text">every baht</span> goes.
+            {t.heroTitle.pre}
+            <span className="hero-gradient-text">{t.heroTitle.hi}</span>
+            {t.heroTitle.post}
           </h1>
-          <p
-            lang="my"
-            className="animate-fade-rise mt-4 text-sm font-medium text-ink/55"
-            style={{ animationDelay: "140ms" }}
-          >
-            အသုံးစရိတ်ကို လွယ်ကူမြန်ဆန်စွာ မှတ်တမ်းတင်ပါ။
-          </p>
           <p
             className="animate-fade-rise mt-4 text-base leading-relaxed text-ink/65 sm:text-lg"
             style={{ animationDelay: "200ms" }}
           >
-            {SITE_NAME} is a fast, personal expense tracker. Log a purchase in seconds,
-            see your budgets and trends at a glance, and get a nudge before bills are due —
-            all in an app that lives on your home screen and works offline.
+            {t.heroLede}
           </p>
           <div
             className="animate-fade-rise mt-8 flex flex-wrap items-center gap-3"
@@ -187,7 +145,7 @@ export default function LandingPage() {
               href={APP_URL}
               className="press flex items-center gap-2 rounded-full bg-river px-6 py-3.5 text-sm font-bold text-bright shadow-glow transition hover:brightness-110 sm:text-base"
             >
-              Open the app
+              {t.heroCtaPrimary}
               <ArrowRight size={17} />
             </a>
             <a
@@ -195,14 +153,14 @@ export default function LandingPage() {
               className="press liquid-control flex items-center gap-2 rounded-full border px-6 py-3.5 text-sm font-semibold text-ink/80 sm:text-base"
             >
               <MonitorSmartphone size={17} className="text-river" />
-              Install on your phone
+              {t.heroCtaSecondary}
             </a>
           </div>
           <p
             className="animate-fade-rise mt-5 text-xs text-ink/45"
             style={{ animationDelay: "340ms" }}
           >
-            Nothing to download from an app store — it runs right in your browser.
+            {t.heroFootnote}
           </p>
         </div>
 
@@ -227,18 +185,17 @@ export default function LandingPage() {
       {/* ---- Statement --------------------------------------------------- */}
       <section className="mx-auto max-w-4xl px-6 py-24 md:py-36">
         <ScrollWords
+          key={t.statement1}
           className="font-display text-3xl font-bold leading-snug sm:text-5xl md:text-[3.4rem]"
-          text="Most spending is invisible. A coffee here, a ride there — gone. Athonesayate turns it back into something you can see, and change."
+          text={t.statement1}
         />
       </section>
 
       {/* ---- Showcase trio ------------------------------------------------ */}
       <section className="pb-24 md:pb-32">
         <Reveal className="mx-auto mb-4 max-w-2xl px-6 text-center">
-          <h2 className="text-3xl font-bold sm:text-4xl">One glance, full picture.</h2>
-          <p className="mt-3 text-ink/60">
-            Dashboard, transactions, reports — every screen answers a question you actually have.
-          </p>
+          <h2 className="text-3xl font-bold sm:text-4xl">{t.showcaseTitle}</h2>
+          <p className="mt-3 text-ink/60">{t.showcaseSub}</p>
         </Reveal>
         <div className="no-scrollbar flex snap-x snap-mandatory items-center gap-6 overflow-x-auto px-8 py-14 md:justify-center md:gap-10 md:overflow-visible">
           <Parallax speed={0.12} disableBelow={768} className="shrink-0 snap-center">
@@ -246,7 +203,9 @@ export default function LandingPage() {
               <PhoneFrame activeTab={1} className="w-[260px] sm:w-[280px]">
                 <TransactionsScreen />
               </PhoneFrame>
-              <p className="mt-5 text-center text-sm font-semibold text-ink/50">Transactions</p>
+              <p className="mt-5 text-center text-sm font-semibold text-ink/50">
+                {t.labelTransactions}
+              </p>
             </div>
           </Parallax>
           <Parallax speed={-0.06} disableBelow={768} className="shrink-0 snap-center">
@@ -254,7 +213,9 @@ export default function LandingPage() {
               <PhoneFrame activeTab={0} className="w-[260px] sm:w-[300px]">
                 <DashboardScreen />
               </PhoneFrame>
-              <p className="mt-5 text-center text-sm font-semibold text-ink/50">Dashboard</p>
+              <p className="mt-5 text-center text-sm font-semibold text-ink/50">
+                {t.labelDashboard}
+              </p>
             </div>
           </Parallax>
           <Parallax speed={0.18} disableBelow={768} className="shrink-0 snap-center">
@@ -262,38 +223,34 @@ export default function LandingPage() {
               <PhoneFrame activeTab={2} className="w-[260px] sm:w-[280px]">
                 <ReportsScreen />
               </PhoneFrame>
-              <p className="mt-5 text-center text-sm font-semibold text-ink/50">Reports</p>
+              <p className="mt-5 text-center text-sm font-semibold text-ink/50">{t.labelReports}</p>
             </div>
           </Parallax>
         </div>
-        <p className="px-6 text-center text-xs text-ink/40 md:hidden">Swipe to see more screens →</p>
+        <p className="px-6 text-center text-xs text-ink/40 md:hidden">{t.swipeHint}</p>
       </section>
 
       {/* ---- Features ---------------------------------------------------- */}
       <section className="mx-auto max-w-6xl px-6 pb-24">
         <Reveal className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold sm:text-4xl">
-            Everything a money diary should be
-          </h2>
-          <p className="mt-3 text-ink/60">
-            Built for people who actually track their spending every day — so every tap is fast,
-            legible, and a little bit satisfying.
-          </p>
+          <h2 className="text-3xl font-bold sm:text-4xl">{t.featuresTitle}</h2>
+          <p className="mt-3 text-ink/60">{t.featuresSub}</p>
         </Reveal>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, i) => (
-            <Reveal key={feature.title} delay={(i % 3) * 90}>
-              <div className="liquid-card h-full rounded-2xl border p-6">
-                <span
-                  className={`mb-4 grid h-11 w-11 place-items-center rounded-xl ${feature.tone}`}
-                >
-                  <feature.icon size={21} />
-                </span>
-                <h3 className="mb-2 text-lg font-bold">{feature.title}</h3>
-                <p className="text-sm leading-relaxed text-ink/60">{feature.body}</p>
-              </div>
-            </Reveal>
-          ))}
+          {t.features.map((feature, i) => {
+            const { icon: Icon, tone } = featureStyles[i];
+            return (
+              <Reveal key={feature.title} delay={(i % 3) * 90}>
+                <div className="liquid-card h-full rounded-2xl border p-6">
+                  <span className={`mb-4 grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
+                    <Icon size={21} />
+                  </span>
+                  <h3 className="mb-2 text-lg font-bold">{feature.title}</h3>
+                  <p className="text-sm leading-relaxed text-ink/60">{feature.body}</p>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       </section>
 
@@ -321,18 +278,12 @@ export default function LandingPage() {
         <Reveal className="order-1 md:order-2" delay={100}>
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-coral/20 bg-coral/10 px-3.5 py-1.5 text-xs font-semibold text-coral">
             <BellRing size={13} />
-            Push notifications
+            {t.remindBadge}
           </div>
           <h2 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-            Never pay late
-            <br />
-            again.
+            {t.remindTitle}
           </h2>
-          <p className="mt-4 max-w-md text-ink/60 sm:text-lg">
-            Set up rent, subscriptions, and utilities once. {SITE_NAME} watches the calendar
-            and taps you on the shoulder before the due date — right on your lock screen,
-            even when the app is closed.
-          </p>
+          <p className="mt-4 max-w-md text-ink/60 sm:text-lg">{t.remindBody}</p>
         </Reveal>
       </section>
 
@@ -341,14 +292,10 @@ export default function LandingPage() {
         <Reveal className="mx-auto mb-12 max-w-2xl text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-moss/20 bg-moss/10 px-3.5 py-1.5 text-xs font-semibold text-moss">
             <Monitor size={13} />
-            Desktop ready
+            {t.desktopBadge}
           </div>
-          <h2 className="text-3xl font-bold sm:text-4xl">Big screen, bigger picture.</h2>
-          <p className="mt-3 text-ink/60">
-            The same app scales up. Open {SITE_NAME} in a browser tab — or install it as a
-            desktop app — and the dashboard spreads out: four-up metrics, wide charts, and
-            your whole month on one screen.
-          </p>
+          <h2 className="text-3xl font-bold sm:text-4xl">{t.desktopTitle}</h2>
+          <p className="mt-3 text-ink/60">{t.desktopBody}</p>
         </Reveal>
         <Reveal delay={120}>
           <Parallax speed={0.05}>
@@ -360,48 +307,45 @@ export default function LandingPage() {
       {/* ---- Statement 2 --------------------------------------------------- */}
       <section className="mx-auto max-w-4xl px-6 py-20 md:py-28">
         <ScrollWords
+          key={t.statement2}
           className="font-display text-3xl font-bold leading-snug sm:text-5xl md:text-[3.4rem]"
-          text="Feels native. Installs in a tap. Works offline. On your phone and your desktop — no app store between you and your money."
+          text={t.statement2}
         />
       </section>
 
       {/* ---- Install ------------------------------------------------------ */}
       <section id="install" className="mx-auto max-w-6xl scroll-mt-28 px-6 pb-24">
         <Reveal className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold sm:text-4xl">Install it anywhere</h2>
-          <p className="mt-3 text-ink/60">
-            {SITE_NAME} installs like a native app — full screen, its own icon, push
-            notifications — on your phone and your computer, without an app store in the way.
-          </p>
+          <h2 className="text-3xl font-bold sm:text-4xl">{t.installTitle}</h2>
+          <p className="mt-3 text-ink/60">{t.installSub}</p>
         </Reveal>
         <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { label: "iPhone & iPad", note: "Safari", steps: iosSteps, icon: Share },
-            { label: "Android", note: "Chrome", steps: androidSteps, icon: MonitorSmartphone },
-            { label: "Desktop", note: "Chrome · Edge", steps: desktopSteps, icon: Monitor }
-          ].map((platform, i) => (
-            <Reveal key={platform.label} delay={i * 100}>
-              <div className="liquid-panel h-full border p-7">
-                <div className="mb-5 flex items-center justify-between">
-                  <h3 className="text-lg font-bold">{platform.label}</h3>
-                  <span className="flex items-center gap-1.5 rounded-full bg-river/10 px-3 py-1 text-xs font-semibold text-river">
-                    <platform.icon size={13} />
-                    {platform.note}
-                  </span>
+          {t.platforms.map((platform, i) => {
+            const Icon = platformIcons[i];
+            return (
+              <Reveal key={platform.label} delay={i * 100}>
+                <div className="liquid-panel h-full border p-7">
+                  <div className="mb-5 flex items-center justify-between">
+                    <h3 className="text-lg font-bold">{platform.label}</h3>
+                    <span className="flex items-center gap-1.5 rounded-full bg-river/10 px-3 py-1 text-xs font-semibold text-river">
+                      <Icon size={13} />
+                      {platform.note}
+                    </span>
+                  </div>
+                  <ol className="space-y-3">
+                    {platform.steps.map((step, n) => (
+                      <li key={step} className="flex items-center gap-3 text-sm text-ink/75">
+                        <span className="tnum grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">
+                          {n + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
                 </div>
-                <ol className="space-y-3">
-                  {platform.steps.map((step, n) => (
-                    <li key={step} className="flex items-center gap-3 text-sm text-ink/75">
-                      <span className="tnum grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">
-                        {n + 1}
-                      </span>
-                      {step}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </Reveal>
-          ))}
+              </Reveal>
+            );
+          })}
         </div>
       </section>
 
@@ -409,20 +353,13 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-6 pb-24">
         <Reveal>
           <div className="liquid-panel overflow-hidden border p-10 text-center sm:p-14">
-            <p lang="my" className="mb-2 text-sm font-medium text-ink/50">
-              {SITE_NAME_MY}
-            </p>
-            <h2 className="mx-auto max-w-xl text-3xl font-bold sm:text-4xl">
-              {SITE_TAGLINE}
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-ink/60">
-              Your first expense takes ten seconds to log. The habit pays for itself.
-            </p>
+            <h2 className="mx-auto max-w-xl text-3xl font-bold sm:text-4xl">{t.ctaTagline}</h2>
+            <p className="mx-auto mt-3 max-w-md text-ink/60">{t.ctaBody}</p>
             <a
               href={APP_URL}
               className="press mt-8 inline-flex items-center gap-2 rounded-full bg-river px-8 py-4 font-bold text-bright shadow-glow transition hover:brightness-110"
             >
-              Start tracking
+              {t.ctaButton}
               <ArrowRight size={18} />
             </a>
           </div>
@@ -438,7 +375,7 @@ export default function LandingPage() {
             <span lang="my">{SITE_NAME_MY}</span>
           </span>
           <a href={APP_URL} className="hover:text-ink/80">
-            Open the app →
+            {t.footerOpen}
           </a>
         </div>
       </footer>

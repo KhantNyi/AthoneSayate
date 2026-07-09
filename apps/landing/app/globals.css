@@ -52,6 +52,35 @@ h3 {
   letter-spacing: 0;
 }
 
+/* When the whole page is switched to Myanmar, route body copy and display
+   headings through the Noto Sans Myanmar webfont (the direct body/heading
+   rules above would otherwise win over the inherited [lang="my"] value). */
+html[lang="my"] body {
+  font-family: var(--font-myanmar), var(--font-body), "Myanmar Text", "Noto Sans Myanmar",
+    ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+html[lang="my"] h1,
+html[lang="my"] h2,
+html[lang="my"] h3 {
+  font-family: var(--font-myanmar), var(--font-display), "Myanmar Text", "Noto Sans Myanmar",
+    ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ...but the product mockups are always shown in English, so opt their
+   Latin text back into the Inter/Space Grotesk stack. */
+html[lang="my"] [lang="en"] {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  line-height: normal;
+}
+
+html[lang="my"] [lang="en"] h1,
+html[lang="my"] [lang="en"] h2,
+html[lang="my"] [lang="en"] h3 {
+  font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }

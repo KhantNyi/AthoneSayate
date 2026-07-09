@@ -1,0 +1,9 @@
+
+> athonesayate@0.1.0 dev:landing
+> npm run dev --workspace @athonesayate/landing
+
+
+> @athonesayate/landing@0.1.0 dev
+> next dev -p 3001
+
+[?25h

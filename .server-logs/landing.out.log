@@ -1,0 +1,239 @@
+
+> athonesayate@0.1.0 dev:landing
+> npm run dev --workspace @athonesayate/landing
+
+
+> @athonesayate/landing@0.1.0 dev
+> next dev -p 3001
+
+   ▲ Next.js 15.5.18
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.1.109:3001
+
+ ✓ Starting...
+ ✓ Ready in 1783ms
+ ○ Compiling / ...
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Setting up new context...
+Finding changed files: 4.387ms
+Reading changed files: 70.606ms
+Sorting candidates: 0.492ms
+Generate rules: 31.818ms
+Build stylesheet: 1.135ms
+Potential classes:  1018
+Active contexts:  1
+JIT TOTAL: 291.737ms
+
+
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\packages\shared\src\theme.css
+JIT TOTAL: 1.139ms
+
+
+ ✓ Compiled / in 3.4s (694 modules)
+ GET / 200 in 4037ms
+ GET / 200 in 233ms
+ ✓ Compiled /icon.png in 215ms (420 modules)
+ GET /icon.png?7ec0876f582e0b96 200 in 441ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 3.559ms
+Reading changed files: 3.645ms
+Sorting candidates: 0.116ms
+Generate rules: 2.035ms
+Build stylesheet: 0.944ms
+Potential classes:  224
+Active contexts:  1
+JIT TOTAL: 29.86ms
+
+
+ ✓ Compiled in 183ms (264 modules)
+ GET / 200 in 121ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 1.601ms
+Reading changed files: 6.27ms
+Sorting candidates: 0.227ms
+Generate rules: 7.278ms
+Build stylesheet: 1.079ms
+Potential classes:  567
+Active contexts:  1
+JIT TOTAL: 30.611ms
+
+
+ ✓ Compiled in 130ms (264 modules)
+ GET / 200 in 55ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 2.261ms
+Reading changed files: 5.34ms
+Sorting candidates: 0.152ms
+Generate rules: 7.695ms
+Build stylesheet: 1.315ms
+Potential classes:  317
+Active contexts:  1
+JIT TOTAL: 38.357ms
+
+
+ ✓ Compiled in 166ms (264 modules)
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 1.098ms
+Reading changed files: 0.006ms
+Sorting candidates: 0.008ms
+Generate rules: 0.325ms
+Build stylesheet: 0.007ms
+Potential classes:  1
+Active contexts:  1
+JIT TOTAL: 19.237ms
+
+
+ ✓ Compiled in 224ms (264 modules)
+ GET / 200 in 239ms
+ GET / 200 in 56ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 3.738ms
+Reading changed files: 4.271ms
+Sorting candidates: 0.112ms
+Generate rules: 1.98ms
+Build stylesheet: 0.006ms
+Potential classes:  315
+Active contexts:  1
+JIT TOTAL: 31.748ms
+
+
+ ✓ Compiled in 169ms (264 modules)
+ GET / 200 in 79ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Setting up new context...
+Finding changed files: 1.411ms
+Reading changed files: 19.213ms
+Sorting candidates: 1.949ms
+Generate rules: 35.436ms
+Build stylesheet: 1.004ms
+Potential classes:  1440
+Active contexts:  2
+JIT TOTAL: 132.384ms
+
+
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 1.973ms
+Reading changed files: 0.01ms
+Sorting candidates: 0.006ms
+Generate rules: 0.309ms
+Build stylesheet: 0.004ms
+Potential classes:  1
+Active contexts:  2
+JIT TOTAL: 19.859ms
+
+
+ ✓ Compiled in 527ms (667 modules)
+ GET / 200 in 181ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Setting up new context...
+Finding changed files: 1.692ms
+Reading changed files: 23.313ms
+Sorting candidates: 0.93ms
+Generate rules: 18.44ms
+Build stylesheet: 0.637ms
+Potential classes:  1440
+Active contexts:  2
+JIT TOTAL: 102.054ms
+
+
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 0.856ms
+Reading changed files: 0.003ms
+Sorting candidates: 0.003ms
+Generate rules: 0.123ms
+Build stylesheet: 0.001ms
+Potential classes:  1
+Active contexts:  2
+JIT TOTAL: 13.169ms
+
+
+ ✓ Compiled in 363ms (667 modules)
+ GET / 200 in 146ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 2.987ms
+Reading changed files: 11.054ms
+Sorting candidates: 0.681ms
+Generate rules: 11.54ms
+Build stylesheet: 1.897ms
+Potential classes:  725
+Active contexts:  2
+JIT TOTAL: 50.16ms
+
+
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 3.324ms
+Reading changed files: 0.003ms
+Sorting candidates: 0.007ms
+Generate rules: 0.35ms
+Build stylesheet: 0.004ms
+Potential classes:  1
+Active contexts:  2
+JIT TOTAL: 31.712ms
+
+
+ ✓ Compiled in 831ms (719 modules)
+ GET / 200 in 207ms
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\landing\app\globals.css
+Finding changed files: 1.594ms
+Reading changed files: 0.004ms
+Sorting candidates: 0.008ms
+Generate rules: 0.337ms
+Build stylesheet: 0.003ms
+Potential classes:  1
+Active contexts:  2
+JIT TOTAL: 23.03ms
+
+
+ ✓ Compiled in 148ms (285 modules)
+ GET / 200 in 120ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1246ms (1051 modules)
+ GET / 200 in 933ms
+ GET / 500 in 3693ms
+ GET / 200 in 326ms
+ GET / 200 in 391ms
+ GET / 200 in 378ms
+ GET / 200 in 282ms
+ GET / 200 in 306ms
+ ✓ Compiled /icon.png in 231ms (645 modules)
+ GET /icon.png?7ec0876f582e0b96 200 in 328ms
+ GET / 200 in 350ms
+ GET /icon.png?7ec0876f582e0b96 200 in 7ms
+ GET / 200 in 234ms
+ GET / 200 in 274ms
+ GET /icon.png?7ec0876f582e0b96 200 in 15ms
+ GET / 200 in 246ms
+ GET /icon.png?7ec0876f582e0b96 200 in 10ms
+ GET / 500 in 2047ms
+ GET / 500 in 34ms
+ GET / 500 in 110ms
+ GET / 500 in 30ms
+[?25h

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
+import { useLang } from "./lang-context";
 import { DashboardScreen, PhoneFrame, QuickAddSheet, SavedToast } from "./phone";
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -12,6 +13,7 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
    the dashboard, then a "Saved" toast pops. Styles are written straight to
    the DOM (transform/opacity only), no re-renders per frame. */
 export function QuickAddScene() {
+  const { t } = useLang();
   const sectionRef = useRef<HTMLElement>(null);
   const phoneRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
@@ -77,30 +79,23 @@ export function QuickAddScene() {
           <div className="text-center md:text-left">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-river/20 bg-river/10 px-3.5 py-1.5 text-xs font-semibold text-river">
               <Sparkles size={13} />
-              Quick add
+              {t.quickBadge}
             </div>
             <h2 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-              Three taps.
+              {t.quickTitle.pre}
               <br />
-              <span className="hero-gradient-text">Logged.</span>
+              <span className="hero-gradient-text">{t.quickTitle.hi}</span>
             </h2>
-            <p className="mx-auto mt-4 max-w-md text-ink/60 md:mx-0 sm:text-lg">
-              Keep scrolling — that&apos;s the whole flow. Amount, category, save.
-              The sheet is already gone before your coffee arrives.
-            </p>
+            <p className="mx-auto mt-4 max-w-md text-ink/60 md:mx-0 sm:text-lg">{t.quickLede}</p>
             <ul className="mt-6 hidden space-y-2 text-sm text-ink/60 sm:block">
-              <li className="flex items-center justify-center gap-2 md:justify-start">
-                <span className="tnum grid h-6 w-6 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">1</span>
-                Type the amount
-              </li>
-              <li className="flex items-center justify-center gap-2 md:justify-start">
-                <span className="tnum grid h-6 w-6 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">2</span>
-                Pick a category
-              </li>
-              <li className="flex items-center justify-center gap-2 md:justify-start">
-                <span className="tnum grid h-6 w-6 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">3</span>
-                Save — synced and charted
-              </li>
+              {t.quickSteps.map((step, i) => (
+                <li key={step} className="flex items-center justify-center gap-2 md:justify-start">
+                  <span className="tnum grid h-6 w-6 place-items-center rounded-full bg-ink/10 text-xs font-bold text-ink/70">
+                    {i + 1}
+                  </span>
+                  {step}
+                </li>
+              ))}
             </ul>
           </div>
 

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_Myanmar, Space_Grotesk } from "next/font/google";
+import { LangProvider } from "@/components/lang-context";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import "./globals.css";
 
@@ -44,13 +45,17 @@ export const viewport: Viewport = {
   ]
 };
 
-/* Same storage key as the app so the toggle behaves identically here. */
-const themeInitScript = `
+/* Same storage key as the app so the toggle behaves identically here.
+   Also restores the saved language so the Myanmar webfont is selected
+   before first paint (the text itself swaps on hydration). */
+const bootScript = `
 (function () {
   try {
-    var stored = localStorage.getItem("athonesayate-theme");
-    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var theme = localStorage.getItem("athonesayate-theme");
+    var dark = theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     if (dark) document.documentElement.classList.add("dark");
+    var lang = localStorage.getItem("athonesayate-lang");
+    if (lang === "my" || lang === "en") document.documentElement.lang = lang;
   } catch (e) {}
 })();
 `;
@@ -67,9 +72,11 @@ export default function RootLayout({
       className={`${inter.variable} ${spaceGrotesk.variable} ${notoSansMyanmar.variable}`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <LangProvider>{children}</LangProvider>
+      </body>
     </html>
   );
 }

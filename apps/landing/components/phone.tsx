@@ -35,6 +35,7 @@ export function PhoneFrame({
   return (
     <div
       aria-hidden
+      lang="en"
       className={`${float ? "animate-phone-float " : ""}mx-auto w-[300px] rounded-[3rem] border border-white/40 bg-ink/90 p-[10px] sm:w-[320px] ${className}`}
       style={{ boxShadow: "var(--shadow-lift), 0 40px 90px rgb(var(--river) / 0.22)" }}
     >
@@ -374,6 +375,7 @@ export function DesktopMockup() {
   return (
     <div
       aria-hidden
+      lang="en"
       className="mx-auto w-full max-w-4xl rounded-2xl border border-white/40 bg-ink/90 p-2"
       style={{ boxShadow: "var(--shadow-lift), 0 40px 90px rgb(var(--river) / 0.18)" }}
     >

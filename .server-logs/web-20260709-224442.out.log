@@ -1,0 +1,35 @@
+
+> athonesayate@0.1.0 dev
+> npm run dev --workspace @athonesayate/web
+
+
+> @athonesayate/web@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.18
+   - Local:        http://localhost:3002
+   - Network:      http://192.168.1.109:3002
+   - Environments: .env.local
+
+ ✓ Starting...
+ ○ (serwist) Serwist is disabled.
+ ○ (serwist) Serwist is disabled.
+ ✓ Ready in 2.2s
+ ○ Compiling / ...
+
+
+Source path: C:\Users\ADMIN\Desktop\athonesayate\apps\web\app\globals.css
+Setting up new context...
+Finding changed files: 7.813ms
+Reading changed files: 73.081ms
+Sorting candidates: 2.533ms
+Generate rules: 72.409ms
+Build stylesheet: 2.048ms
+Potential classes:  4503
+Active contexts:  1
+JIT TOTAL: 317.104ms
+
+
+ ✓ Compiled / in 2.3s (1986 modules)
+ GET / 200 in 2727ms
+[?25h
