@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownCircle, ArrowUpCircle, Banknote, PiggyBank, Plus } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Banknote, PiggyBank } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { format, isSameMonth, parseISO } from "date-fns";
 import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
@@ -41,21 +41,7 @@ export default function DashboardTab() {
     categoryLabel,
     recurringDueLabel,
     displayCategories,
-    subcategories,
-    quickAddCategories,
-    type,
-    setType,
-    amount,
-    setAmount,
-    occurredOn,
-    setOccurredOn,
-    notes,
-    setNotes,
-    categoryId,
-    setCategoryId,
-    canAddTransaction,
-    isSaving,
-    handleSubmit
+    subcategories
   } = useApp();
 
   const accountTotal = balances.reduce((sum, account) => sum + account.balance, 0);
@@ -66,6 +52,15 @@ export default function DashboardTab() {
   const forecastTrendLabel = expenseForecast.trendPercent === null
     ? `Not enough history - ${expenseForecast.confidence} confidence`
     : `${Math.abs(expenseForecast.trendPercent).toFixed(0)}% ${expenseForecast.trendPercent >= 0 ? "above" : "below"} ${expenseForecast.historyMonths}-month average - ${expenseForecast.confidence} confidence`;
+  const forecastTotal = Math.max(expenseForecast.projected, 1);
+  const forecastParts = [
+    { label: "Spent", value: expenseForecast.actualToDate, color: "bg-coral" },
+    { label: "Expected variable", value: expenseForecast.predictedRemaining, color: "bg-river" },
+    { label: "Recurring due", value: expenseForecast.recurringDue, color: "bg-amber" }
+  ];
+  const detailedForecastTrend = expenseForecast.trendPercent === null
+    ? "More completed months will improve this estimate."
+    : `${Math.abs(expenseForecast.trendPercent).toFixed(0)}% ${expenseForecast.trendPercent >= 0 ? "above" : "below"} the recent weighted average.`;
 
   return (
     <div className="grid gap-4">
@@ -272,37 +267,48 @@ export default function DashboardTab() {
           </div>
         </DashboardPanel>
 
-        <DashboardPanel title={t.quickAdd} action={type === "income" ? t.income : t.expense}>
-          <form onSubmit={handleSubmit} className="grid gap-3">
-            <div className="grid grid-cols-2 gap-1 rounded-xl border border-ink/10 bg-white/45 p-1">
-              {(["expense", "income"] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setType(kind)}
-                  className={`h-9 rounded-lg text-xs font-semibold transition ${
-                    type === kind ? "bg-river text-bright shadow-glow" : "text-ink/55 hover:bg-river/10 hover:text-river"
-                  }`}
-                >
-                  {kind === "income" ? t.income : t.expense}
-                </button>
-              ))}
+        <DashboardPanel title="Projected usage" action={`${expenseForecast.confidence.charAt(0).toUpperCase()}${expenseForecast.confidence.slice(1)} confidence`}>
+          <div className="grid gap-4">
+            <div className="rounded-xl border border-river/15 bg-river/5 p-4">
+              <p className="text-xs font-semibold uppercase text-river">Forecast for {format(new Date(), "MMMM")}</p>
+              <p className="tnum mt-1 font-display text-3xl font-semibold text-ink">{currency.format(expenseForecast.projected)}</p>
+              <p className="mt-1 text-xs text-ink/50">{detailedForecastTrend}</p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2" placeholder="Coffee, Groceries" />
-              <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={preciseCurrency.format(0)} />
-              <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-              <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2">
-                {quickAddCategories.map((category) => (
-                  <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+
+            <div className="grid grid-cols-3 gap-2">
+              <ActivityStat label="Spent" value={currency.format(expenseForecast.actualToDate)} tone="coral" compact />
+              <ActivityStat label="Expected" value={currency.format(expenseForecast.predictedRemaining)} tone="river" compact />
+              <ActivityStat label="Bills due" value={currency.format(expenseForecast.recurringDue)} tone="amber" compact />
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                <span className="font-semibold uppercase text-ink/45">Projection makeup</span>
+                <span className="text-ink/45">{expenseForecast.historyMonths} completed month{expenseForecast.historyMonths === 1 ? "" : "s"}</span>
+              </div>
+              <div className="flex h-3 overflow-hidden rounded-full bg-ink/10">
+                {forecastParts.map((part) => (
+                  <div key={part.label} className={part.color} style={{ width: `${(part.value / forecastTotal) * 100}%` }} />
                 ))}
-              </select>
+              </div>
+              <div className="mt-3 grid gap-1.5 text-xs text-ink/55">
+                {forecastParts.map((part) => (
+                  <div key={part.label} className="flex items-center justify-between gap-3">
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <span className={`size-2.5 shrink-0 rounded-full ${part.color}`} />
+                      <span className="truncate">{part.label}</span>
+                    </span>
+                    <strong className="tnum shrink-0 text-ink">{currency.format(part.value)}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
-            <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-river to-blue-600 text-sm font-semibold text-bright shadow-glow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45">
-              <Plus size={17} />
-              {isSaving ? "Saving" : type === "income" ? "Add income" : "Add expense"}
-            </button>
-          </form>
+
+            <div className="flex items-center justify-between gap-3 border-t border-ink/10 pt-3 text-sm">
+              <span className="text-ink/55">Recent weighted average</span>
+              <strong className="tnum">{expenseForecast.historyMonths > 0 ? currency.format(expenseForecast.historicalBaseline) : "Not available"}</strong>
+            </div>
+          </div>
         </DashboardPanel>
       </div>
     </div>

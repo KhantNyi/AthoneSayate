@@ -34,6 +34,7 @@ import {
   dailySeries,
   forecastMonthlyExpenses,
   frequentCategories,
+  frequentSubcategories,
   monthTransactions,
   safeToSpend,
   totals,
@@ -282,12 +283,12 @@ export function useAppState() {
   }, [categories, categoryId, transactions, type]);
 
   useEffect(() => {
-    const categorySubcategories = subcategories.filter((item) => item.categoryId === categoryId);
+    const categorySubcategories = frequentSubcategories(subcategories, transactions, categoryId);
 
     if (!categorySubcategories.some((item) => item.id === subcategoryId)) {
       setSubcategoryId(categorySubcategories[0]?.id ?? "");
     }
-  }, [categoryId, subcategories, subcategoryId]);
+  }, [categoryId, subcategories, subcategoryId, transactions]);
 
   useEffect(() => {
     const currentCategory = categories.find((category) => category.id === recurringCategoryId);
@@ -339,6 +340,7 @@ export function useAppState() {
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions]);
   const displayCategories = useMemo(() => applyCategoryDisplayColors(categories), [categories]);
   const quickAddCategories = useMemo(() => frequentCategories(displayCategories, transactions, type), [displayCategories, transactions, type]);
+  const quickAddSubcategories = useMemo(() => frequentSubcategories(subcategories, transactions, categoryId), [categoryId, subcategories, transactions]);
   const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, dashboardCategoryMonthKey), [displayCategories, budgets, dashboardCategoryMonthKey]);
   const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, budgetMonth), [displayCategories, budgets, budgetMonth]);
   const budgetMonthTx = useMemo(() => monthTransactions(transactions, visibleMonth), [transactions, visibleMonth]);
@@ -1455,6 +1457,7 @@ export function useAppState() {
     balances,
     displayCategories,
     quickAddCategories,
+    quickAddSubcategories,
     // shell / nav
     activeTab,
     setActiveTab,

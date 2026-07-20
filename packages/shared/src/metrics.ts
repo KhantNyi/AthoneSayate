@@ -9,7 +9,7 @@ import {
   subDays,
   subMonths
 } from "date-fns";
-import type { Account, Category, RecurringRule, Transaction, TransactionType } from "./types";
+import type { Account, Category, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
 
 export const currency = new Intl.NumberFormat("th-TH", {
   style: "currency",
@@ -110,6 +110,46 @@ export function frequentCategories(
 
   return categories
     .filter((category) => category.kind === type)
+    .slice()
+    .sort((a, b) => {
+      const aUsage = usage.get(a.id) ?? { count: 0, latest: "" };
+      const bUsage = usage.get(b.id) ?? { count: 0, latest: "" };
+      return bUsage.count - aUsage.count || bUsage.latest.localeCompare(aUsage.latest) || a.name.localeCompare(b.name);
+    });
+}
+
+export function frequentSubcategories(
+  subcategories: Subcategory[],
+  transactions: Transaction[],
+  categoryId: string,
+  referenceDate = new Date(),
+  windowDays = 90
+) {
+  const today = format(referenceDate, "yyyy-MM-dd");
+  const cutoff = format(subDays(referenceDate, Math.max(windowDays - 1, 0)), "yyyy-MM-dd");
+  const usage = new Map<string, { count: number; latest: string }>();
+
+  for (const transaction of transactions) {
+    if (
+      transaction.categoryId !== categoryId ||
+      transaction.isRecurring ||
+      transaction.recurringRuleId ||
+      !transaction.subcategoryId ||
+      transaction.occurredOn < cutoff ||
+      transaction.occurredOn > today
+    ) {
+      continue;
+    }
+
+    const current = usage.get(transaction.subcategoryId) ?? { count: 0, latest: "" };
+    usage.set(transaction.subcategoryId, {
+      count: current.count + 1,
+      latest: transaction.occurredOn > current.latest ? transaction.occurredOn : current.latest
+    });
+  }
+
+  return subcategories
+    .filter((subcategory) => subcategory.categoryId === categoryId)
     .slice()
     .sort((a, b) => {
       const aUsage = usage.get(a.id) ?? { count: 0, latest: "" };

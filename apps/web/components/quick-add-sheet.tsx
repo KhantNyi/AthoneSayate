@@ -17,7 +17,7 @@ export function QuickAddSheet() {
     quickAddCategories,
     categoryId,
     setCategoryId,
-    subcategories,
+    quickAddSubcategories,
     subcategoryId,
     setSubcategoryId,
     accounts,
@@ -119,11 +119,11 @@ export function QuickAddSheet() {
           </div>
         </div>
 
-        {subcategories.some((subcategory) => subcategory.categoryId === categoryId) ? (
+        {quickAddSubcategories.length > 0 ? (
           <div className="mb-4">
             <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">Subcategory</span>
             <div className="flex flex-wrap gap-1.5">
-              {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => {
+              {quickAddSubcategories.map((subcategory) => {
                 const active = subcategory.id === subcategoryId;
                 return (
                   <button
