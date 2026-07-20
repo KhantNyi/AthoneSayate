@@ -32,6 +32,8 @@ import {
   accountBalances,
   categorySpend,
   dailySeries,
+  forecastMonthlyExpenses,
+  frequentCategories,
   monthTransactions,
   safeToSpend,
   totals,
@@ -231,7 +233,7 @@ export function useAppState() {
 
       if (initial) {
         setAccountId(data.accounts[0]?.id ?? "");
-        setCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
+        setCategoryId(frequentCategories(data.categories, data.transactions, "expense")[0]?.id ?? "");
         setNewSubcategoryCategoryId(data.categories.find((category) => category.kind === "expense")?.id ?? "");
         setBudgetDrafts(Object.fromEntries(data.categories.filter((category) => category.kind === "expense").map((category) => {
           const month = format(new Date(), "yyyy-MM");
@@ -275,9 +277,9 @@ export function useAppState() {
     const currentCategory = categories.find((category) => category.id === categoryId);
 
     if (currentCategory?.kind !== type) {
-      setCategoryId(categories.find((category) => category.kind === type)?.id ?? "");
+      setCategoryId(frequentCategories(categories, transactions, type)[0]?.id ?? "");
     }
-  }, [categories, categoryId, type]);
+  }, [categories, categoryId, transactions, type]);
 
   useEffect(() => {
     const categorySubcategories = subcategories.filter((item) => item.categoryId === categoryId);
@@ -336,6 +338,7 @@ export function useAppState() {
   const allTotals = useMemo(() => totals(transactions), [transactions]);
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions]);
   const displayCategories = useMemo(() => applyCategoryDisplayColors(categories), [categories]);
+  const quickAddCategories = useMemo(() => frequentCategories(displayCategories, transactions, type), [displayCategories, transactions, type]);
   const categoriesForCurrentMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, dashboardCategoryMonthKey), [displayCategories, budgets, dashboardCategoryMonthKey]);
   const categoriesForBudgetMonth = useMemo(() => applyMonthlyBudgets(displayCategories, budgets, budgetMonth), [displayCategories, budgets, budgetMonth]);
   const budgetMonthTx = useMemo(() => monthTransactions(transactions, visibleMonth), [transactions, visibleMonth]);
@@ -570,7 +573,30 @@ export function useAppState() {
     ...matches,
     [rule.id]: findRecurringPayment(rule, transactions, new Date(), liveRecurringIds)
   }), {}), [transactions, upcoming, liveRecurringIds]);
-  const recurringDue = upcoming.filter((rule) => rule.type === "expense" && !recurringPayments[rule.id] && parseISO(rule.nextDueOn) <= endOfMonth(new Date())).reduce((sum, rule) => sum + rule.amount, 0);
+  const recurringDue = useMemo(() => {
+    const monthEnd = endOfMonth(new Date());
+    const today = format(new Date(), "yyyy-MM-dd");
+
+    return upcoming
+      .filter((rule) => rule.type === "expense")
+      .reduce((sum, rule) => {
+        let due = parseISO(rule.nextDueOn);
+        let occurrenceIndex = 0;
+        let ruleTotal = 0;
+
+        while (due <= monthEnd) {
+          const recordedPayment = recurringPayments[rule.id];
+          if (occurrenceIndex > 0 || !recordedPayment || recordedPayment.occurredOn > today) {
+            ruleTotal += rule.amount;
+          }
+          due = advanceRecurringDate(due, rule.frequency);
+          occurrenceIndex += 1;
+        }
+
+        return sum + ruleTotal;
+      }, 0);
+  }, [recurringPayments, upcoming]);
+  const expenseForecast = useMemo(() => forecastMonthlyExpenses(transactions, recurringDue), [recurringDue, transactions]);
   const dailyAllowance = safeToSpend(currentMonthTotals.income, currentMonthTotals.expenses, recurringDue);
   const t = translations[language];
   const ui = uiTranslations[language];
@@ -1428,6 +1454,7 @@ export function useAppState() {
     transactions,
     balances,
     displayCategories,
+    quickAddCategories,
     // shell / nav
     activeTab,
     setActiveTab,
@@ -1478,6 +1505,7 @@ export function useAppState() {
     setSelectedDashboardDate,
     dailyAllowance,
     recurringDue,
+    expenseForecast,
     openMonthlyCategoryReport,
     // reports
     monthlyReportMonth,

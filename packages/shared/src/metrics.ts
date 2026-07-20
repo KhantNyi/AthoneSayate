@@ -6,9 +6,10 @@ import {
   isWithinInterval,
   parseISO,
   startOfMonth,
+  subDays,
   subMonths
 } from "date-fns";
-import type { Account, Category, RecurringRule, Transaction } from "./types";
+import type { Account, Category, RecurringRule, Transaction, TransactionType } from "./types";
 
 export const currency = new Intl.NumberFormat("th-TH", {
   style: "currency",
@@ -75,6 +76,129 @@ export function categorySpend(categories: Category[], transactions: Transaction[
       };
     })
     .sort((a, b) => b.spent - a.spent);
+}
+
+export function frequentCategories(
+  categories: Category[],
+  transactions: Transaction[],
+  type: TransactionType,
+  referenceDate = new Date(),
+  windowDays = 90
+) {
+  const today = format(referenceDate, "yyyy-MM-dd");
+  const cutoff = format(subDays(referenceDate, Math.max(windowDays - 1, 0)), "yyyy-MM-dd");
+  const usage = new Map<string, { count: number; latest: string }>();
+
+  for (const transaction of transactions) {
+    if (
+      transaction.type !== type ||
+      transaction.isRecurring ||
+      transaction.recurringRuleId ||
+      !transaction.categoryId ||
+      transaction.occurredOn < cutoff ||
+      transaction.occurredOn > today
+    ) {
+      continue;
+    }
+
+    const current = usage.get(transaction.categoryId) ?? { count: 0, latest: "" };
+    usage.set(transaction.categoryId, {
+      count: current.count + 1,
+      latest: transaction.occurredOn > current.latest ? transaction.occurredOn : current.latest
+    });
+  }
+
+  return categories
+    .filter((category) => category.kind === type)
+    .slice()
+    .sort((a, b) => {
+      const aUsage = usage.get(a.id) ?? { count: 0, latest: "" };
+      const bUsage = usage.get(b.id) ?? { count: 0, latest: "" };
+      return bUsage.count - aUsage.count || bUsage.latest.localeCompare(aUsage.latest) || a.name.localeCompare(b.name);
+    });
+}
+
+export type ExpenseForecast = {
+  projected: number;
+  actualToDate: number;
+  predictedRemaining: number;
+  recurringDue: number;
+  historicalBaseline: number;
+  trendPercent: number | null;
+  historyMonths: number;
+  confidence: "low" | "medium" | "high";
+};
+
+export function forecastMonthlyExpenses(
+  transactions: Transaction[],
+  recurringDue: number,
+  referenceDate = new Date(),
+  historyMonthCount = 3
+): ExpenseForecast {
+  const today = format(referenceDate, "yyyy-MM-dd");
+  const currentMonthStart = startOfMonth(referenceDate);
+  const currentMonthStartKey = format(currentMonthStart, "yyyy-MM-dd");
+  const daysInMonth = endOfMonth(referenceDate).getDate();
+  const elapsedDays = Math.min(Math.max(differenceInCalendarDays(referenceDate, currentMonthStart) + 1, 1), daysInMonth);
+  const remainingDays = Math.max(daysInMonth - elapsedDays, 0);
+  const expenseTransactions = transactions.filter((transaction) => transaction.type === "expense");
+  const trackingStart = transactions.reduce<string | null>((earliest, transaction) => (
+    earliest === null || transaction.occurredOn < earliest ? transaction.occurredOn : earliest
+  ), null);
+  const currentExpenses = expenseTransactions.filter((transaction) => (
+    transaction.occurredOn >= currentMonthStartKey && transaction.occurredOn <= today
+  ));
+  const actualToDate = currentExpenses.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const currentVariableSpend = currentExpenses
+    .filter((transaction) => !transaction.isRecurring && !transaction.recurringRuleId)
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const completedMonths = Array.from({ length: Math.max(historyMonthCount, 0) }, (_, index) => subMonths(currentMonthStart, index + 1))
+    .filter((month) => trackingStart !== null && trackingStart <= format(startOfMonth(month), "yyyy-MM-dd"));
+  const history = completedMonths.map((month, index) => {
+    const monthExpenseTransactions = monthTransactions(expenseTransactions, month);
+    const variableSpend = monthExpenseTransactions
+      .filter((transaction) => !transaction.isRecurring && !transaction.recurringRuleId)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+    return {
+      total: monthExpenseTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+      variableDailyRate: variableSpend / endOfMonth(month).getDate(),
+      weight: completedMonths.length - index
+    };
+  });
+  const totalWeight = history.reduce((sum, month) => sum + month.weight, 0);
+  const historicalDailyRate = totalWeight > 0
+    ? history.reduce((sum, month) => sum + month.variableDailyRate * month.weight, 0) / totalWeight
+    : 0;
+  const historicalBaseline = totalWeight > 0
+    ? history.reduce((sum, month) => sum + month.total * month.weight, 0) / totalWeight
+    : 0;
+  const currentDailyRate = currentVariableSpend / elapsedDays;
+  const progress = elapsedDays / daysInMonth;
+  const remainingDailyRate = history.length > 0
+    ? historicalDailyRate * (1 - progress) + currentDailyRate * progress
+    : currentDailyRate;
+  const predictedRemaining = Math.max(remainingDailyRate * remainingDays, 0);
+  const projected = actualToDate + Math.max(recurringDue, 0) + predictedRemaining;
+  const trendPercent = historicalBaseline > 0
+    ? ((projected - historicalBaseline) / historicalBaseline) * 100
+    : null;
+  const confidence = history.length >= 3 && elapsedDays >= 10
+    ? "high"
+    : history.length >= 2 || elapsedDays >= 7
+      ? "medium"
+      : "low";
+
+  return {
+    projected,
+    actualToDate,
+    predictedRemaining,
+    recurringDue: Math.max(recurringDue, 0),
+    historicalBaseline,
+    trendPercent,
+    historyMonths: history.length,
+    confidence
+  };
 }
 
 export function dailySeries(transactions: Transaction[], date = new Date()) {

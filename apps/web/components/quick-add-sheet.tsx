@@ -14,7 +14,7 @@ export function QuickAddSheet() {
     setType,
     amount,
     setAmount,
-    displayCategories,
+    quickAddCategories,
     categoryId,
     setCategoryId,
     subcategories,
@@ -99,7 +99,7 @@ export function QuickAddSheet() {
         <div className="mb-4">
           <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">{t.category}</span>
           <div className="flex flex-wrap gap-1.5">
-            {displayCategories.filter((category) => category.kind === type).map((category) => {
+            {quickAddCategories.map((category) => {
               const active = category.id === categoryId;
               return (
                 <button

@@ -2,7 +2,7 @@
 
 import { ArrowDownCircle, ArrowUpCircle, Banknote, PiggyBank, Plus } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { format, parseISO } from "date-fns";
+import { format, isSameMonth, parseISO } from "date-fns";
 import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
 import { compactCurrency } from "@/lib/helpers";
 import { useApp } from "../app-context";
@@ -18,11 +18,12 @@ export default function DashboardTab() {
     upcoming,
     recurringPayments,
     budgetRows,
+    dashboardStatsMonth,
     monthTotals,
     allTotals,
     comparison,
     daily,
-    recurringDue,
+    expenseForecast,
     dashboardInsights,
     dashboardCategoryMonth,
     dashboardCalendarMonth,
@@ -41,7 +42,7 @@ export default function DashboardTab() {
     recurringDueLabel,
     displayCategories,
     subcategories,
-    categories,
+    quickAddCategories,
     type,
     setType,
     amount,
@@ -61,6 +62,10 @@ export default function DashboardTab() {
   const recurringDashboardItems = upcoming.filter((rule) => !recurringPayments[rule.id]);
   const recurringExpenseTotal = recurringDashboardItems.reduce((sum, rule) => sum + (rule.type === "expense" ? rule.amount : 0), 0);
   const categoryMixRows = budgetRows.filter((row) => row.spent > 0).slice(0, 6);
+  const isCurrentDashboardMonth = isSameMonth(dashboardStatsMonth, new Date());
+  const forecastTrendLabel = expenseForecast.trendPercent === null
+    ? `Not enough history - ${expenseForecast.confidence} confidence`
+    : `${Math.abs(expenseForecast.trendPercent).toFixed(0)}% ${expenseForecast.trendPercent >= 0 ? "above" : "below"} ${expenseForecast.historyMonths}-month average - ${expenseForecast.confidence} confidence`;
 
   return (
     <div className="grid gap-4">
@@ -72,7 +77,7 @@ export default function DashboardTab() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <DashboardPanel title={t.spendingPace} action="This month">
+        <DashboardPanel title={t.spendingPace} action={format(dashboardStatsMonth, "MMM yyyy")}>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_116px]">
             <div className="h-56 min-w-0 lg:h-60">
               <ResponsiveContainer width="100%" height="100%">
@@ -92,9 +97,19 @@ export default function DashboardTab() {
               </ResponsiveContainer>
             </div>
             <div className="grid gap-2 text-sm lg:content-center">
-              <ActivityStat label="Projected" value={currency.format(monthTotals.expenses + recurringDue)} tone="ink" compact />
+              <ActivityStat
+                label={isCurrentDashboardMonth ? "Projected" : "Actual"}
+                value={currency.format(isCurrentDashboardMonth ? expenseForecast.projected : monthTotals.expenses)}
+                sub={isCurrentDashboardMonth ? forecastTrendLabel : undefined}
+                tone="ink"
+                compact
+              />
               <ActivityStat label="Budget" value={currency.format(budgetRows.reduce((sum, row) => sum + (row.monthlyBudget ?? 0), 0))} tone="ink" compact />
-              <ActivityStat label="Spent" value={currency.format(monthTotals.expenses)} tone="river" compact />
+              {isCurrentDashboardMonth ? (
+                <ActivityStat label="Spent" value={currency.format(monthTotals.expenses)} tone="river" compact />
+              ) : (
+                <ActivityStat label="Vs prior month" value={`${comparison.expenseDelta >= 0 ? "+" : ""}${comparison.expenseDelta.toFixed(1)}%`} tone={comparison.expenseDelta > 0 ? "coral" : "moss"} compact />
+              )}
             </div>
           </div>
         </DashboardPanel>
@@ -278,7 +293,7 @@ export default function DashboardTab() {
               <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={preciseCurrency.format(0)} />
               <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
               <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2">
-                {categories.filter((category) => category.kind === type).map((category) => (
+                {quickAddCategories.map((category) => (
                   <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
                 ))}
               </select>
