@@ -3,7 +3,7 @@
 | Document field | Value |
 |---|---|
 | Status | As-built design reference |
-| Last updated | 2026-07-21 |
+| Last updated | 2026-07-26 |
 | Repository version | Monorepo version 0.1.0 |
 | Primary application | Next.js expense-tracking progressive web app backed by Supabase |
 
@@ -39,14 +39,13 @@ The web app is a client-heavy PWA. It loads an entire data snapshot from Supabas
 
 There is one server-side route: a scheduled web-push dispatcher. Vercel Cron invokes it daily, it finds due recurring bills, and it sends a single reminder payload to registered browser subscriptions.
 
-The current database and client are configured for a shared demo-user mode:
+Access is authenticated and per-user:
 
-- newly inserted user-owned rows use a hard-coded demo user UUID;
-- reads are not filtered by user;
-- Supabase row-level security policies allow all operations;
-- there is no authentication or tenant isolation.
-
-This is suitable only for a controlled demo or single shared dataset. Authentication and user-scoped policies are the highest-priority requirements before handling private financial data for multiple users.
+- Supabase Auth email/password sessions gate the application;
+- `app_users.id` is the `auth.users` id, so every existing `user_id` column is the ownership key;
+- row-level security policies restrict all reads and writes to `user_id = auth.uid()`, including the rows a record references;
+- the offline cache and mutation queue are namespaced per user and cleared on sign-out;
+- the scheduled push dispatcher runs with service-role credentials and sends each user only their own bills.
 
 ## 3. Design goals and current non-goals
 
@@ -63,8 +62,8 @@ This is suitable only for a controlled demo or single shared dataset. Authentica
 
 ### 3.2 Current non-goals or incomplete areas
 
-- User authentication and account isolation.
-- Creating new banking accounts. Existing seeded accounts can be edited or archived, but there is no create-account command or form.
+- Creating new banking accounts. Seeded accounts can be edited or archived, but there is no create-account command or form; new users get a starter account from the signup trigger instead.
+- Sharing a dataset between users (households or joint accounts). Ownership is strictly one user per row.
 - Bank synchronization or payment initiation.
 - Foreign-exchange conversion or multi-currency reporting.
 - Transfers between accounts in the TypeScript domain/UI, even though the base SQL constraint permits a transfer transaction type.
@@ -135,6 +134,9 @@ athonesayate/
 
 | Module | Role |
 |---|---|
+| [apps/web/components/app-gate.tsx](../apps/web/components/app-gate.tsx) | Chooses between the auth screen and the app; remounts the app on account change |
+| [apps/web/components/use-session.ts](../apps/web/components/use-session.ts) | Session state, storage binding, and sign-out cleanup |
+| [apps/web/components/auth-screen.tsx](../apps/web/components/auth-screen.tsx) | Sign-in, sign-up, and password-reset form |
 | [apps/web/components/use-app-state.ts](../apps/web/components/use-app-state.ts) | Central client state, derived views, and feature command handlers |
 | [apps/web/components/expense-tracker-app.tsx](../apps/web/components/expense-tracker-app.tsx) | Responsive application shell, lazy-loaded tabs, FAB, toast, and provider |
 | [apps/web/components/app-context.tsx](../apps/web/components/app-context.tsx) | Typed React context exposing the full state object |
@@ -254,12 +256,12 @@ erDiagram
 
 #### app_users
 
-Stores a user UUID, display name, currency, and preferred month start day. In the current application:
+Profile table for an authenticated user. `id` is a foreign key to `auth.users(id)`, so it is both the auth subject and the ownership key every other table references. In the current application:
 
-- newly inserted user-owned rows use DEMO_USER_ID = 00000000-0000-0000-0000-000000000001;
-- updates, archives, and deletes normally target only a supplied row ID and do not add a user predicate;
-- no authentication session selects a user;
-- currency and month_start_day are not read by the UI.
+- the signup trigger creates the row and seeds starter categories, subcategories, and one account;
+- deleting the auth user cascades to the profile and from there to every owned table;
+- updates, archives, and deletes target a supplied row ID; the user predicate is enforced by row-level security rather than by the query;
+- currency and month_start_day are still not read by the UI.
 
 #### accounts
 
@@ -838,32 +840,30 @@ There are no application REST endpoints for normal CRUD. The browser talks direc
 
 ### 15.1 Current posture
 
-The current configuration is explicitly a no-auth development model:
+The application uses Supabase Auth with email/password sessions and per-user row-level security.
 
-- Supabase RLS is enabled, but each policy uses true for read and write checks.
-- New user-owned rows use the same hard-coded demo user UUID; updates, archives, and deletes are selected by row ID without a user predicate.
-- Snapshot reads do not filter by user_id.
-- The browser receives the anon key, which is expected for Supabase, but the open policies grant it broad access.
-- Push subscription rows are also open and globally queried.
-- Financial snapshots and mutation arguments are stored unencrypted in localStorage.
-- A configured CRON_SECRET protects the scheduled route; absence of the variable disables that check.
+- `app_users.id` is a foreign key to `auth.users(id)`. Every owned table keeps its existing `user_id` reference to `app_users`, so ownership is one hop from the session in all cases.
+- A trigger on `auth.users` creates the profile row on signup and seeds a starter account, categories, and subcategories. Without the seed a new user cannot use Quick Add, because the app has no create-account form.
+- Policies are `user_id = auth.uid()`. Tables that reference other user-owned rows (`transactions`, `budgets`, `recurring_rules`, `subcategories`) additionally assert ownership of the referenced account, category, and subcategory in their `with check`, so a row cannot be attached to another user's account. `transaction_tags` reaches ownership through both parents.
+- Every owned table defaults `user_id` to `auth.uid()`.
+- The browser holds one Supabase client per tab. Multiple clients would each run their own token-refresh timer against the same stored session.
+- Snapshot reads pass an explicit `user_id` predicate. RLS already restricts the rows; the predicate exists so the composite `user_id` indexes are used.
+- The offline snapshot and mutation queue are namespaced per user id and cleared on sign-out, so a second account on the same device cannot read the first account's cached data or replay its queued writes.
+- The scheduled push dispatcher uses a service-role client, groups bills and subscriptions by user, and sends each user only their own payload. It returns 500 in production when `CRON_SECRET` is unset rather than running unauthenticated.
 
-**This design does not provide confidentiality or tenant isolation. It must not be treated as production-ready for multiple real users.**
+Remaining gaps:
 
-### 15.2 Required production security design
+- Financial snapshots and mutation arguments are still stored unencrypted in localStorage.
+- Notification bodies still include merchant names and amounts, with no opt-out.
+- Signup is open; there is no invite gate or rate limiting on auth attempts beyond Supabase defaults.
 
-1. Add Supabase Auth and require a session.
-2. Replace DEMO_USER_ID with auth.uid().
-3. Filter every query by the authenticated user where appropriate.
-4. Replace open policies with ownership policies using user_id = auth.uid().
-5. Ensure referenced account/category/subcategory IDs also belong to the same user.
-6. Use a server-only Supabase client for scheduled dispatch, preferably with narrowly-scoped service credentials.
-7. Partition due bills and push subscriptions by user; send each user only their own payload.
-8. Require CRON_SECRET in production and fail closed if missing.
-9. Add rate limiting and audit logging to server routes.
-10. Define a local-data privacy policy; consider IndexedDB plus encryption or an option to disable offline financial caching.
-11. Avoid including sensitive merchant or amount details in notifications unless the user opts in.
-12. Add Content Security Policy and review service-worker caching of authenticated responses.
+### 15.2 Remaining production hardening
+
+1. Add rate limiting and audit logging to server routes.
+2. Define a local-data privacy policy; consider IndexedDB plus encryption or an option to disable offline financial caching.
+3. Avoid including sensitive merchant or amount details in notifications unless the user opts in.
+4. Add Content Security Policy and review service-worker caching of authenticated responses.
+5. Consider requiring email confirmation before first sign-in if signup is left open.
 
 ## 16. Reliability and consistency
 
@@ -908,15 +908,14 @@ This is straightforward and responsive for a small personal dataset. It will deg
 
 ### 17.3 Scaling path
 
-1. Add authentication and strict user predicates first.
-2. Page transaction lists and bound normal snapshots by useful history.
-3. Add server/RPC aggregates for monthly totals, category usage, reports, and forecast inputs.
-4. Use TanStack Query or an equivalent cache for normalized remote state, while retaining a dedicated offline mutation strategy.
-5. Move large durable offline data from localStorage to IndexedDB.
-6. Precompute or incrementally maintain reporting aggregates only after measuring query cost.
-7. Partition push dispatch by user and batch delivery.
-8. Add composite indexes based on measured queries, likely user/type/date/category and user/type/date/subcategory.
-9. Split useAppState into domain hooks or stores to reduce rerender and ownership coupling.
+1. Page transaction lists and bound normal snapshots by useful history.
+2. Add server/RPC aggregates for monthly totals, category usage, reports, and forecast inputs.
+3. Use TanStack Query or an equivalent cache for normalized remote state, while retaining a dedicated offline mutation strategy.
+4. Move large durable offline data from localStorage to IndexedDB.
+5. Precompute or incrementally maintain reporting aggregates only after measuring query cost.
+6. Batch push delivery; dispatch is already partitioned by user, but every subscription is still sent individually.
+7. Add composite indexes based on measured queries, likely user/type/date/category and user/type/date/subcategory.
+8. Split useAppState into domain hooks or stores to reduce rerender and ownership coupling.
 
 ## 18. Deployment and configuration
 
@@ -937,11 +936,12 @@ This is straightforward and responsive for a small personal dataset. It will deg
 | Variable | Runtime | Required | Purpose |
 |---|---|---:|---|
 | NEXT_PUBLIC_SUPABASE_URL | Web browser and push route | Yes | Supabase project URL |
-| NEXT_PUBLIC_SUPABASE_ANON_KEY | Web browser and push route | Yes | Supabase public client key |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | Web browser | Yes | Supabase public client key |
+| SUPABASE_SERVICE_ROLE_KEY | Push route only | Yes for push | Bypasses RLS for scheduled dispatch; must never be NEXT_PUBLIC |
 | NEXT_PUBLIC_VAPID_PUBLIC_KEY | Browser and push route | For push | Push application public key |
 | VAPID_PRIVATE_KEY | Push route only | For push | Push application private key |
 | VAPID_SUBJECT | Push route only | Optional | VAPID contact identity |
-| CRON_SECRET | Push route only | Strongly required in production | Authorizes scheduled dispatch |
+| CRON_SECRET | Push route only | Required in production | Authorizes scheduled dispatch; the route fails closed without it |
 | BILL_REMINDER_TIMEZONE | Push route only | Optional | Calendar timezone; defaults to Asia/Yangon |
 | NEXT_PUBLIC_APP_URL | Landing browser | Optional | Expense-tracker link target |
 | NODE_ENV | Build/runtime | Managed | Disables Serwist in development |
@@ -958,6 +958,10 @@ Apply SQL in numeric order:
 4. 004_recurring_subcategories.sql
 5. 005_recurring_payment_links.sql
 6. 006_push_subscriptions.sql
+7. 007_auth.sql
+8. 008_auth_lockdown.sql
+
+007 is additive and changes no policy, so the pre-auth build keeps working after it. 008 is a hard cutover and refuses to run while the demo dataset is unclaimed. Between the two, sign up and run `select public.claim_legacy_data('<your-auth-uid>');` to move the demo-owned rows onto a real account. Back up the database before that call.
 
 The base schema already includes subcategories, but migration ordering remains relevant for databases created from older versions. Several data-layer functions intentionally fall back when recurring subcategory/link columns are missing.
 
@@ -1099,10 +1103,8 @@ A production CI pipeline should run:
 
 ### P0 — required before multi-user production
 
-- Authentication and user-scoped RLS.
-- Per-user reads, writes, forecasts, and push delivery.
-- Fail-closed cron authorization.
-- Review local financial-data storage/privacy.
+- Review local financial-data storage/privacy: the per-user snapshot and queue are still unencrypted in localStorage.
+- Decide whether signup stays open, and whether email confirmation is required.
 
 ### P1 — data integrity and reliability
 

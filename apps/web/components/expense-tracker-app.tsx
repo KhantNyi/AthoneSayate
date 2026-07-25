@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
+import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import { AppProvider } from "./app-context";
@@ -9,6 +9,7 @@ import { navItems } from "./nav";
 import { QuickAddSheet } from "./quick-add-sheet";
 import { ActivityStat, DashboardMonthControl, DashboardSkeleton, LanguageToggle, StatusPill, TabSkeleton, ThemeToggle } from "./ui";
 import { useAppState } from "./use-app-state";
+import type { Session } from "./use-session";
 
 // Each tab is its own chunk so the initial load doesn't ship every screen.
 const DashboardTab = dynamic(() => import("./tabs/dashboard-tab"), { loading: () => <DashboardSkeleton /> });
@@ -19,7 +20,7 @@ const RecurringTab = dynamic(() => import("./tabs/recurring-tab"), { loading: ()
 const GoalsTab = dynamic(() => import("./tabs/goals-tab"), { loading: () => <TabSkeleton /> });
 const SettingsTab = dynamic(() => import("./tabs/settings-tab"), { loading: () => <TabSkeleton /> });
 
-export function ExpenseTrackerApp() {
+export function ExpenseTrackerApp({ session }: { session: Session }) {
   const app = useAppState();
   const {
     t,
@@ -91,12 +92,22 @@ export function ExpenseTrackerApp() {
           </nav>
           <div className="mt-4 grid gap-3">
             <div className="liquid-control flex items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold text-bright">A</span>
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold uppercase text-bright">
+                {session.email?.charAt(0) ?? "A"}
+              </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">athonesayate</span>
+                <span className="block truncate text-sm font-semibold">{session.email ?? "Signed in"}</span>
                 <span className="block text-xs text-ink/45">Free plan</span>
               </span>
-              <ChevronRight className="ml-auto shrink-0 text-ink/45" size={17} />
+              <button
+                type="button"
+                onClick={() => void session.signOut()}
+                title="Sign out"
+                aria-label="Sign out"
+                className="ml-auto shrink-0 rounded-lg p-1.5 text-ink/45 transition hover:bg-rose-500/10 hover:text-rose-600"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
             <div className="liquid-card rounded-xl border border-ink/10 bg-white p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
@@ -162,6 +173,14 @@ export function ExpenseTrackerApp() {
                 <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
               </div>
+              <button
+                type="button"
+                onClick={() => void session.signOut()}
+                className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink/70 hover:bg-rose-500/10 hover:text-rose-600"
+              >
+                <LogOut size={18} />
+                Sign out
+              </button>
             </div>
           </div>
         ) : null}

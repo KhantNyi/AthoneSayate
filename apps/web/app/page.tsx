@@ -1,5 +1,5 @@
-import { ExpenseTrackerApp } from "@/components/expense-tracker-app";
+import { AppGate } from "@/components/app-gate";
 
 export default function Page() {
-  return <ExpenseTrackerApp />;
+  return <AppGate />;
 }
