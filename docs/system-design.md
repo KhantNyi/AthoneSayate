@@ -16,6 +16,7 @@ The design covers:
 - the customer-facing landing site;
 - the expense-tracking web application;
 - shared domain types, calculations, recurring-payment logic, and Supabase access;
+- authentication, per-user isolation, and the signed-out demo;
 - the PostgreSQL/Supabase schema and migrations;
 - client state management and derived dashboard/report data;
 - offline reads, optimistic writes, and mutation replay;
@@ -46,6 +47,8 @@ Access is authenticated and per-user:
 - row-level security policies restrict all reads and writes to `user_id = auth.uid()`, including the rows a record references;
 - the offline cache and mutation queue are namespaced per user and cleared on sign-out;
 - the scheduled push dispatcher runs with service-role credentials and sends each user only their own bills.
+
+A signed-out visitor is not shown an auth wall. They land in the application backed by a bundled sample dataset, can browse every tab, and are asked to create an account only when they attempt to save something. The demo never contacts Supabase, so it required no relaxation of the row-level security policies.
 
 ## 3. Design goals and current non-goals
 
@@ -109,7 +112,7 @@ flowchart LR
 | Browser UI | Interaction, React state, validation, charts, derived calculations | Untrusted client |
 | Browser localStorage | Cached financial snapshot and queued mutation arguments | Device-local but unencrypted |
 | Service worker | Application caching and notification display/click handling | Browser-managed |
-| Supabase client API | Direct browser database reads and writes using the anon key | Public API boundary |
+| Supabase client API | Direct browser reads and writes using the anon key plus the user's session JWT | Public API boundary; row-level security is the enforcement point |
 | Supabase PostgreSQL | Durable system of record | Trusted persistence layer |
 | Push dispatch route | Scheduled due-bill evaluation and VAPID delivery | Server runtime |
 | Web push provider | Delivery to browser subscription endpoints | External infrastructure |
@@ -140,7 +143,8 @@ athonesayate/
 | [apps/web/components/use-app-state.ts](../apps/web/components/use-app-state.ts) | Central client state, derived views, and feature command handlers |
 | [apps/web/components/expense-tracker-app.tsx](../apps/web/components/expense-tracker-app.tsx) | Responsive application shell, lazy-loaded tabs, FAB, toast, and provider |
 | [apps/web/components/app-context.tsx](../apps/web/components/app-context.tsx) | Typed React context exposing the full state object |
-| [apps/web/lib/offline-data.ts](../apps/web/lib/offline-data.ts) | Network-first reads, local snapshot, optimistic writes, queue, and replay |
+| [apps/web/lib/offline-data.ts](../apps/web/lib/offline-data.ts) | Network-first reads, local snapshot, optimistic writes, queue, replay, and demo-mode gating |
+| [apps/web/lib/demo-data.ts](../apps/web/lib/demo-data.ts) | Date-relative sample dataset for the signed-out demo |
 | [packages/shared/src/supabase-data.ts](../packages/shared/src/supabase-data.ts) | Direct table queries and CRUD mapping between SQL and TypeScript |
 | [packages/shared/src/metrics.ts](../packages/shared/src/metrics.ts) | Totals, balances, ranking, forecast, daily series, and safe-to-spend calculations |
 | [packages/shared/src/recurring.ts](../packages/shared/src/recurring.ts) | Recurrence advancement, stale-date normalization, cycle identity, and payment matching |
@@ -153,11 +157,13 @@ athonesayate/
 
 ### 6.1 Web application composition
 
-The root page renders ExpenseTrackerApp. That component calls useAppState once, passes its return value through AppProvider, and lazy-loads each feature tab as a separate client chunk.
+The root page renders AppGate, which resolves the session before mounting anything else. The gate chooses between a loading state, the auth screen, and ExpenseTrackerApp — the last of which serves both the signed-in application and the signed-out demo. ExpenseTrackerApp calls useAppState once, passes its return value through AppProvider, and lazy-loads each feature tab as a separate client chunk.
 
 ~~~mermaid
 flowchart TD
     Page[app/page.tsx]
+    Gate[AppGate]
+    Auth[AuthScreen]
     Shell[ExpenseTrackerApp]
     State[useAppState]
     Context[AppProvider / useApp]
@@ -170,7 +176,10 @@ flowchart TD
     Goals[Goals tab]
     Settings[Settings tab]
 
-    Page --> Shell
+    Page --> Gate
+    Gate -->|no session, auth requested| Auth
+    Gate -->|session or demo| Shell
+    Auth -->|back to demo| Gate
     Shell --> State
     State --> Context
     Context --> Quick
@@ -184,6 +193,8 @@ flowchart TD
 ~~~
 
 There is no Redux, server action layer, or independent feature store. useAppState is the application store and command layer. Its ReturnType is the context contract, so adding or removing a returned field automatically changes the compile-time context type.
+
+ExpenseTrackerApp is keyed on the user id, so switching accounts — or moving from the demo to a real session — remounts the whole tree rather than leaving one user's derived state in place for the next.
 
 ### 6.2 Rendering model
 
@@ -221,7 +232,9 @@ This separation lets the marketing site deploy and evolve independently from the
 | Recurring | Create/edit/archive rules, mark paid/received, undo the latest recorded payment, and inspect recurring calendar state |
 | Goals | Create, edit, archive, and visualize savings-goal progress |
 | Settings | Enable/disable bill reminders, edit/archive accounts, and manage categories/subcategories |
-| Global shell | Responsive navigation, language/theme controls, sync state, notices, month selection, and floating Quick Add |
+| Global shell | Responsive navigation, language/theme controls, sync state, notices, month selection, floating Quick Add, and sign-out |
+| Auth screen | Sign in, sign up with optional display name, and password reset |
+| Signed-out demo | Full read-only browsing of sample data, a persistent demo banner, and a sign-up prompt raised on the first write attempt |
 
 ## 8. Data model
 
@@ -317,7 +330,7 @@ These tables provide a many-to-many tagging model in SQL. No TypeScript type, qu
 
 #### push_subscriptions
 
-Stores Web Push endpoint, p256dh key, auth secret, and the demo user ID. Endpoint is globally unique. Stale endpoints are removed when the push service responds with HTTP 404 or 410.
+Stores Web Push endpoint, p256dh key, auth secret, and the owning user id. Endpoint is globally unique, so sign-out releases the subscription to keep the next user on that device from colliding with it. Stale endpoints are removed when the push service responds with HTTP 404 or 410.
 
 ### 8.3 Referential and deletion behavior
 
@@ -360,9 +373,46 @@ The Supabase data module contains updateGoalProgress and fetchPushSubscriptions 
 
 ## 9. Data access and client state
 
+### 9.0 Session and demo mode
+
+`useSession` resolves the Supabase session once on mount and then follows `onAuthStateChange`. It owns three side effects beyond reporting status:
+
+1. it binds local storage to the user id before any consumer mounts, so the cache and queue can never be read under the wrong account;
+2. on sign-out it releases the Web Push subscription, because endpoints are globally unique and a row left behind would block the next user on that device from registering;
+3. on sign-out it deletes that user's cached snapshot and pending queue.
+
+`AppGate` reads the session and selects a mode. When there is no session it enables demo mode on the offline layer, and it does so **during render rather than in an effect** — a child's effects run before its parent's, so useAppState would otherwise have started a real Supabase fetch before the flag was set.
+
+Demo mode changes two things inside `offline-data`:
+
+| Operation | Signed in | Demo |
+|---|---|---|
+| `loadExpenseData` | Network-first Supabase snapshot, localStorage fallback | Returns generated sample data; never touches network or storage |
+| Any mutation | Remote write, or optimistic write plus queued replay when offline | Throws `DEMO_WRITE_BLOCKED` before the optimistic path runs |
+
+Refusing the write *before* the optimistic branch is deliberate: nothing reaches React state, the cached snapshot, or the mutation queue, so a demo visitor cannot leave residue that replays into a real account later.
+
+The block is surfaced in exactly one place. All twenty-odd command handlers in useAppState already report failures through `setDataError`, so that setter is wrapped: the sentinel message opens the sign-up sheet and is swallowed, and every other message behaves as before. No individual handler knows demo mode exists.
+
+### 9.0.1 Demo dataset
+
+`lib/demo-data.ts` generates the sample dataset relative to the moment it is called, so the dashboard, month comparison, and forecast all have usable history:
+
+- four complete prior months plus the current month to date;
+- salary, rent, internet, electricity, and a savings transfer placed on fixed days, each omitted if that day has not arrived in the current month;
+- day-to-day spending scaled by how much of the current month has elapsed;
+- a fixed PRNG seed, so complete months render identically on every load.
+
+Consequences worth knowing:
+
+- the dataset moves with the **client clock**, so the current month fills in as the month progresses and the five-month window slides forward;
+- a visitor arriving in the first days of a month sees a nearly empty current month and a Low-confidence forecast, which is the weakest version of the demo;
+- sample ids use a `d0000000-…` prefix, so demo rows are recognisable if one ever appears in a bug report;
+- signing up does **not** migrate this data. The demo references account, category, and subcategory ids that exist only in the browser, so a new account starts from the starter rows seeded by `007_auth.sql` instead.
+
 ### 9.1 Initial read path
 
-On mount, useAppState calls loadExpenseData. The offline layer first attempts a live Supabase snapshot. Supabase queries accounts, budgets, categories, subcategories, transactions, active recurring rules, and goals in parallel.
+On mount, useAppState calls loadExpenseData. In demo mode this returns the generated sample data immediately. Otherwise the offline layer first attempts a live Supabase snapshot. Supabase queries accounts, budgets, categories, subcategories, transactions, active recurring rules, and goals in parallel.
 
 ~~~mermaid
 sequenceDiagram
@@ -828,9 +878,11 @@ sequenceDiagram
 
 | Integration | Direction | Authentication/configuration | Purpose |
 |---|---|---|---|
-| Supabase browser API | Browser and push route to Supabase | Public URL + anon key | Primary CRUD and scheduled reads |
+| Supabase browser API | Browser to Supabase | Public URL + anon key + user session JWT | Primary CRUD, scoped by row-level security |
+| Supabase Auth | Browser to Supabase | Email/password; session persisted in localStorage | Sign in, sign up, password reset |
+| Supabase service API | Push route to Supabase | SUPABASE_SERVICE_ROLE_KEY, server only | Scheduled cross-user bill reads |
 | Web Push | Server route to browser push endpoints | VAPID key pair | Bill reminders |
-| Vercel Cron | Vercel to push route | Optional CRON_SECRET validation | Daily dispatch |
+| Vercel Cron | Vercel to push route | CRON_SECRET; required in production | Daily dispatch |
 | Browser localStorage | Browser internal | Same-origin browser access | Snapshot and mutation queue |
 | Service Worker / PushManager | Browser internal/external push service | User permission + VAPID public key | PWA cache and notifications |
 
@@ -850,6 +902,8 @@ The application uses Supabase Auth with email/password sessions and per-user row
 - Snapshot reads pass an explicit `user_id` predicate. RLS already restricts the rows; the predicate exists so the composite `user_id` indexes are used.
 - The offline snapshot and mutation queue are namespaced per user id and cleared on sign-out, so a second account on the same device cannot read the first account's cached data or replay its queued writes.
 - The scheduled push dispatcher uses a service-role client, groups bills and subscriptions by user, and sends each user only their own payload. It returns 500 in production when `CRON_SECRET` is unset rather than running unauthenticated.
+
+- The signed-out demo is served entirely from generated client-side data. It issues no Supabase request, so exposing a preview did not require any anonymous read policy.
 
 Remaining gaps:
 
@@ -881,7 +935,8 @@ Remaining gaps:
 | Missing latest migrations | Selected recurring fields fall back | Reduced linkage precision | Migration health check |
 | Push endpoint expired | 404/410 endpoint deleted | Self-healing subscription list | Keep |
 | Push dispatcher called repeatedly | Same tagged reminder can be resent/replaced | Duplicate processing | Dispatch ledger/idempotency key |
-| Client clock incorrect | Date windows/ranking/forecast shift | Misclassified records | Server reference date or user warning |
+| Client clock incorrect | Date windows/ranking/forecast shift | Misclassified records; the demo dataset also moves with it | Server reference date or user warning |
+| Demo visited early in a month | Current month is nearly empty | Weak first impression, Low-confidence forecast | Offset the demo reference date or preselect the prior month |
 
 ## 17. Performance and scalability
 
@@ -1069,7 +1124,9 @@ Required edge cases:
 - PWA shortcut opens Quick Add.
 - Offline transaction survives reload and synchronizes after reconnect.
 - Recurring payment advances once and undo restores it.
-- Authenticated user cannot access another user’s data after auth is added.
+- An authenticated user cannot read or write another user’s data.
+- A signed-out visitor sees the demo, and attempting to save raises the sign-up prompt without issuing a network request.
+- Signing out clears the cached snapshot, so a second account on the same browser cannot see the first account’s data.
 
 ### 20.3 CI quality gates
 
@@ -1150,7 +1207,8 @@ Engineers should preserve these behaviors unless a deliberate migration changes 
 | Canonical snapshot | Latest successfully fetched Supabase dataset |
 | Completed month | A prior month considered fully tracked and eligible for forecast history |
 | Cycle | One scheduled occurrence of a recurring rule |
-| Demo user | The fixed shared UUID used by the no-auth implementation |
+| Demo mode | Signed-out browsing backed by generated sample data; reads are local and writes are refused |
+| Legacy demo user | The fixed shared UUID used before auth, retired by claim_legacy_data |
 | Derived state | A value computed from loaded entities rather than stored independently |
 | Mutation queue | FIFO list of offline writes awaiting replay |
 | PWA | Installable web application using a manifest and service worker |
@@ -1166,7 +1224,8 @@ For implementation questions, start with:
 - **Domain and schema:** [packages/shared/src/types.ts](../packages/shared/src/types.ts), [supabase](../supabase/)
 - **Database mapping:** [packages/shared/src/supabase-data.ts](../packages/shared/src/supabase-data.ts)
 - **Client commands and derived data:** [apps/web/components/use-app-state.ts](../apps/web/components/use-app-state.ts)
-- **Offline behavior:** [apps/web/lib/offline-data.ts](../apps/web/lib/offline-data.ts)
+- **Offline behavior and demo gating:** [apps/web/lib/offline-data.ts](../apps/web/lib/offline-data.ts)
+- **Session, auth UI, and demo routing:** [apps/web/components/use-session.ts](../apps/web/components/use-session.ts), [apps/web/components/app-gate.tsx](../apps/web/components/app-gate.tsx), [apps/web/lib/demo-data.ts](../apps/web/lib/demo-data.ts)
 - **Financial calculations:** [packages/shared/src/metrics.ts](../packages/shared/src/metrics.ts)
 - **Recurring semantics:** [packages/shared/src/recurring.ts](../packages/shared/src/recurring.ts)
 - **PWA behavior:** [apps/web/app/manifest.ts](../apps/web/app/manifest.ts), [apps/web/app/sw.ts](../apps/web/app/sw.ts)
