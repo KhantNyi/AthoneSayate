@@ -23,8 +23,63 @@ import type {
 } from "@athonesayate/shared/supabase-data";
 import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@athonesayate/shared/types";
 
-const CACHE_KEY = "athonesayate-data-cache-v1";
-const QUEUE_KEY = "athonesayate-mutation-queue-v1";
+// Storage is namespaced per user. Without this, signing in as a second user on
+// the same browser would read the previous user's financial snapshot straight
+// out of localStorage before any network call, and their queued writes would
+// replay under the new session.
+const CACHE_PREFIX = "athonesayate-data-cache-v2";
+const QUEUE_PREFIX = "athonesayate-mutation-queue-v2";
+
+// Unscoped keys written by the pre-auth build; removed on first run.
+const LEGACY_KEYS = ["athonesayate-data-cache-v1", "athonesayate-mutation-queue-v1"];
+
+let activeUserId: string | null = null;
+
+/**
+ * Binds local storage to a user. Must be called before any read or write;
+ * until it is, the cache and queue are inert and every operation goes straight
+ * to the network.
+ */
+export function setActiveUser(userId: string | null) {
+  if (activeUserId === userId) {
+    return;
+  }
+  activeUserId = userId;
+  notifySyncListeners();
+}
+
+/** Drops a user's cached snapshot and pending queue. Called on sign-out. */
+export function clearStoredData(userId: string | null) {
+  if (!isBrowser() || !userId) {
+    return;
+  }
+  try {
+    localStorage.removeItem(`${CACHE_PREFIX}:${userId}`);
+    localStorage.removeItem(`${QUEUE_PREFIX}:${userId}`);
+  } catch {
+    // nothing actionable: the keys are per-user, so a failure here cannot
+    // expose one user's data to another session
+  }
+}
+
+function purgeLegacyKeys() {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // ignore
+  }
+}
+
+function cacheKey() {
+  return activeUserId ? `${CACHE_PREFIX}:${activeUserId}` : null;
+}
+
+function queueKey() {
+  return activeUserId ? `${QUEUE_PREFIX}:${activeUserId}` : null;
+}
 
 export type SyncState = {
   online: boolean;
@@ -97,11 +152,12 @@ function isOfflineError(error: unknown) {
 // --- snapshot cache -------------------------------------------------------
 
 export function readCache(): ExpenseData | null {
-  if (!isBrowser()) {
+  const key = cacheKey();
+  if (!isBrowser() || !key) {
     return null;
   }
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as ExpenseData) : null;
   } catch {
     return null;
@@ -109,11 +165,12 @@ export function readCache(): ExpenseData | null {
 }
 
 function writeCache(data: ExpenseData) {
-  if (!isBrowser()) {
+  const key = cacheKey();
+  if (!isBrowser() || !key) {
     return;
   }
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(key, JSON.stringify(data));
   } catch {
     // storage full or unavailable: offline fallback just won't have fresh data
   }
@@ -131,11 +188,12 @@ function mutateCache(mutator: (data: ExpenseData) => void) {
 // --- queue ----------------------------------------------------------------
 
 function readQueue(): QueuedMutation[] {
-  if (!isBrowser()) {
+  const key = queueKey();
+  if (!isBrowser() || !key) {
     return [];
   }
   try {
-    const raw = localStorage.getItem(QUEUE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as QueuedMutation[]) : [];
   } catch {
     return [];
@@ -143,11 +201,12 @@ function readQueue(): QueuedMutation[] {
 }
 
 function writeQueue(queue: QueuedMutation[]) {
-  if (!isBrowser()) {
+  const key = queueKey();
+  if (!isBrowser() || !key) {
     return;
   }
   try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    localStorage.setItem(key, JSON.stringify(queue));
   } catch {
     // if the queue can't be stored the mutation is lost after reload,
     // but the in-memory optimistic state still holds for this session
@@ -235,6 +294,7 @@ function newId() {
 
 export async function loadExpenseData(): Promise<{ data: ExpenseData; fromCache: boolean }> {
   bindConnectivityListeners();
+  purgeLegacyKeys();
   void replayQueue();
 
   try {

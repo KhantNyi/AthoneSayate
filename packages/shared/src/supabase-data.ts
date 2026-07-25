@@ -1,7 +1,32 @@
-import { createSupabaseBrowserClient } from "./supabase";
+import { getSupabaseClient } from "./supabase";
 import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
 
-export const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
+/**
+ * Owner of every row this client writes. Row-level security also defaults
+ * user_id to auth.uid() server-side, so this is the client half of a check the
+ * database enforces independently.
+ */
+async function requireUserId(): Promise<string> {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const userId = data.session?.user.id;
+
+  if (!userId) {
+    throw new Error("Not signed in.");
+  }
+
+  return userId;
+}
 
 export type ExpenseData = {
   accounts: Account[];
@@ -111,9 +136,12 @@ type RecurringRuleRow = {
   auto_create: boolean;
 };
 
-function recurringRulePayload(input: NewRecurringRuleInput, options: { includeUser?: boolean; includeSubcategory?: boolean } = {}): RecurringRulePayload {
+function recurringRulePayload(
+  input: NewRecurringRuleInput,
+  options: { userId?: string; includeSubcategory?: boolean } = {}
+): RecurringRulePayload {
   const payload: RecurringRulePayload = {
-    ...(input.id && options.includeUser ? { id: input.id } : {}),
+    ...(input.id && options.userId ? { id: input.id } : {}),
     account_id: input.accountId,
     category_id: input.categoryId,
     type: input.type,
@@ -124,8 +152,8 @@ function recurringRulePayload(input: NewRecurringRuleInput, options: { includeUs
     auto_create: input.autoCreate
   };
 
-  if (options.includeUser) {
-    payload.user_id = DEMO_USER_ID;
+  if (options.userId) {
+    payload.user_id = options.userId;
   }
 
   if (options.includeSubcategory) {
@@ -178,20 +206,25 @@ function mapRecurringRule(data: RecurringRuleRow): RecurringRule {
 }
 
 export async function fetchExpenseData(): Promise<ExpenseData> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
   }
 
+  // Row-level security already restricts these to the signed-in user. The
+  // explicit predicate is for the planner: it lets the composite user_id
+  // indexes be used instead of a filtered scan.
+  const userId = await requireUserId();
+
   const [accountsResult, budgetsResult, categoriesResult, subcategoriesResult, transactionsResult, recurringResult, goalsResult] = await Promise.all([
-    supabase.from("accounts").select("*").eq("archived", false).order("created_at", { ascending: true }),
-    supabase.from("budgets").select("*").order("month", { ascending: false }),
-    supabase.from("categories").select("*").eq("archived", false).order("name", { ascending: true }),
-    supabase.from("subcategories").select("*").eq("archived", false).order("name", { ascending: true }),
-    supabase.from("transactions").select("*").order("occurred_on", { ascending: false }),
-    supabase.from("recurring_rules").select("*").eq("active", true).order("next_due_on", { ascending: true }),
-    supabase.from("goals").select("*").eq("archived", false).order("target_date", { ascending: true })
+    supabase.from("accounts").select("*").eq("user_id", userId).eq("archived", false).order("created_at", { ascending: true }),
+    supabase.from("budgets").select("*").eq("user_id", userId).order("month", { ascending: false }),
+    supabase.from("categories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }),
+    supabase.from("subcategories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }),
+    supabase.from("transactions").select("*").eq("user_id", userId).order("occurred_on", { ascending: false }),
+    supabase.from("recurring_rules").select("*").eq("user_id", userId).eq("active", true).order("next_due_on", { ascending: true }),
+    supabase.from("goals").select("*").eq("user_id", userId).eq("archived", false).order("target_date", { ascending: true })
   ]);
 
   const firstError =
@@ -259,7 +292,7 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
 }
 
 export async function createTransaction(input: NewTransactionInput): Promise<Transaction> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -283,7 +316,7 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
 
   const basePayload: TransactionPayload = {
     ...(input.id ? { id: input.id } : {}),
-    user_id: DEMO_USER_ID,
+    user_id: await requireUserId(),
     account_id: input.accountId,
     category_id: input.categoryId,
     subcategory_id: input.subcategoryId,
@@ -318,7 +351,7 @@ export async function createTransaction(input: NewTransactionInput): Promise<Tra
 }
 
 export async function updateTransaction(id: string, input: UpdateTransactionInput): Promise<Transaction> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -348,7 +381,7 @@ export async function updateTransaction(id: string, input: UpdateTransactionInpu
 }
 
 export async function updateAccount(id: string, input: UpdateAccountInput): Promise<Account> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -380,7 +413,7 @@ export async function updateAccount(id: string, input: UpdateAccountInput): Prom
 }
 
 export async function archiveAccount(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -394,7 +427,7 @@ export async function archiveAccount(id: string) {
 }
 
 export async function createCategory(input: NewCategoryInput): Promise<Category> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -404,7 +437,7 @@ export async function createCategory(input: NewCategoryInput): Promise<Category>
     .from("categories")
     .insert({
       ...(input.id ? { id: input.id } : {}),
-      user_id: DEMO_USER_ID,
+      user_id: await requireUserId(),
       name: input.name,
       kind: input.kind,
       monthly_budget: input.kind === "expense" ? input.monthlyBudget ?? null : null
@@ -427,7 +460,7 @@ export async function createCategory(input: NewCategoryInput): Promise<Category>
 }
 
 export async function updateCategory(id: string, input: UpdateCategoryInput): Promise<Category> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -459,7 +492,7 @@ export async function updateCategory(id: string, input: UpdateCategoryInput): Pr
 }
 
 export async function archiveCategory(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -473,7 +506,7 @@ export async function archiveCategory(id: string) {
 }
 
 export async function createSubcategory(input: NewSubcategoryInput): Promise<Subcategory> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -483,7 +516,7 @@ export async function createSubcategory(input: NewSubcategoryInput): Promise<Sub
     .from("subcategories")
     .insert({
       ...(input.id ? { id: input.id } : {}),
-      user_id: DEMO_USER_ID,
+      user_id: await requireUserId(),
       category_id: input.categoryId,
       name: input.name
     })
@@ -502,7 +535,7 @@ export async function createSubcategory(input: NewSubcategoryInput): Promise<Sub
 }
 
 export async function updateSubcategory(id: string, input: NewSubcategoryInput): Promise<Subcategory> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -530,7 +563,7 @@ export async function updateSubcategory(id: string, input: NewSubcategoryInput):
 }
 
 export async function archiveSubcategory(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -544,7 +577,7 @@ export async function archiveSubcategory(id: string) {
 }
 
 export async function updateCategoryBudget(categoryId: string, monthlyBudget: number | null): Promise<Category> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -572,7 +605,7 @@ export async function updateCategoryBudget(categoryId: string, monthlyBudget: nu
 }
 
 export async function upsertMonthlyBudget(input: MonthlyBudgetInput): Promise<Budget> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -582,7 +615,7 @@ export async function upsertMonthlyBudget(input: MonthlyBudgetInput): Promise<Bu
     .from("budgets")
     .upsert(
       {
-        user_id: DEMO_USER_ID,
+        user_id: await requireUserId(),
         category_id: input.categoryId,
         month: input.month,
         amount: input.amount
@@ -605,7 +638,7 @@ export async function upsertMonthlyBudget(input: MonthlyBudgetInput): Promise<Bu
 }
 
 export async function removeMonthlyBudget(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -619,22 +652,24 @@ export async function removeMonthlyBudget(id: string) {
 }
 
 export async function createRecurringRule(input: NewRecurringRuleInput): Promise<RecurringRule> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
   }
 
+  const userId = await requireUserId();
+
   let { data, error } = await supabase
     .from("recurring_rules")
-    .insert(recurringRulePayload(input, { includeUser: true, includeSubcategory: true }))
+    .insert(recurringRulePayload(input, { userId, includeSubcategory: true }))
     .select("*")
     .single();
 
   if (isMissingRecurringSubcategoryError(error)) {
     ({ data, error } = await supabase
       .from("recurring_rules")
-      .insert(recurringRulePayload(input, { includeUser: true }))
+      .insert(recurringRulePayload(input, { userId }))
       .select("*")
       .single());
   }
@@ -647,7 +682,7 @@ export async function createRecurringRule(input: NewRecurringRuleInput): Promise
 }
 
 export async function updateRecurringRule(id: string, input: UpdateRecurringRuleInput): Promise<RecurringRule> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -677,7 +712,7 @@ export async function updateRecurringRule(id: string, input: UpdateRecurringRule
 }
 
 export async function archiveRecurringRule(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -691,7 +726,7 @@ export async function archiveRecurringRule(id: string) {
 }
 
 export async function createGoal(input: NewGoalInput): Promise<Goal> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -701,7 +736,7 @@ export async function createGoal(input: NewGoalInput): Promise<Goal> {
     .from("goals")
     .insert({
       ...(input.id ? { id: input.id } : {}),
-      user_id: DEMO_USER_ID,
+      user_id: await requireUserId(),
       name: input.name,
       target_amount: input.targetAmount,
       current_amount: input.currentAmount,
@@ -725,7 +760,7 @@ export async function createGoal(input: NewGoalInput): Promise<Goal> {
 }
 
 export async function updateGoal(id: string, input: UpdateGoalInput): Promise<Goal> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -758,7 +793,7 @@ export async function updateGoal(id: string, input: UpdateGoalInput): Promise<Go
 }
 
 export async function updateGoalProgress(goalId: string, currentAmount: number): Promise<Goal> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -786,7 +821,7 @@ export async function updateGoalProgress(goalId: string, currentAmount: number):
 }
 
 export async function archiveGoal(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -806,7 +841,7 @@ export type PushSubscriptionRecord = {
 };
 
 export async function savePushSubscription(input: PushSubscriptionRecord) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -816,7 +851,7 @@ export async function savePushSubscription(input: PushSubscriptionRecord) {
     .from("push_subscriptions")
     .upsert(
       {
-        user_id: DEMO_USER_ID,
+        user_id: await requireUserId(),
         endpoint: input.endpoint,
         p256dh: input.p256dh,
         auth: input.auth
@@ -830,7 +865,7 @@ export async function savePushSubscription(input: PushSubscriptionRecord) {
 }
 
 export async function deletePushSubscription(endpoint: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
@@ -844,13 +879,16 @@ export async function deletePushSubscription(endpoint: string) {
 }
 
 export async function fetchPushSubscriptions(): Promise<PushSubscriptionRecord[]> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
   }
 
-  const { data, error } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth");
+  const { data, error } = await supabase
+    .from("push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("user_id", await requireUserId());
 
   if (error) {
     throw new Error(error.message);
@@ -860,7 +898,7 @@ export async function fetchPushSubscriptions(): Promise<PushSubscriptionRecord[]
 }
 
 export async function removeTransaction(id: string) {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = getSupabaseClient();
 
   if (!supabase) {
     throw new Error("Missing Supabase environment variables.");
