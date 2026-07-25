@@ -14,6 +14,8 @@ import {
   createSubcategory,
   createTransaction,
   loadExpenseData,
+  DEMO_WRITE_BLOCKED,
+  isDemoMode,
   removeMonthlyBudget,
   removeTransaction,
   setQueueDrainedCallback,
@@ -87,8 +89,20 @@ export function useAppState() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
-  const [dataError, setDataError] = useState("");
+  const [dataError, setDataErrorRaw] = useState("");
   const [dataNotice, setDataNotice] = useState("");
+  const [signUpPromptOpen, setSignUpPromptOpen] = useState(false);
+
+  // Every command handler reports failures through setDataError, so a blocked
+  // demo write is intercepted here once rather than in each of them.
+  const setDataError = useCallback((message: string) => {
+    if (message === DEMO_WRITE_BLOCKED) {
+      setSignUpPromptOpen(true);
+      setDataErrorRaw("");
+      return;
+    }
+    setDataErrorRaw(message);
+  }, []);
   const [isSaving, setIsSaving] = useState(false);
   const [savingBudgetId, setSavingBudgetId] = useState("");
   const [savingGoalId, setSavingGoalId] = useState("");
@@ -253,7 +267,7 @@ export function useAppState() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [setDataError]);
 
   useEffect(() => {
     void loadData({ initial: true });
@@ -1446,6 +1460,10 @@ export function useAppState() {
   }
 
   return {
+    // demo
+    demoMode: isDemoMode(),
+    signUpPromptOpen,
+    setSignUpPromptOpen,
     // data
     accounts,
     budgets,
