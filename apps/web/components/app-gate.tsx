@@ -1,20 +1,41 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { setDemoMode } from "@/lib/offline-data";
 import { AuthScreen } from "./auth-screen";
 import { ExpenseTrackerApp } from "./expense-tracker-app";
 import { useSession } from "./use-session";
 
 /**
- * Decides between the auth screen and the app.
+ * Decides between the demo, the auth screen, and the real app.
  *
- * ExpenseTrackerApp is only mounted once a session exists, because useAppState
- * fetches the whole dataset on mount and the offline cache is keyed by user id.
- * Keying it on userId also forces a full remount when the account changes, so
- * no state from the previous user survives.
+ * A signed-out visitor lands in a read-only demo backed by bundled sample data
+ * rather than an auth wall, and is prompted to sign up on the first write.
+ *
+ * ExpenseTrackerApp only mounts once the mode is settled, because useAppState
+ * fetches its dataset on mount. The key forces a full remount whenever the
+ * account changes, so no state survives across users or across demo-to-real.
  */
 export function AppGate() {
   const session = useSession();
+  const [authMode, setAuthMode] = useState<"signIn" | "signUp" | null>(null);
+  const showAuth = authMode !== null;
+
+  const isDemo = session.status === "signedOut" || (session.status !== "loading" && !session.userId);
+
+  // Set during render, not in an effect: a child's effects run before its
+  // parent's, so useAppState would otherwise start its first fetch against
+  // Supabase before this flag was set. Writing a module-level boolean during
+  // render is idempotent and safe to repeat.
+  setDemoMode(isDemo);
+
+  // A completed sign-in should drop the auth screen.
+  useEffect(() => {
+    if (session.userId) {
+      setAuthMode(null);
+    }
+  }, [session.userId]);
 
   if (session.status === "loading") {
     return (
@@ -37,9 +58,15 @@ export function AppGate() {
     );
   }
 
-  if (session.status === "signedOut" || !session.userId) {
-    return <AuthScreen />;
+  if (isDemo && showAuth) {
+    return <AuthScreen initialMode={authMode} onBack={() => setAuthMode(null)} />;
   }
 
-  return <ExpenseTrackerApp key={session.userId} session={session} />;
+  return (
+    <ExpenseTrackerApp
+      key={session.userId ?? "demo"}
+      session={session}
+      onRequestAuth={isDemo ? (mode) => setAuthMode(mode ?? "signIn") : undefined}
+    />
+  );
 }

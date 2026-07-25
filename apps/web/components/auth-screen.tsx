@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CircleAlert, Loader2, WalletCards } from "lucide-react";
+import { ArrowLeft, CircleAlert, Loader2, WalletCards } from "lucide-react";
 import { sendPasswordReset, signInWithPassword, signUpWithPassword } from "@athonesayate/shared/supabase";
 
 type Mode = "signIn" | "signUp" | "reset";
@@ -18,8 +18,8 @@ const subtitles: Record<Mode, string> = {
   reset: "We'll email you a link to set a new password."
 };
 
-export function AuthScreen() {
-  const [mode, setMode] = useState<Mode>("signIn");
+export function AuthScreen({ onBack, initialMode = "signIn" }: { onBack?: () => void; initialMode?: Mode }) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -78,6 +78,16 @@ export function AuthScreen() {
   return (
     <main className="liquid-ui grid min-h-screen place-items-center px-5 py-12 text-ink">
       <div className="w-full max-w-sm">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-4 flex items-center gap-1.5 text-sm font-medium text-ink/55 transition hover:text-river"
+          >
+            <ArrowLeft size={15} />
+            Back to demo
+          </button>
+        ) : null}
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
             <WalletCards size={26} />

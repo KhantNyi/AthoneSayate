@@ -22,6 +22,7 @@ import type {
   UpdateTransactionInput
 } from "@athonesayate/shared/supabase-data";
 import type { Account, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "@athonesayate/shared/types";
+import { demoExpenseData } from "./demo-data";
 
 // Storage is namespaced per user. Without this, signing in as a second user on
 // the same browser would read the previous user's financial snapshot straight
@@ -34,6 +35,27 @@ const QUEUE_PREFIX = "athonesayate-mutation-queue-v2";
 const LEGACY_KEYS = ["athonesayate-data-cache-v1", "athonesayate-mutation-queue-v1"];
 
 let activeUserId: string | null = null;
+let demoMode = false;
+
+/**
+ * Message carried by the error thrown when a signed-out visitor attempts a
+ * write. useAppState recognises it and opens the sign-up sheet instead of
+ * surfacing it as a failure.
+ */
+export const DEMO_WRITE_BLOCKED = "__demo_write_blocked__";
+
+/**
+ * Read-only exploration for signed-out visitors: reads come from a bundled
+ * sample dataset and writes are refused. Nothing here touches Supabase or
+ * localStorage, so the demo cannot collide with a real account's cache.
+ */
+export function setDemoMode(enabled: boolean) {
+  demoMode = enabled;
+}
+
+export function isDemoMode() {
+  return demoMode;
+}
 
 /**
  * Binds local storage to a user. Must be called before any read or write;
@@ -293,6 +315,10 @@ function newId() {
 // --- reads ----------------------------------------------------------------
 
 export async function loadExpenseData(): Promise<{ data: ExpenseData; fromCache: boolean }> {
+  if (demoMode) {
+    return { data: demoExpenseData(), fromCache: false };
+  }
+
   bindConnectivityListeners();
   purgeLegacyKeys();
   void replayQueue();
@@ -322,6 +348,12 @@ async function runMutation<T>(
   optimistic: () => T,
   applyToCache: (data: ExpenseData, result: T) => void
 ): Promise<T> {
+  // Signed-out visitors can explore but not persist. Refused before the
+  // optimistic path so nothing lands in state, the cache, or the queue.
+  if (demoMode) {
+    throw new Error(DEMO_WRITE_BLOCKED);
+  }
+
   try {
     const result = (await replayHandlers[fn](args)) as T;
     mutateCache((data) => applyToCache(data, result));

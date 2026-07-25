@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
+import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import { AppProvider } from "./app-context";
@@ -20,7 +20,13 @@ const RecurringTab = dynamic(() => import("./tabs/recurring-tab"), { loading: ()
 const GoalsTab = dynamic(() => import("./tabs/goals-tab"), { loading: () => <TabSkeleton /> });
 const SettingsTab = dynamic(() => import("./tabs/settings-tab"), { loading: () => <TabSkeleton /> });
 
-export function ExpenseTrackerApp({ session }: { session: Session }) {
+type ExpenseTrackerAppProps = {
+  session: Session;
+  /** Signed-out preview: leaves the demo and shows the auth screen. */
+  onRequestAuth?: (mode?: "signIn" | "signUp") => void;
+};
+
+export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppProps) {
   const app = useAppState();
   const {
     t,
@@ -51,7 +57,10 @@ export function ExpenseTrackerApp({ session }: { session: Session }) {
     lastRecurringPayment,
     handleUndoRecurringPaid,
     undoingRecurringPaymentId,
-    setQuickAddOpen
+    setQuickAddOpen,
+    demoMode,
+    signUpPromptOpen,
+    setSignUpPromptOpen
   } = app;
 
   const syncPill = !syncState.online || usingCachedData
@@ -91,24 +100,35 @@ export function ExpenseTrackerApp({ session }: { session: Session }) {
             ))}
           </nav>
           <div className="mt-4 grid gap-3">
-            <div className="liquid-control flex items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold uppercase text-bright">
-                {session.email?.charAt(0) ?? "A"}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">{session.email ?? "Signed in"}</span>
-                <span className="block text-xs text-ink/45">Free plan</span>
-              </span>
+            {demoMode ? (
               <button
                 type="button"
-                onClick={() => void session.signOut()}
-                title="Sign out"
-                aria-label="Sign out"
-                className="ml-auto shrink-0 rounded-lg p-1.5 text-ink/45 transition hover:bg-rose-500/10 hover:text-rose-600"
+                onClick={() => onRequestAuth?.()}
+                className="liquid-control w-full rounded-xl border border-river/25 bg-river/5 p-3 text-left transition hover:bg-river/10"
               >
-                <LogOut size={16} />
+                <span className="block text-sm font-semibold text-river">Sample data</span>
+                <span className="mt-0.5 block text-xs text-ink/55">Sign in to track your own</span>
               </button>
-            </div>
+            ) : (
+              <div className="liquid-control flex items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold uppercase text-bright">
+                  {session.email?.charAt(0) ?? "A"}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{session.email ?? "Signed in"}</span>
+                  <span className="block text-xs text-ink/45">Free plan</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void session.signOut()}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  className="ml-auto shrink-0 rounded-lg p-1.5 text-ink/45 transition hover:bg-rose-500/10 hover:text-rose-600"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
             <div className="liquid-card rounded-xl border border-ink/10 bg-white p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-ink/55">{t.accountBalance}</span>
@@ -173,19 +193,43 @@ export function ExpenseTrackerApp({ session }: { session: Session }) {
                 <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
               </div>
-              <button
-                type="button"
-                onClick={() => void session.signOut()}
-                className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink/70 hover:bg-rose-500/10 hover:text-rose-600"
-              >
-                <LogOut size={18} />
-                Sign out
-              </button>
+              {demoMode ? (
+                <button
+                  type="button"
+                  onClick={() => onRequestAuth?.()}
+                  className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-river hover:bg-river/10"
+                >
+                  <LogIn size={18} />
+                  Sign in or sign up
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void session.signOut()}
+                  className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink/70 hover:bg-rose-500/10 hover:text-rose-600"
+                >
+                  <LogOut size={18} />
+                  Sign out
+                </button>
+              )}
             </div>
           </div>
         ) : null}
 
         <section className="min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
+          {demoMode ? (
+            <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-river/25 bg-river/5 px-4 py-2.5 text-sm">
+              <span className="font-semibold text-river">Demo</span>
+              <span className="min-w-0 text-ink/65">You&apos;re exploring sample data. Nothing here is saved.</span>
+              <button
+                type="button"
+                onClick={() => onRequestAuth?.()}
+                className="ml-auto shrink-0 rounded-lg bg-gradient-to-r from-river to-indigo-500 px-3 py-1.5 text-xs font-semibold text-bright shadow-glow"
+              >
+                Sign in or sign up
+              </button>
+            </div>
+          ) : null}
           <header className="mb-5 grid items-center gap-3 xl:grid-cols-[340px_minmax(280px,1fr)_auto]">
             <div className="min-w-0">
               <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
@@ -306,6 +350,35 @@ export function ExpenseTrackerApp({ session }: { session: Session }) {
                 className="grid size-8 shrink-0 place-items-center rounded-lg text-ink/40 transition hover:bg-ink/5 hover:text-ink"
               >
                 <X size={15} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {signUpPromptOpen ? (
+          <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/40 px-5 backdrop-blur-sm">
+            <div className="liquid-chrome w-full max-w-sm rounded-2xl border border-ink/10 bg-white p-6 shadow-lift">
+              <div className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
+                <WalletCards size={22} />
+              </div>
+              <h2 className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
+              <p className="mt-2 text-sm text-ink/60">
+                You&apos;re exploring with sample data. Sign up to start tracking your own spending — it takes a few seconds,
+                and you&apos;ll begin with a clean set of categories.
+              </p>
+              <button
+                type="button"
+                onClick={() => onRequestAuth?.("signUp")}
+                className="mt-5 w-full rounded-xl bg-gradient-to-r from-river to-indigo-500 px-4 py-2.5 text-sm font-semibold text-bright shadow-glow"
+              >
+                Create free account
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignUpPromptOpen(false)}
+                className="mt-2 w-full rounded-xl px-4 py-2.5 text-sm font-medium text-ink/55 transition hover:bg-ink/5"
+              >
+                Keep looking around
               </button>
             </div>
           </div>
