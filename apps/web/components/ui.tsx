@@ -1,10 +1,56 @@
 "use client";
 
-import { BadgeDollarSign, CalendarDays, ChevronLeft, ChevronRight, Languages, Moon, Sun } from "lucide-react";
+import { BadgeDollarSign, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Languages, Moon, Sun } from "lucide-react";
 import { addMonths, format, parseISO, startOfMonth } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import type { Language } from "@/lib/i18n";
+import type { ValidationResult } from "@/lib/validation";
+import type { TabKey } from "./nav";
+
+/** Outline for a control the form is still waiting on. */
+export const INVALID_FIELD = "border-coral bg-coral/[0.04]";
+
+/**
+ * Spells out, next to the form itself, what an action is still waiting on. The
+ * global toast can scroll out of view; this stays where the user is working.
+ */
+export function FormAlert({
+  result,
+  show = true,
+  onFix,
+  className = ""
+}: {
+  result: ValidationResult;
+  /** Field-level requirements only nag once the user has tried to submit. */
+  show?: boolean;
+  onFix?: (tab: TabKey) => void;
+  className?: string;
+}) {
+  // A prerequisite the form cannot satisfy on its own is worth saying upfront.
+  if (result.ok || (!show && !result.fix)) {
+    return null;
+  }
+
+  return (
+    <div
+      role="alert"
+      className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-coral/25 bg-coral/10 px-3 py-2 text-sm text-coral ${className}`}
+    >
+      <CircleAlert size={16} className="shrink-0" />
+      <span className="min-w-0">{result.message}</span>
+      {result.fix && onFix ? (
+        <button
+          type="button"
+          onClick={() => onFix(result.fix!.tab)}
+          className="ml-auto shrink-0 rounded-lg border border-coral/30 px-2.5 py-1 text-xs font-semibold transition hover:bg-coral/10"
+        >
+          {result.fix.label}
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 export function Panel({
   id,

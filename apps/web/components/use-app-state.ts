@@ -68,6 +68,17 @@ import {
 } from "@/lib/calendar-utils";
 import { applyCategoryDisplayColors, applyMonthlyBudgets, monthlyComparisonForMonth, percentDelta, upsertBudgetInState } from "@/lib/helpers";
 import { categoryTranslations, frequencyTranslations, translations, uiTranslations, type Language } from "@/lib/i18n";
+import {
+  validateAccount,
+  validateBudget,
+  validateCategory,
+  validateGoal,
+  validateRecurring,
+  validateSubcategory,
+  validateTransaction,
+  type RequirementFix,
+  type ValidationResult
+} from "@/lib/validation";
 import { navItems, type TabKey } from "./nav";
 
 type LastRecurringPayment = {
@@ -76,6 +87,12 @@ type LastRecurringPayment = {
   updatedRule: RecurringRule;
   notice: string;
 };
+
+/** Why an action could not complete, plus where to go to unblock it. */
+type ActionAlert = { message: string; fix?: RequirementFix };
+
+/** Forms whose field-level requirements are shown only after a failed attempt. */
+type FormKey = "transaction" | "recurring" | "goal" | "category" | "subcategory" | "budget";
 
 export function useAppState() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -91,10 +108,13 @@ export function useAppState() {
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataErrorRaw] = useState("");
   const [dataNotice, setDataNotice] = useState("");
+  const [actionAlert, setActionAlert] = useState<ActionAlert | null>(null);
+  const [attemptedForms, setAttemptedForms] = useState<Partial<Record<FormKey, boolean>>>({});
   const [signUpPromptOpen, setSignUpPromptOpen] = useState(false);
 
-  // Every command handler reports failures through setDataError, so a blocked
-  // demo write is intercepted here once rather than in each of them.
+  // dataError covers the whole screen failing to load; a single action that
+  // fails reports through reportFailure instead, so the explanation follows the
+  // user rather than sitting in a banner they have scrolled past.
   const setDataError = useCallback((message: string) => {
     if (message === DEMO_WRITE_BLOCKED) {
       setSignUpPromptOpen(true);
@@ -102,6 +122,37 @@ export function useAppState() {
       return;
     }
     setDataErrorRaw(message);
+  }, []);
+
+  const clearActionAlert = useCallback(() => setActionAlert(null), []);
+
+  /**
+   * Says why an action could not complete. Every command handler funnels
+   * failures through here, so a blocked demo write is intercepted once rather
+   * than in each of them.
+   */
+  const reportFailure = useCallback((message: string, fix?: RequirementFix) => {
+    if (message === DEMO_WRITE_BLOCKED) {
+      setSignUpPromptOpen(true);
+      setActionAlert(null);
+      return;
+    }
+    setDataNotice("");
+    setActionAlert({ message, fix });
+  }, []);
+
+  const reportError = useCallback((error: unknown, fallback: string) => {
+    reportFailure(error instanceof Error ? error.message : fallback);
+  }, [reportFailure]);
+
+  /** Reports the unmet requirements of a form and remembers to keep showing them. */
+  const reportBlocked = useCallback((form: FormKey, result: ValidationResult) => {
+    setAttemptedForms((current) => ({ ...current, [form]: true }));
+    reportFailure(result.message, result.fix);
+  }, [reportFailure]);
+
+  const clearAttempt = useCallback((form: FormKey) => {
+    setAttemptedForms((current) => (current[form] ? { ...current, [form]: false } : current));
   }, []);
   const [isSaving, setIsSaving] = useState(false);
   const [savingBudgetId, setSavingBudgetId] = useState("");
@@ -224,6 +275,15 @@ export function useAppState() {
     const timeout = window.setTimeout(() => setDataNotice(""), hasUndo ? 12000 : 6000);
     return () => window.clearTimeout(timeout);
   }, [dataNotice, lastRecurringPayment]);
+
+  useEffect(() => {
+    if (!actionAlert) {
+      return;
+    }
+    // Longer than a success notice: this one has something to read and act on.
+    const timeout = window.setTimeout(() => setActionAlert(null), 10000);
+    return () => window.clearTimeout(timeout);
+  }, [actionAlert]);
 
   const loadData = useCallback(async ({ initial }: { initial: boolean }) => {
     try {
@@ -671,7 +731,46 @@ export function useAppState() {
   ].filter(Boolean);
   const selectedCategory = displayCategories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
-  const canAddTransaction = Boolean(accountId && categoryId && Number(amount) > 0 && !isSaving);
+
+  // One source of truth per form: the submit handler refuses on it and the form
+  // itself renders it, so what blocks the button is always spelled out.
+  const formIssues: Record<FormKey, ValidationResult> = {
+    transaction: validateTransaction({
+      action: "add this transaction",
+      type,
+      amount,
+      categoryId,
+      accountId,
+      categories,
+      accountCount: accounts.length
+    }),
+    recurring: validateRecurring({
+      action: "add this recurring item",
+      type: recurringType,
+      name: recurringName,
+      amount: recurringAmount,
+      categoryId: recurringCategoryId,
+      accountId: recurringAccountId,
+      nextDueOn: recurringNextDueOn,
+      categories,
+      accountCount: accounts.length
+    }),
+    goal: validateGoal({ action: "add this goal", name: goalName, targetAmount: goalTargetAmount }),
+    category: validateCategory({ action: "create this category", name: newCategoryName, monthlyBudget: newCategoryBudget }),
+    subcategory: validateSubcategory({
+      action: "create this subcategory",
+      name: newSubcategoryName,
+      categoryId: newSubcategoryCategoryId,
+      categoryCount: categories.length
+    }),
+    budget: validateBudget({
+      action: "save this budget",
+      categoryId: budgetCategoryId,
+      amount: budgetAmount,
+      expenseCategoryCount: categories.filter((category) => category.kind === "expense").length
+    })
+  };
+  const formAttempted = (form: FormKey) => Boolean(attemptedForms[form]);
   const transactionCalendarDays = useMemo(() => summarizeTransactionsByDay(transactions.filter((tx) => tx.occurredOn.startsWith(visibleMonthKey))), [transactions, visibleMonthKey]);
   const visibleRecurringPayments = useMemo(() => upcoming.reduce<Record<string, Transaction | undefined>>((matches, rule) => ({
     ...matches,
@@ -773,14 +872,17 @@ export function useAppState() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsedAmount = Number(amount);
-    if (!parsedAmount || !categoryId || !accountId) {
+
+    if (!formIssues.transaction.ok) {
+      reportBlocked("transaction", formIssues.transaction);
       return false;
     }
 
+    const parsedAmount = Number(amount);
+
     try {
       setIsSaving(true);
-      setDataError("");
+      clearActionAlert();
       const transaction = await createTransaction({
         accountId,
         categoryId: categoryId || undefined,
@@ -796,9 +898,10 @@ export function useAppState() {
       setTransactionDrafts((current) => ({ ...current, [transaction.id]: transactionToDraft(transaction) }));
       setAmount("");
       setNotes("");
+      clearAttempt("transaction");
       return true;
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to save transaction.");
+      reportError(error, "Unable to save transaction.");
       return false;
     } finally {
       setIsSaving(false);
@@ -887,15 +990,24 @@ export function useAppState() {
     const parsedAmount = Number(draft.amount);
     const draftCategory = categories.find((category) => category.id === draft.categoryId);
     const draftSubcategory = subcategories.find((subcategory) => subcategory.id === draft.subcategoryId);
+    const issues = validateTransaction({
+      action: "update this transaction",
+      type: draft.type,
+      amount: draft.amount,
+      categoryId: draft.categoryId,
+      accountId: draft.accountId,
+      categories,
+      accountCount: accounts.length
+    });
 
-    if (!parsedAmount || !draft.accountId || !draft.categoryId) {
-      setDataError("Transaction needs an account, category, and amount.");
+    if (!issues.ok) {
+      reportFailure(issues.message, issues.fix);
       return;
     }
 
     try {
       setSavingTransactionId(transaction.id);
-      setDataError("");
+      clearActionAlert();
       const updated = await updateTransaction(transaction.id, {
         accountId: draft.accountId,
         categoryId: draft.categoryId || undefined,
@@ -911,7 +1023,7 @@ export function useAppState() {
       setTransactionDrafts((current) => ({ ...current, [updated.id]: transactionToDraft(updated) }));
       setEditingTransactionId("");
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update transaction.");
+      reportError(error, "Unable to update transaction.");
     } finally {
       setSavingTransactionId("");
     }
@@ -928,23 +1040,25 @@ export function useAppState() {
     });
 
     try {
-      setDataError("");
+      clearActionAlert();
       await removeTransaction(id);
     } catch (error) {
       setTransactions(previous);
       setTransactionDrafts(previousDrafts);
-      setDataError(error instanceof Error ? error.message : "Unable to delete transaction.");
+      reportError(error, "Unable to delete transaction.");
     }
   }
 
   async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newCategoryName.trim()) {
+
+    if (!formIssues.category.ok) {
+      reportBlocked("category", formIssues.category);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       const category = await createCategory({
         name: newCategoryName.trim(),
         kind: newCategoryKind,
@@ -954,44 +1068,56 @@ export function useAppState() {
       setNewCategoryName("");
       setNewCategoryBudget("");
       setNewSubcategoryCategoryId(category.id);
+      clearAttempt("category");
+      setDataNotice(`${category.name} added to your ${category.kind} categories.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to create category.");
+      reportError(error, "Unable to create category.");
     }
   }
 
   async function handleCreateSubcategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newSubcategoryName.trim() || !newSubcategoryCategoryId) {
+
+    if (!formIssues.subcategory.ok) {
+      reportBlocked("subcategory", formIssues.subcategory);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       const subcategory = await createSubcategory({
         categoryId: newSubcategoryCategoryId,
         name: newSubcategoryName.trim()
       });
       setSubcategories((current) => [...current, subcategory].sort((a, b) => a.name.localeCompare(b.name)));
       setNewSubcategoryName("");
+      clearAttempt("subcategory");
+      setDataNotice(`${subcategory.name} added.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to create subcategory.");
+      reportError(error, "Unable to create subcategory.");
     }
   }
 
   async function handleSaveBudget(event: FormEvent<HTMLFormElement>, categoryIdToUpdate: string) {
     event.preventDefault();
+    const draft = budgetDrafts[categoryIdToUpdate] ?? "";
+    const parsedBudget = Number(draft.trim());
+    const issues = validateBudget({
+      action: "update this budget",
+      categoryId: categoryIdToUpdate,
+      amount: draft,
+      expenseCategoryCount: categories.filter((category) => category.kind === "expense").length
+    });
+
+    if (!issues.ok) {
+      reportFailure(issues.message, issues.fix);
+      return;
+    }
+
     try {
-      setDataError("");
+      clearActionAlert();
       setDataNotice("");
       setSavingBudgetId(categoryIdToUpdate);
-      const draft = budgetDrafts[categoryIdToUpdate]?.trim();
-      const parsedBudget = Number(draft);
-
-      if (!draft || !Number.isFinite(parsedBudget) || parsedBudget < 0) {
-        setDataError("Budget must be a positive number.");
-        return;
-      }
-
       const updated = await upsertMonthlyBudget({
         categoryId: categoryIdToUpdate,
         month: `${budgetMonth}-01`,
@@ -1006,7 +1132,7 @@ export function useAppState() {
       setEditingBudgetId("");
       setDataNotice(`Budget saved for ${category?.name ?? "category"} in ${budgetMonth}.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update budget.");
+      reportError(error, "Unable to update budget.");
     } finally {
       setSavingBudgetId("");
     }
@@ -1015,23 +1141,17 @@ export function useAppState() {
   async function handleSetBudget(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!budgetCategoryId) {
-      setDataError("Choose a category first.");
+    if (!formIssues.budget.ok) {
+      reportBlocked("budget", formIssues.budget);
       return;
     }
 
+    const parsedBudget = Number(budgetAmount.trim());
+
     try {
-      setDataError("");
+      clearActionAlert();
       setDataNotice("");
       setSavingBudgetId(budgetCategoryId);
-      const draft = budgetAmount.trim();
-      const parsedBudget = Number(draft);
-
-      if (!draft || !Number.isFinite(parsedBudget) || parsedBudget < 0) {
-        setDataError("Budget must be a positive number.");
-        return;
-      }
-
       const updated = await upsertMonthlyBudget({
         categoryId: budgetCategoryId,
         month: `${budgetMonth}-01`,
@@ -1041,9 +1161,10 @@ export function useAppState() {
       setBudgets((current) => upsertBudgetInState(current, updated));
       setBudgetDrafts((current) => ({ ...current, [updated.categoryId]: String(updated.amount) }));
       setBudgetAmount(String(updated.amount));
+      clearAttempt("budget");
       setDataNotice(`Budget saved for ${category?.name ?? "category"} in ${budgetMonth}.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update budget.");
+      reportError(error, "Unable to update budget.");
     } finally {
       setSavingBudgetId("");
     }
@@ -1051,13 +1172,16 @@ export function useAppState() {
 
   async function handleCreateRecurring(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsedAmount = Number(recurringAmount);
-    if (!recurringAccountId || !recurringCategoryId || !recurringName.trim() || !parsedAmount || !recurringNextDueOn) {
+
+    if (!formIssues.recurring.ok) {
+      reportBlocked("recurring", formIssues.recurring);
       return;
     }
 
+    const parsedAmount = Number(recurringAmount);
+
     try {
-      setDataError("");
+      clearActionAlert();
       const rule = await createRecurringRule({
         accountId: recurringAccountId,
         categoryId: recurringCategoryId,
@@ -1074,21 +1198,26 @@ export function useAppState() {
       setRecurringAmount("");
       setRecurringName("");
       setRecurringAutoCreate(false);
+      clearAttempt("recurring");
+      setDataNotice(`${rule.merchant} added to your recurring items.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to create recurring item.");
+      reportError(error, "Unable to create recurring item.");
     }
   }
 
   async function handleCreateGoal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsedTarget = Number(goalTargetAmount);
-    const parsedCurrent = Number(goalCurrentAmount) || 0;
-    if (!goalName.trim() || !parsedTarget) {
+
+    if (!formIssues.goal.ok) {
+      reportBlocked("goal", formIssues.goal);
       return;
     }
 
+    const parsedTarget = Number(goalTargetAmount);
+    const parsedCurrent = Number(goalCurrentAmount) || 0;
+
     try {
-      setDataError("");
+      clearActionAlert();
       const goal = await createGoal({
         name: goalName.trim(),
         targetAmount: parsedTarget,
@@ -1101,8 +1230,10 @@ export function useAppState() {
       setGoalTargetAmount("");
       setGoalCurrentAmount("");
       setGoalTargetDate("");
+      clearAttempt("goal");
+      setDataNotice(`${goal.name} added to your goals.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to create goal.");
+      reportError(error, "Unable to create goal.");
     }
   }
 
@@ -1111,14 +1242,19 @@ export function useAppState() {
     const draft = goalDrafts[goalId];
     const parsedTarget = Number(draft?.targetAmount);
     const parsedCurrent = Number(draft?.currentAmount) || 0;
+    const issues = validateGoal({
+      action: "update this goal",
+      name: draft?.name ?? "",
+      targetAmount: draft?.targetAmount ?? ""
+    });
 
-    if (!draft?.name.trim() || !parsedTarget) {
-      setDataError("Goal needs a name and target amount.");
+    if (!draft || !issues.ok) {
+      reportFailure(issues.message || "Can't update this goal yet — reopen it and try again.", issues.fix);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       setSavingGoalId(goalId);
       const updated = await updateGoal(goalId, {
         name: draft.name.trim(),
@@ -1130,7 +1266,7 @@ export function useAppState() {
       setGoalDrafts((current) => ({ ...current, [updated.id]: goalToDraft(updated) }));
       setEditingGoalId("");
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update goal.");
+      reportError(error, "Unable to update goal.");
     } finally {
       setSavingGoalId("");
     }
@@ -1141,6 +1277,7 @@ export function useAppState() {
     const categoryBudgets = budgets.filter((item) => item.categoryId === categoryIdToDelete);
 
     if (!category) {
+      reportFailure("Can't remove this budget — its category is no longer in your list. Refresh and try again.");
       return;
     }
 
@@ -1163,7 +1300,7 @@ export function useAppState() {
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       setSavingBudgetId(categoryIdToDelete);
       await Promise.all([
         category.monthlyBudget !== undefined ? updateCategoryBudget(categoryIdToDelete, null) : Promise.resolve(),
@@ -1173,7 +1310,7 @@ export function useAppState() {
     } catch (error) {
       setCategories(previousCategories);
       setBudgets(previousBudgets);
-      setDataError(error instanceof Error ? error.message : "Unable to remove budget category.");
+      reportError(error, "Unable to remove budget category.");
     } finally {
       setSavingBudgetId("");
     }
@@ -1183,14 +1320,25 @@ export function useAppState() {
     event.preventDefault();
     const draft = recurringDrafts[ruleId];
     const parsedAmount = Number(draft?.amount);
+    const issues = validateRecurring({
+      action: "update this recurring item",
+      type: draft?.type ?? "expense",
+      name: draft?.merchant ?? "",
+      amount: draft?.amount ?? "",
+      categoryId: draft?.categoryId ?? "",
+      accountId: draft?.accountId ?? "",
+      nextDueOn: draft?.nextDueOn ?? "",
+      categories,
+      accountCount: accounts.length
+    });
 
-    if (!draft?.accountId || !draft.categoryId || !draft.merchant.trim() || !parsedAmount || !draft.nextDueOn) {
-      setDataError("Recurring item needs account, category, name, amount, and next due date.");
+    if (!draft || !issues.ok) {
+      reportFailure(issues.message || "Can't update this recurring item yet — reopen it and try again.", issues.fix);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       setSavingRecurringId(ruleId);
       const updated = await updateRecurringRule(ruleId, {
         accountId: draft.accountId,
@@ -1207,7 +1355,7 @@ export function useAppState() {
       setRecurringDrafts((current) => ({ ...current, [updated.id]: recurringRuleToDraft(updated) }));
       setEditingRecurringId("");
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update recurring item.");
+      reportError(error, "Unable to update recurring item.");
     } finally {
       setSavingRecurringId("");
     }
@@ -1215,12 +1363,17 @@ export function useAppState() {
 
   async function handleMarkRecurringPaid(rule: RecurringRule) {
     if (!rule.categoryId) {
-      setDataError("Recurring item needs a category before it can be recorded.");
+      reportFailure(`Can't record ${rule.merchant} yet — give it a category first (edit the item and pick one).`);
+      return;
+    }
+
+    if (!rule.accountId) {
+      reportFailure(`Can't record ${rule.merchant} yet — give it an account first (edit the item and pick one).`);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       setDataNotice("");
       setSavingRecurringId(rule.id);
       // Pay the cycle currently in view (a stale schedule catches up to this
@@ -1259,7 +1412,7 @@ export function useAppState() {
       setLastRecurringPayment({ transaction, previousRule: rule, updatedRule, notice });
       setDataNotice(notice);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to record recurring payment.");
+      reportError(error, "Unable to record recurring payment.");
     } finally {
       setSavingRecurringId("");
     }
@@ -1267,13 +1420,14 @@ export function useAppState() {
 
   async function handleUndoRecurringPaid() {
     if (!lastRecurringPayment) {
+      reportFailure("Nothing left to undo — that payment has already been rolled back or the window expired.");
       return;
     }
 
     const { previousRule, transaction, updatedRule } = lastRecurringPayment;
 
     try {
-      setDataError("");
+      clearActionAlert();
       setUndoingRecurringPaymentId(transaction.id);
       await removeTransaction(transaction.id);
       const restoredRule = await updateRecurringRule(previousRule.id, {
@@ -1299,7 +1453,7 @@ export function useAppState() {
       setLastRecurringPayment(null);
       setDataNotice(`${previousRule.merchant} payment undone and moved back to ${format(parseISO(restoredRule.nextDueOn), "MMM d")}.`);
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to undo recurring payment.");
+      reportError(error, "Unable to undo recurring payment.");
     } finally {
       setUndoingRecurringPaymentId("");
     }
@@ -1313,11 +1467,11 @@ export function useAppState() {
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       await archiveRecurringRule(ruleId);
     } catch (error) {
       setRecurringRules(previous);
-      setDataError(error instanceof Error ? error.message : "Unable to delete recurring item.");
+      reportError(error, "Unable to delete recurring item.");
     }
   }
 
@@ -1329,24 +1483,25 @@ export function useAppState() {
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       await archiveGoal(goalId);
     } catch (error) {
       setGoals(previous);
-      setDataError(error instanceof Error ? error.message : "Unable to delete goal.");
+      reportError(error, "Unable to delete goal.");
     }
   }
 
   async function handleUpdateCategory(categoryIdToUpdate: string, input: { name: string; kind: TransactionType; monthlyBudget: string }) {
     const parsedBudget = Number(input.monthlyBudget);
+    const issues = validateCategory({ action: "update this category", name: input.name, monthlyBudget: input.monthlyBudget });
 
-    if (!input.name.trim()) {
-      setDataError("Category needs a name.");
+    if (!issues.ok) {
+      reportFailure(issues.message, issues.fix);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       const updated = await updateCategory(categoryIdToUpdate, {
         name: input.name.trim(),
         kind: input.kind,
@@ -1354,7 +1509,7 @@ export function useAppState() {
       });
       setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update category.");
+      reportError(error, "Unable to update category.");
     }
   }
 
@@ -1365,30 +1520,37 @@ export function useAppState() {
     setSubcategories((current) => current.filter((subcategory) => subcategory.categoryId !== categoryIdToDelete));
 
     try {
-      setDataError("");
+      clearActionAlert();
       await archiveCategory(categoryIdToDelete);
     } catch (error) {
       setCategories(previousCategories);
       setSubcategories(previousSubcategories);
-      setDataError(error instanceof Error ? error.message : "Unable to delete category.");
+      reportError(error, "Unable to delete category.");
     }
   }
 
   async function handleUpdateSubcategory(subcategoryIdToUpdate: string, input: { categoryId: string; name: string }) {
-    if (!input.categoryId || !input.name.trim()) {
-      setDataError("Subcategory needs a category and name.");
+    const issues = validateSubcategory({
+      action: "update this subcategory",
+      name: input.name,
+      categoryId: input.categoryId,
+      categoryCount: categories.length
+    });
+
+    if (!issues.ok) {
+      reportFailure(issues.message, issues.fix);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       const updated = await updateSubcategory(subcategoryIdToUpdate, {
         categoryId: input.categoryId,
         name: input.name.trim()
       });
       setSubcategories((current) => current.map((subcategory) => (subcategory.id === updated.id ? updated : subcategory)).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update subcategory.");
+      reportError(error, "Unable to update subcategory.");
     }
   }
 
@@ -1397,11 +1559,11 @@ export function useAppState() {
     setSubcategories((current) => current.filter((subcategory) => subcategory.id !== subcategoryIdToDelete));
 
     try {
-      setDataError("");
+      clearActionAlert();
       await archiveSubcategory(subcategoryIdToDelete);
     } catch (error) {
       setSubcategories(previous);
-      setDataError(error instanceof Error ? error.message : "Unable to delete subcategory.");
+      reportError(error, "Unable to delete subcategory.");
     }
   }
 
@@ -1409,14 +1571,19 @@ export function useAppState() {
     event.preventDefault();
     const draft = accountDrafts[accountIdToUpdate];
     const parsedOpeningBalance = Number(draft?.openingBalance);
+    const issues = validateAccount({
+      action: "update this account",
+      name: draft?.name ?? "",
+      openingBalance: draft?.openingBalance ?? ""
+    });
 
-    if (!draft?.name.trim() || !Number.isFinite(parsedOpeningBalance)) {
-      setDataError("Account needs a name and valid opening balance.");
+    if (!draft || !issues.ok) {
+      reportFailure(issues.message || "Can't update this account yet — reopen it and try again.", issues.fix);
       return;
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       setSavingAccountId(accountIdToUpdate);
       const updated = await updateAccount(accountIdToUpdate, {
         name: draft.name.trim(),
@@ -1428,7 +1595,7 @@ export function useAppState() {
       setAccountDrafts((current) => ({ ...current, [updated.id]: accountToDraft(updated) }));
       setEditingAccountId("");
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : "Unable to update account.");
+      reportError(error, "Unable to update account.");
     } finally {
       setSavingAccountId("");
     }
@@ -1451,11 +1618,11 @@ export function useAppState() {
     }
 
     try {
-      setDataError("");
+      clearActionAlert();
       await archiveAccount(accountIdToDelete);
     } catch (error) {
       setAccounts(previous);
-      setDataError(error instanceof Error ? error.message : "Unable to delete account.");
+      reportError(error, "Unable to delete account.");
     }
   }
 
@@ -1497,6 +1664,11 @@ export function useAppState() {
     dataError,
     dataNotice,
     setDataNotice,
+    actionAlert,
+    clearActionAlert,
+    reportFailure,
+    formIssues,
+    formAttempted,
     syncState,
     usingCachedData,
     // i18n helpers
@@ -1593,7 +1765,6 @@ export function useAppState() {
     setOccurredOn,
     notes,
     setNotes,
-    canAddTransaction,
     isSaving,
     handleSubmit,
     handleQuickAdd,

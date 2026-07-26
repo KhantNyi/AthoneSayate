@@ -5,9 +5,10 @@ import { format, parseISO } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import type { RecurringRule, TransactionType } from "@athonesayate/shared/types";
 import { recurringRuleToDraft } from "@/lib/drafts";
+import { isMissing, validateRecurring } from "@/lib/validation";
 import { useApp } from "../app-context";
 import { MonthCalendar } from "../month-calendar";
-import { Panel } from "../ui";
+import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function RecurringEditor({ rule }: { rule: RecurringRule }) {
   const {
@@ -20,13 +21,25 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
     setRecurringDrafts,
     handleUpdateRecurring,
     cancelEditingRecurring,
-    savingRecurringId
+    savingRecurringId,
+    chooseTab
   } = useApp();
 
   const draft = recurringDrafts[rule.id] ?? recurringRuleToDraft(rule);
+  const issues = validateRecurring({
+    action: "update this recurring item",
+    type: draft.type,
+    name: draft.merchant,
+    amount: draft.amount,
+    categoryId: draft.categoryId,
+    accountId: draft.accountId,
+    nextDueOn: draft.nextDueOn,
+    categories,
+    accountCount: accounts.length
+  });
 
   return (
-    <form onSubmit={(event) => handleUpdateRecurring(event, rule.id)} className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
+    <form onSubmit={(event) => handleUpdateRecurring(event, rule.id)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
       <select
         value={draft.type}
         onChange={(event) => {
@@ -40,8 +53,8 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
         <option value="expense">{t.expense}</option>
         <option value="income">{t.income}</option>
       </select>
-      <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-      <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Name" />
+      <input value={draft.amount} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, amount: event.target.value } }))} aria-invalid={isMissing(issues, "amount") || undefined} className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount") ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder={t.amount} />
+      <input value={draft.merchant} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, merchant: event.target.value } }))} aria-invalid={isMissing(issues, "name") || undefined} className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "name") ? INVALID_FIELD : "border-ink/10"}`} placeholder="Name" />
       <select
         value={draft.categoryId}
         onChange={(event) => {
@@ -49,8 +62,10 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
           const nextSubcategoryId = subcategories.find((subcategory) => subcategory.categoryId === nextCategoryId)?.id ?? "";
           setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId } }));
         }}
-        className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+        aria-invalid={isMissing(issues, "categoryId") || undefined}
+        className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId") ? INVALID_FIELD : "border-ink/10"}`}
       >
+        {categories.some((category) => category.kind === draft.type) ? null : <option value="">No {draft.type} categories</option>}
         {categories.filter((category) => category.kind === draft.type).map((category) => (
           <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
         ))}
@@ -74,7 +89,8 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
           type="date"
           value={draft.nextDueOn}
           onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...(current[rule.id] ?? draft), nextDueOn: event.target.value } }))}
-          className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm font-normal normal-case text-ink"
+          aria-invalid={isMissing(issues, "nextDueOn") || undefined}
+          className={`h-10 rounded-lg border bg-white px-3 text-sm font-normal normal-case text-ink ${isMissing(issues, "nextDueOn") ? INVALID_FIELD : "border-ink/10"}`}
         />
       </label>
       <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingRecurringId === rule.id}>
@@ -84,7 +100,8 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
         <X size={16} />
       </button>
       <div className="flex flex-wrap items-center gap-3 text-sm text-ink/55 lg:col-span-full">
-        <select value={draft.accountId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, accountId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+        <select value={draft.accountId} onChange={(event) => setRecurringDrafts((current) => ({ ...current, [rule.id]: { ...draft, accountId: event.target.value } }))} aria-invalid={isMissing(issues, "accountId") || undefined} className={`h-9 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "accountId") ? INVALID_FIELD : "border-ink/10"}`}>
+          {accounts.length > 0 ? null : <option value="">No accounts yet</option>}
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>{account.name}</option>
           ))}
@@ -94,6 +111,7 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
           Auto-create
         </label>
       </div>
+      <FormAlert result={issues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-full" />
     </form>
   );
 }
@@ -139,14 +157,20 @@ export default function RecurringTab() {
     setVisibleMonth,
     selectedRecurringDate,
     setSelectedRecurringDate,
-    recurringCalendarDays
+    recurringCalendarDays,
+    formIssues,
+    formAttempted,
+    chooseTab
   } = useApp();
+
+  const issues = formIssues.recurring;
+  const showIssues = formAttempted("recurring");
 
   return (
     <Panel id="recurring" title={t.recurring} action={`${displayedRecurringRules.length} ${t.rules}`}>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
-      <form onSubmit={handleCreateRecurring} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
+      <form onSubmit={handleCreateRecurring} noValidate className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold uppercase text-river">Add new recurring item</h3>
           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${recurringType === "income" ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral"}`}>
@@ -158,9 +182,10 @@ export default function RecurringTab() {
             <option value="expense">{t.expense}</option>
             <option value="income">{t.income}</option>
           </select>
-          <input value={recurringAmount} onChange={(event) => setRecurringAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-          <input value={recurringName} onChange={(event) => setRecurringName(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-1" placeholder="Name, e.g. Electricity bill" />
-          <select value={recurringCategoryId} onChange={(event) => setRecurringCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <input value={recurringAmount} onChange={(event) => setRecurringAmount(event.target.value)} aria-invalid={isMissing(issues, "amount", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount", showIssues) ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder={t.amount} />
+          <input value={recurringName} onChange={(event) => setRecurringName(event.target.value)} aria-invalid={isMissing(issues, "name", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm sm:col-span-2 lg:col-span-1 ${isMissing(issues, "name", showIssues) ? INVALID_FIELD : "border-ink/10"}`} placeholder="Name, e.g. Electricity bill" />
+          <select value={recurringCategoryId} onChange={(event) => setRecurringCategoryId(event.target.value)} aria-invalid={isMissing(issues, "categoryId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
+            {categories.some((category) => category.kind === recurringType) ? null : <option value="">No {recurringType} categories</option>}
             {categories.filter((category) => category.kind === recurringType).map((category) => (
               <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
             ))}
@@ -171,7 +196,8 @@ export default function RecurringTab() {
               <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
             ))}
           </select>
-          <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+          <select value={recurringAccountId} onChange={(event) => setRecurringAccountId(event.target.value)} aria-invalid={isMissing(issues, "accountId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "accountId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
+            {accounts.length > 0 ? null : <option value="">No accounts yet</option>}
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
@@ -183,11 +209,12 @@ export default function RecurringTab() {
             <option value="quarterly">Quarterly</option>
             <option value="yearly">Yearly</option>
           </select>
-          <input type="date" value={recurringNextDueOn} onChange={(event) => setRecurringNextDueOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
+          <input type="date" value={recurringNextDueOn} onChange={(event) => setRecurringNextDueOn(event.target.value)} aria-invalid={isMissing(issues, "nextDueOn", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "nextDueOn", showIssues) ? INVALID_FIELD : "border-ink/10"}`} />
           <label className="flex h-11 items-center gap-2 rounded-lg border border-ink/10 bg-white px-3 text-sm">
             <input type="checkbox" checked={recurringAutoCreate} onChange={(event) => setRecurringAutoCreate(event.target.checked)} />
             Auto-create
           </label>
+          <FormAlert result={issues} show={showIssues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-3" />
           <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright sm:col-span-2 lg:col-span-1">
             <Plus size={17} />
             Add

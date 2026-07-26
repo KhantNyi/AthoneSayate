@@ -6,9 +6,10 @@ import { currency } from "@athonesayate/shared/metrics";
 import type { AccountType } from "@athonesayate/shared/types";
 import { accountToDraft } from "@/lib/drafts";
 import { disablePushNotifications, enablePushNotifications, getCurrentPushSubscription } from "@/lib/push";
+import { isMissing, validateAccount } from "@/lib/validation";
 import { useApp } from "../app-context";
 import { CategoryManager } from "../category-manager";
-import { Panel } from "../ui";
+import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function BillRemindersCard() {
   const [status, setStatus] = useState<"loading" | "off" | "on" | "busy">("loading");
@@ -115,6 +116,8 @@ export default function SettingsTab() {
     setNewSubcategoryName,
     newSubcategoryCategoryId,
     setNewSubcategoryCategoryId,
+    formIssues,
+    formAttempted,
     handleCreateCategory,
     handleCreateSubcategory,
     handleUpdateCategory,
@@ -134,6 +137,11 @@ export default function SettingsTab() {
             {balances.map((account) => {
               const draft = accountDrafts[account.id] ?? accountToDraft(account);
               const isEditing = editingAccountId === account.id;
+              const accountIssues = validateAccount({
+                action: "update this account",
+                name: draft.name,
+                openingBalance: draft.openingBalance
+              });
 
               return (
                 <article key={account.id} className={`rounded-lg border p-2 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10"}`}>
@@ -146,8 +154,8 @@ export default function SettingsTab() {
                       </div>
                     </div>
                     {isEditing ? (
-                      <form onSubmit={(event) => handleUpdateAccount(event, account.id)} className="grid gap-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_140px_130px_92px_auto_auto] md:items-center">
-                        <input value={draft.name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))} className="h-10 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold" placeholder="Account name" />
+                      <form onSubmit={(event) => handleUpdateAccount(event, account.id)} noValidate className="grid gap-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_140px_130px_92px_auto_auto] md:items-center">
+                        <input value={draft.name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))} aria-invalid={isMissing(accountIssues, "name") || undefined} className={`h-10 w-full rounded-lg border bg-white px-3 text-sm font-semibold ${isMissing(accountIssues, "name") ? INVALID_FIELD : "border-ink/10"}`} placeholder="Account name" />
                         <select value={draft.type} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, type: event.target.value as AccountType } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                           <option value="cash">Cash</option>
                           <option value="checking">Checking</option>
@@ -156,7 +164,7 @@ export default function SettingsTab() {
                           <option value="wallet">Wallet</option>
                           <option value="investment">Investment</option>
                         </select>
-                        <input value={draft.openingBalance} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Opening" />
+                        <input value={draft.openingBalance} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, openingBalance: event.target.value } }))} aria-invalid={isMissing(accountIssues, "openingBalance") || undefined} className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(accountIssues, "openingBalance") ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder="Opening" />
                         <input type="color" value={draft.color} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, color: event.target.value } }))} className="h-10 w-full rounded-lg border border-ink/10 bg-white px-2" aria-label="Account color" />
                         <button className="h-10 rounded-lg bg-river px-3 text-sm font-semibold text-bright disabled:opacity-50" disabled={savingAccountId === account.id}>
                           {savingAccountId === account.id ? "Saving" : "Update"}
@@ -164,6 +172,7 @@ export default function SettingsTab() {
                         <button type="button" aria-label="Cancel account edit" onClick={() => cancelEditingAccount(account)} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
                           <X size={16} />
                         </button>
+                        <FormAlert result={accountIssues} className="md:col-span-full" />
                       </form>
                     ) : (
                       <div className="inline-flex justify-end gap-1">
@@ -190,6 +199,10 @@ export default function SettingsTab() {
           newCategoryBudget={newCategoryBudget}
           newSubcategoryName={newSubcategoryName}
           newSubcategoryCategoryId={newSubcategoryCategoryId}
+          categoryIssues={formIssues.category}
+          categoryAttempted={formAttempted("category")}
+          subcategoryIssues={formIssues.subcategory}
+          subcategoryAttempted={formAttempted("subcategory")}
           onCategoryNameChange={setNewCategoryName}
           onCategoryKindChange={setNewCategoryKind}
           onCategoryBudgetChange={setNewCategoryBudget}

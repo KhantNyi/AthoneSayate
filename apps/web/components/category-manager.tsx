@@ -4,6 +4,8 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import type { Category, Subcategory, TransactionType } from "@athonesayate/shared/types";
+import { isMissing, type ValidationResult } from "@/lib/validation";
+import { FormAlert, INVALID_FIELD } from "./ui";
 
 export function CategoryManager({
   categories,
@@ -13,6 +15,10 @@ export function CategoryManager({
   newCategoryBudget,
   newSubcategoryName,
   newSubcategoryCategoryId,
+  categoryIssues,
+  categoryAttempted,
+  subcategoryIssues,
+  subcategoryAttempted,
   onCategoryNameChange,
   onCategoryKindChange,
   onCategoryBudgetChange,
@@ -32,6 +38,10 @@ export function CategoryManager({
   newCategoryBudget: string;
   newSubcategoryName: string;
   newSubcategoryCategoryId: string;
+  categoryIssues: ValidationResult;
+  categoryAttempted: boolean;
+  subcategoryIssues: ValidationResult;
+  subcategoryAttempted: boolean;
   onCategoryNameChange: (value: string) => void;
   onCategoryKindChange: (value: TransactionType) => void;
   onCategoryBudgetChange: (value: string) => void;
@@ -76,13 +86,14 @@ export function CategoryManager({
   return (
     <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="grid gap-4">
-        <form onSubmit={onCreateCategory} className="rounded-lg border border-river/15 bg-river/5 p-3">
+        <form onSubmit={onCreateCategory} noValidate className="rounded-lg border border-river/15 bg-river/5 p-3">
           <h3 className="mb-3 text-sm font-semibold uppercase text-river">Create category</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               value={newCategoryName}
               onChange={(event) => onCategoryNameChange(event.target.value)}
-              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              aria-invalid={isMissing(categoryIssues, "name", categoryAttempted) || undefined}
+              className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(categoryIssues, "name", categoryAttempted) ? INVALID_FIELD : "border-ink/10"}`}
               placeholder="Category name"
             />
             <select
@@ -96,10 +107,12 @@ export function CategoryManager({
             <input
               value={newCategoryBudget}
               onChange={(event) => onCategoryBudgetChange(event.target.value)}
-              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2"
+              aria-invalid={isMissing(categoryIssues, "monthlyBudget", categoryAttempted) || undefined}
+              className={`h-11 rounded-lg border bg-white px-3 text-sm sm:col-span-2 ${isMissing(categoryIssues, "monthlyBudget", categoryAttempted) ? INVALID_FIELD : "border-ink/10"}`}
               inputMode="decimal"
               placeholder="Monthly budget, optional"
             />
+            <FormAlert result={categoryIssues} show={categoryAttempted} className="sm:col-span-2" />
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright sm:col-span-2">
               <Plus size={17} />
               Create category
@@ -107,15 +120,16 @@ export function CategoryManager({
           </div>
         </form>
 
-        <form onSubmit={onCreateSubcategory} className="rounded-lg border border-river/15 bg-river/5 p-3">
+        <form onSubmit={onCreateSubcategory} noValidate className="rounded-lg border border-river/15 bg-river/5 p-3">
           <h3 className="mb-3 text-sm font-semibold uppercase text-river">Create subcategory</h3>
           <div className="grid gap-2">
             <select
               value={newSubcategoryCategoryId}
               onChange={(event) => onSubcategoryCategoryChange(event.target.value)}
-              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              aria-invalid={isMissing(subcategoryIssues, "categoryId", subcategoryAttempted) || undefined}
+              className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(subcategoryIssues, "categoryId", subcategoryAttempted) ? INVALID_FIELD : "border-ink/10"}`}
             >
-              <option value="">Choose category</option>
+              <option value="">{categories.length === 0 ? "No categories yet" : "Choose category"}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
@@ -123,9 +137,11 @@ export function CategoryManager({
             <input
               value={newSubcategoryName}
               onChange={(event) => onSubcategoryNameChange(event.target.value)}
-              className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              aria-invalid={isMissing(subcategoryIssues, "name", subcategoryAttempted) || undefined}
+              className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(subcategoryIssues, "name", subcategoryAttempted) ? INVALID_FIELD : "border-ink/10"}`}
               placeholder="Subcategory name, e.g. Electricity"
             />
+            <FormAlert result={subcategoryIssues} show={subcategoryAttempted} />
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright">
               <Plus size={17} />
               Create subcategory

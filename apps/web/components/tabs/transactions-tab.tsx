@@ -6,9 +6,10 @@ import { format, parseISO } from "date-fns";
 import { preciseCurrency } from "@athonesayate/shared/metrics";
 import type { Transaction, TransactionType } from "@athonesayate/shared/types";
 import { transactionToDraft } from "@/lib/drafts";
+import { isMissing, validateTransaction } from "@/lib/validation";
 import { useApp } from "../app-context";
 import { MonthCalendar } from "../month-calendar";
-import { Panel } from "../ui";
+import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function TransactionEditor({ transaction }: { transaction: Transaction }) {
   const {
@@ -21,20 +22,30 @@ function TransactionEditor({ transaction }: { transaction: Transaction }) {
     updateTransactionDraft,
     handleUpdateTransaction,
     cancelEditingTransaction,
-    savingTransactionId
+    savingTransactionId,
+    chooseTab
   } = useApp();
 
   const draft = transactionDrafts[transaction.id] ?? transactionToDraft(transaction);
-  const canSave = Boolean(draft.accountId && draft.categoryId && Number(draft.amount) > 0 && savingTransactionId !== transaction.id);
+  const issues = validateTransaction({
+    action: "update this transaction",
+    type: draft.type,
+    amount: draft.amount,
+    categoryId: draft.categoryId,
+    accountId: draft.accountId,
+    categories,
+    accountCount: accounts.length
+  });
 
   return (
-    <form onSubmit={(event) => handleUpdateTransaction(transaction, event)} className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto_auto]">
+    <form onSubmit={(event) => handleUpdateTransaction(transaction, event)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto_auto]">
       <select value={draft.type} onChange={(event) => updateTransactionDraft(transaction.id, { type: event.target.value as TransactionType })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
         <option value="expense">{t.expense}</option>
         <option value="income">{t.income}</option>
       </select>
-      <input value={draft.amount} onChange={(event) => updateTransactionDraft(transaction.id, { amount: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-      <select value={draft.categoryId} onChange={(event) => updateTransactionDraft(transaction.id, { categoryId: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+      <input value={draft.amount} onChange={(event) => updateTransactionDraft(transaction.id, { amount: event.target.value })} aria-invalid={isMissing(issues, "amount") || undefined} className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount") ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder={t.amount} />
+      <select value={draft.categoryId} onChange={(event) => updateTransactionDraft(transaction.id, { categoryId: event.target.value })} aria-invalid={isMissing(issues, "categoryId") || undefined} className={`h-10 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId") ? INVALID_FIELD : "border-ink/10"}`}>
+        {categories.some((category) => category.kind === draft.type) ? null : <option value="">No {draft.type} categories</option>}
         {categories.filter((category) => category.kind === draft.type).map((category) => (
           <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
         ))}
@@ -51,13 +62,14 @@ function TransactionEditor({ transaction }: { transaction: Transaction }) {
         ))}
       </select>
       <input type="date" value={draft.occurredOn} onChange={(event) => updateTransactionDraft(transaction.id, { occurredOn: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-      <button disabled={!canSave} className="inline-flex h-10 items-center justify-center rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
+      <button disabled={savingTransactionId === transaction.id} className="inline-flex h-10 items-center justify-center rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
         {savingTransactionId === transaction.id ? "Saving" : "Update"}
       </button>
       <button type="button" aria-label="Cancel edit" onClick={() => cancelEditingTransaction(transaction)} className="inline-grid h-10 place-items-center rounded-lg border border-ink/10 bg-white px-3 text-ink/55 transition hover:bg-ink/5 hover:text-ink">
         <X size={16} />
       </button>
       <input value={draft.notes} onChange={(event) => updateTransactionDraft(transaction.id, { notes: event.target.value })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm lg:col-span-full" placeholder={t.optionalNote} />
+      <FormAlert result={issues} onFix={chooseTab} className="lg:col-span-full" />
     </form>
   );
 }
@@ -91,9 +103,11 @@ export default function TransactionsTab() {
     setOccurredOn,
     notes,
     setNotes,
-    canAddTransaction,
     isSaving,
     handleSubmit,
+    formIssues,
+    formAttempted,
+    chooseTab,
     accounts,
     categories,
     subcategories,
@@ -108,6 +122,9 @@ export default function TransactionsTab() {
     setSelectedTransactionDate,
     transactionCalendarDays
   } = useApp();
+
+  const issues = formIssues.transaction;
+  const showIssues = formAttempted("transaction");
 
   // Show a longer list while the user is actively narrowing things down.
   const filtersActive = Boolean(query || txFilterCount > 0 || selectedTransactionDate);
@@ -169,7 +186,7 @@ export default function TransactionsTab() {
             {ui.clear}
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="rounded-lg border border-river/15 bg-river/5 p-3">
+        <form onSubmit={handleSubmit} noValidate className="rounded-lg border border-river/15 bg-river/5 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold uppercase text-river">Record new transaction</h3>
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${type === "income" ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral"}`}>
@@ -181,8 +198,9 @@ export default function TransactionsTab() {
               <option value="expense">{t.expense}</option>
               <option value="income">{t.income}</option>
             </select>
-            <input value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder={t.amount} />
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+            <input value={amount} onChange={(event) => setAmount(event.target.value)} aria-invalid={isMissing(issues, "amount", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount", showIssues) ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder={t.amount} />
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} aria-invalid={isMissing(issues, "categoryId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
+              {categories.some((category) => category.kind === type) ? null : <option value="">No {type} categories</option>}
               {categories.filter((category) => category.kind === type).map((category) => (
                 <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
               ))}
@@ -193,17 +211,19 @@ export default function TransactionsTab() {
                 <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
               ))}
             </select>
-            <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
+            <select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-invalid={isMissing(issues, "accountId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "accountId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
+              {accounts.length > 0 ? null : <option value="">No accounts yet</option>}
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
             </select>
             <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-            <button disabled={!canAddTransaction} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
+            <button disabled={isSaving} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
               <Plus size={17} />
               {isSaving ? "Saving" : t.add}
             </button>
             <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-full" placeholder={t.optionalNote} />
+            <FormAlert result={issues} show={showIssues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-full" />
           </div>
         </form>
       </div>

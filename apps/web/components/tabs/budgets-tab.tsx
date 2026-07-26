@@ -3,8 +3,9 @@
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { parseISO } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
+import { isMissing, validateBudget } from "@/lib/validation";
 import { useApp } from "../app-context";
-import { Panel } from "../ui";
+import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 export default function BudgetsTab() {
   const {
@@ -26,12 +27,19 @@ export default function BudgetsTab() {
     handleSetBudget,
     handleSaveBudget,
     handleDeleteBudget,
-    savingBudgetId
+    savingBudgetId,
+    formIssues,
+    formAttempted,
+    chooseTab
   } = useApp();
+
+  const expenseCategories = categories.filter((category) => category.kind === "expense");
+  const issues = formIssues.budget;
+  const showIssues = formAttempted("budget");
 
   return (
     <Panel id="budgets" title={t.budgetHealth} action={t.monthlyLimits}>
-      <form onSubmit={handleSetBudget} className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
+      <form onSubmit={handleSetBudget} noValidate className="mb-4 max-w-3xl rounded-lg border border-river/15 bg-river/5 p-3">
         <h3 className="mb-3 text-sm font-semibold uppercase text-river">Set new monthly budget</h3>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[150px_minmax(0,1fr)_150px_auto]">
           <input
@@ -46,16 +54,19 @@ export default function BudgetsTab() {
           <select
             value={budgetCategoryId}
             onChange={(event) => setBudgetCategoryId(event.target.value)}
-            className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+            aria-invalid={isMissing(issues, "categoryId", showIssues) || undefined}
+            className={`h-11 min-w-0 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}
           >
-            {categories.filter((category) => category.kind === "expense").map((category) => (
+            {expenseCategories.length > 0 ? null : <option value="">No expense categories</option>}
+            {expenseCategories.map((category) => (
               <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
             ))}
           </select>
           <input
             value={budgetAmount}
             onChange={(event) => setBudgetAmount(event.target.value)}
-            className="h-11 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+            aria-invalid={isMissing(issues, "amount", showIssues) || undefined}
+            className={`h-11 min-w-0 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount", showIssues) ? INVALID_FIELD : "border-ink/10"}`}
             inputMode="decimal"
             placeholder="Amount"
           />
@@ -63,11 +74,18 @@ export default function BudgetsTab() {
             <Plus size={17} />
             {savingBudgetId === budgetCategoryId ? "Saving budget" : "Save monthly budget"}
           </button>
+          <FormAlert result={issues} show={showIssues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-full" />
         </div>
       </form>
       <div className="grid gap-3 xl:grid-cols-2">
         {budgetTabRows.map((row) => {
           const isEditing = editingBudgetId === row.id;
+          const rowIssues = validateBudget({
+            action: "update this budget",
+            categoryId: row.id,
+            amount: budgetDrafts[row.id] ?? "",
+            expenseCategoryCount: expenseCategories.length
+          });
 
           return (
           <article key={row.id} className={`rounded-lg border p-4 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
@@ -79,11 +97,12 @@ export default function BudgetsTab() {
                 </p>
               </div>
               {isEditing ? (
-                <form onSubmit={(event) => handleSaveBudget(event, row.id)} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-80">
+                <form onSubmit={(event) => handleSaveBudget(event, row.id)} noValidate className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-80">
                   <input
                     value={budgetDrafts[row.id] ?? ""}
                     onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}
-                    className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm"
+                    aria-invalid={isMissing(rowIssues, "amount") || undefined}
+                    className={`h-10 min-w-0 rounded-lg border bg-white px-3 text-sm ${isMissing(rowIssues, "amount") ? INVALID_FIELD : "border-ink/10"}`}
                     inputMode="decimal"
                     placeholder="Budget"
                   />
@@ -96,6 +115,7 @@ export default function BudgetsTab() {
                   }} className="grid size-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/55 transition hover:bg-ink/5 hover:text-ink">
                     <X size={16} />
                   </button>
+                  <FormAlert result={rowIssues} className="col-span-full" />
                 </form>
               ) : (
                 <div className="inline-flex justify-end gap-1">

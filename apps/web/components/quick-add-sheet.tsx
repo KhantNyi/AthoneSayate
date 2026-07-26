@@ -2,7 +2,9 @@
 
 import { Plus, X } from "lucide-react";
 import { preciseCurrency } from "@athonesayate/shared/metrics";
+import { isMissing } from "@/lib/validation";
 import { useApp } from "./app-context";
+import { FormAlert, INVALID_FIELD } from "./ui";
 
 export function QuickAddSheet() {
   const {
@@ -27,10 +29,15 @@ export function QuickAddSheet() {
     setOccurredOn,
     notes,
     setNotes,
-    canAddTransaction,
     isSaving,
-    categoryLabel
+    categoryLabel,
+    formIssues,
+    formAttempted,
+    chooseTab
   } = useApp();
+
+  const issues = formIssues.transaction;
+  const showIssues = formAttempted("transaction");
 
   if (!quickAddOpen) {
     return null;
@@ -47,6 +54,7 @@ export function QuickAddSheet() {
     >
       <form
         onSubmit={handleQuickAdd}
+        noValidate
         className="liquid-sheet liquid-scroll max-h-[92vh] w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 bg-white p-5 shadow-lift sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
@@ -82,7 +90,7 @@ export function QuickAddSheet() {
 
         <label className="mb-5 block">
           <span className="mb-1 block text-xs font-semibold uppercase text-ink/45">{t.amount}</span>
-          <div className="flex items-baseline gap-2 border-b-2 border-ink/10 pb-1 transition focus-within:border-river">
+          <div className={`flex items-baseline gap-2 border-b-2 pb-1 transition focus-within:border-river ${isMissing(issues, "amount", showIssues) ? "border-coral" : "border-ink/10"}`}>
             <span className="font-display text-3xl font-semibold text-ink/35">฿</span>
             <input
               autoFocus
@@ -91,6 +99,7 @@ export function QuickAddSheet() {
               inputMode="decimal"
               placeholder="0"
               aria-label={t.amount}
+              aria-invalid={isMissing(issues, "amount", showIssues) || undefined}
               className="tnum w-full border-none bg-transparent font-display text-4xl font-semibold outline-none"
             />
           </div>
@@ -98,6 +107,11 @@ export function QuickAddSheet() {
 
         <div className="mb-4">
           <span className="mb-2 block text-xs font-semibold uppercase text-ink/45">{t.category}</span>
+          {quickAddCategories.length === 0 ? (
+            <p className="rounded-lg border border-amber/25 bg-amber/10 px-3 py-2 text-sm text-amber">
+              You have no {type} categories yet — create one in Settings before recording {type === "income" ? "income" : "an expense"}.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-1.5">
             {quickAddCategories.map((category) => {
               const active = category.id === categoryId;
@@ -148,8 +162,10 @@ export function QuickAddSheet() {
             <select
               value={accountId}
               onChange={(event) => setAccountId(event.target.value)}
-              className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
+              aria-invalid={isMissing(issues, "accountId", showIssues) || undefined}
+              className={`h-11 w-full rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "accountId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}
             >
+              {accounts.length > 0 ? null : <option value="">No accounts yet</option>}
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
@@ -173,8 +189,18 @@ export function QuickAddSheet() {
           className="mb-5 h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
         />
 
+        <FormAlert
+          result={issues}
+          show={showIssues}
+          className="mb-3"
+          onFix={(tab) => {
+            chooseTab(tab);
+            setQuickAddOpen(false);
+          }}
+        />
+
         <button
-          disabled={!canAddTransaction}
+          disabled={isSaving}
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-river to-indigo-500 text-sm font-semibold text-bright shadow-glow transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
         >
           <Plus size={18} />

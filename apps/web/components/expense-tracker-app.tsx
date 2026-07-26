@@ -48,6 +48,8 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     dataError,
     dataNotice,
     setDataNotice,
+    actionAlert,
+    clearActionAlert,
     syncState,
     usingCachedData,
     dashboardStatsMonth,
@@ -272,7 +274,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           ) : null}
 
           {dataError && (
-            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-coral/25 bg-coral/10 px-4 py-3 text-sm text-coral">
+            <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-coral/25 bg-coral/10 px-4 py-3 text-sm text-coral">
               <CircleAlert size={17} className="shrink-0" />
               <span>{dataError}</span>
             </div>
@@ -327,6 +329,40 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         </button>
 
         <QuickAddSheet />
+
+        {/* Why an action didn't go through. Floats so it reaches the user even
+            when the form that failed is far up the page. */}
+        {actionAlert ? (
+          <div className="pointer-events-none fixed inset-x-3 bottom-32 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
+            <div
+              role="alert"
+              className="liquid-toast pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-coral/25 bg-coral/10 py-2.5 pl-4 pr-2 text-sm font-medium text-coral shadow-lift"
+            >
+              <CircleAlert size={18} className="shrink-0" />
+              <span className="min-w-0">{actionAlert.message}</span>
+              {actionAlert.fix ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    chooseTab(actionAlert.fix!.tab);
+                    clearActionAlert();
+                  }}
+                  className="shrink-0 rounded-lg border border-coral/30 px-2.5 py-1 text-xs font-semibold transition hover:bg-coral/10"
+                >
+                  {actionAlert.fix.label}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={clearActionAlert}
+                aria-label="Dismiss alert"
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-coral/60 transition hover:bg-coral/10 hover:text-coral"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {dataNotice ? (
           <div className="pointer-events-none fixed inset-x-3 bottom-32 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
