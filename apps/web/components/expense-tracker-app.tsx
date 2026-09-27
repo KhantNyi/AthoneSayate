@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useRef } from "react";
+import { Modal } from "./modal";
 import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
@@ -35,7 +37,6 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     theme,
     toggleTheme,
     activeTab,
-    setActiveTab,
     chooseTab,
     activeNavItem,
     mobilePrimaryNavItems,
@@ -65,6 +66,33 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     setSignUpPromptOpen
   } = app;
 
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const morePanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mobileMoreOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !morePanel.current?.contains(event.target) && !moreButton.current?.contains(event.target)) {
+        setMobileMoreOpen(false);
+      }
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileMoreOpen(false);
+        moreButton.current?.focus();
+      }
+    };
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const resize = () => { if (desktop.matches) setMobileMoreOpen(false); };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", keydown);
+    desktop.addEventListener("change", resize);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", keydown);
+      desktop.removeEventListener("change", resize);
+    };
+  }, [mobileMoreOpen, setMobileMoreOpen]);
+
   const syncPill = !syncState.online || usingCachedData
     ? { tone: "amber" as const, label: syncState.pending > 0 ? `Offline - ${syncState.pending} queued` : "Offline" }
     : syncState.pending > 0
@@ -73,7 +101,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
   return (
     <AppProvider value={app}>
-      <main className="liquid-ui min-h-screen overflow-x-clip pb-36 text-ink xl:grid xl:grid-cols-[16rem_minmax(0,1fr)] xl:pb-0" lang={language === "my" ? "my" : "en"}>
+      <main className="liquid-ui app-shell min-h-screen text-ink xl:grid xl:grid-cols-[16rem_minmax(0,1fr)]" lang={language === "my" ? "my" : "en"}>
         <aside className="liquid-chrome sticky top-0 z-20 hidden h-screen min-h-0 w-64 grid-rows-[auto_minmax(0,1fr)_auto] border-r border-ink/10 bg-white px-4 py-5 xl:grid">
           <div className="mb-7 flex items-center gap-3 px-2">
             <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
@@ -84,12 +112,13 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
             </div>
           </div>
-          <nav className="min-h-0 space-y-1 overflow-y-auto pr-1">
+          <nav className="min-h-0 space-y-1 overflow-y-auto pr-1" aria-label="Primary navigation">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setActiveTab(item.key)}
+                onClick={() => chooseTab(item.key)}
+                aria-current={activeTab === item.key ? "page" : undefined}
                 className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition duration-200 ${
                   activeTab === item.key
                     ? "bg-gradient-to-r from-river to-indigo-500 text-bright shadow-glow"
@@ -154,6 +183,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                 key={item.key}
                 type="button"
                 onClick={() => chooseTab(item.key)}
+                aria-current={activeTab === item.key ? "page" : undefined}
                 className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
                   activeTab === item.key ? "ios-tab-active" : ""
                 }`}
@@ -163,8 +193,11 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               </button>
             ))}
             <button
+              ref={moreButton}
               type="button"
               onClick={() => setMobileMoreOpen(!mobileMoreOpen)}
+              aria-expanded={mobileMoreOpen}
+              aria-controls="mobile-more-navigation"
               className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
                 mobileMoreOpen || mobileMoreActive ? "ios-tab-active" : ""
               }`}
@@ -176,13 +209,14 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         </nav>
 
         {mobileMoreOpen ? (
-          <div className="ios-popover fixed inset-x-3 bottom-28 z-40 p-2 xl:hidden">
+          <div ref={morePanel} id="mobile-more-navigation" className="ios-popover mobile-more fixed inset-x-3 z-40 p-2 xl:hidden" aria-label="More navigation">
             <div className="grid gap-1">
               {mobileMoreNavItems.map((item) => (
                 <button
                   key={item.key}
                   type="button"
                   onClick={() => chooseTab(item.key)}
+                  aria-current={activeTab === item.key ? "page" : undefined}
                   className={`flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${
                     activeTab === item.key ? "bg-river/10 text-river" : "text-ink/70 hover:bg-ink/[0.04]"
                   }`}
@@ -232,11 +266,11 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               </button>
             </div>
           ) : null}
-          <header className="mb-5 grid items-center gap-3 xl:grid-cols-[340px_minmax(280px,1fr)_auto]">
+          <header className="mb-5 grid min-w-0 items-center gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(240px,1fr)_auto]">
             <div className="min-w-0">
               <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
               <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
-              <h1 className="font-display text-xl font-semibold text-ink sm:whitespace-nowrap sm:text-3xl xl:text-4xl">
+              <h1 className="font-display text-xl font-semibold text-ink sm:text-3xl xl:text-4xl">
                 <span className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text text-transparent sm:hidden">athonesayate</span>
                 <span className="hidden sm:inline">{t.expenseTracker}</span>
               </h1>
@@ -321,7 +355,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
         <button
           type="button"
-          onClick={() => setQuickAddOpen(true)}
+          onClick={() => { setMobileMoreOpen(false); setQuickAddOpen(true); }}
           aria-label={t.quickAdd}
           className="liquid-fab group fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8"
         >
@@ -364,9 +398,9 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           </div>
         ) : null}
 
-        {dataNotice ? (
+        {dataNotice && !actionAlert ? (
           <div className="pointer-events-none fixed inset-x-3 bottom-32 z-[70] flex justify-center xl:inset-x-auto xl:bottom-9 xl:right-28 xl:justify-end">
-            <div className="liquid-toast pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-ink/10 bg-white py-2.5 pl-4 pr-2 text-sm font-medium shadow-lift">
+            <div role="status" className="liquid-toast pointer-events-auto flex max-w-full animate-toast-in items-center gap-3 rounded-xl border border-ink/10 bg-white py-2.5 pl-4 pr-2 text-sm font-medium shadow-lift">
               <CheckCircle2 size={18} className="shrink-0 text-moss" />
               <span className="min-w-0">{dataNotice}</span>
               {lastRecurringPayment && dataNotice === lastRecurringPayment.notice ? (
@@ -392,12 +426,12 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         ) : null}
 
         {signUpPromptOpen ? (
-          <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/40 px-5 backdrop-blur-sm">
-            <div className="liquid-chrome w-full max-w-sm rounded-2xl border border-ink/10 bg-white p-6 shadow-lift">
+          <Modal open={signUpPromptOpen} onClose={() => setSignUpPromptOpen(false)} labelledBy="signup-prompt-title" centered>
+            <div className="liquid-sheet liquid-scroll w-full max-w-sm overflow-y-auto rounded-2xl border p-6 shadow-lift">
               <div className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
                 <WalletCards size={22} />
               </div>
-              <h2 className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
+              <h2 id="signup-prompt-title" className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
               <p className="mt-2 text-sm text-ink/60">
                 You&apos;re exploring with sample data. Sign up to start tracking your own spending — it takes a few seconds,
                 and you&apos;ll begin with a clean set of categories.
@@ -417,7 +451,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                 Keep looking around
               </button>
             </div>
-          </div>
+          </Modal>
         ) : null}
       </main>
     </AppProvider>

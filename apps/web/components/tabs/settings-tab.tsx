@@ -145,7 +145,7 @@ export default function SettingsTab() {
 
               return (
                 <article key={account.id} className={`rounded-lg border p-2 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10"}`}>
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className={`grid min-w-0 gap-2 md:items-center ${isEditing ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="size-3 rounded-full" style={{ background: account.color }} />
                       <div className="min-w-0">
@@ -154,7 +154,7 @@ export default function SettingsTab() {
                       </div>
                     </div>
                     {isEditing ? (
-                      <form onSubmit={(event) => handleUpdateAccount(event, account.id)} noValidate className="grid gap-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_140px_130px_92px_auto_auto] md:items-center">
+                      <form onSubmit={(event) => handleUpdateAccount(event, account.id)} noValidate className="grid gap-2 w-full md:grid-cols-3 md:items-center">
                         <input value={draft.name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, name: event.target.value } }))} aria-invalid={isMissing(accountIssues, "name") || undefined} className={`h-10 w-full rounded-lg border bg-white px-3 text-sm font-semibold ${isMissing(accountIssues, "name") ? INVALID_FIELD : "border-ink/10"}`} placeholder="Account name" />
                         <select value={draft.type} onChange={(event) => setAccountDrafts((current) => ({ ...current, [account.id]: { ...draft, type: event.target.value as AccountType } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                           <option value="cash">Cash</option>

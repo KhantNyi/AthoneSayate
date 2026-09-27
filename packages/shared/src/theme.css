@@ -21,17 +21,17 @@
   --glass-alpha-soft: 0.48;
   /* Baked-in frost for in-flow surfaces that skip backdrop-filter */
   --glass-solid: 0.9;
-  --glass-solid-soft: 0.68;
+  --glass-solid-soft: 0.78;
   --glass-border: rgba(255, 255, 255, 0.68);
   --glass-border-muted: rgba(23, 32, 51, 0.1);
   --glass-highlight: rgba(255, 255, 255, 0.82);
   --glass-blur: 22px;
   --glass-saturate: 170%;
-  --ios-glass-tint: rgba(255, 255, 255, 0.58);
+  --ios-glass-tint: rgba(255, 255, 255, 0.76);
   --ios-glass-active: rgba(255, 255, 255, 0.66);
   --ios-glass-stroke: rgba(255, 255, 255, 0.86);
   --shadow-soft:
-    0 18px 42px rgba(15, 23, 42, 0.08),
+    0 8px 28px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.56);
   --shadow-lift:
     0 28px 70px rgba(15, 23, 42, 0.16),
@@ -54,17 +54,17 @@
   --glass-alpha-strong: 0.68;
   --glass-alpha-soft: 0.34;
   --glass-solid: 0.85;
-  --glass-solid-soft: 0.58;
+  --glass-solid-soft: 0.72;
   --glass-border: rgba(255, 255, 255, 0.16);
   --glass-border-muted: rgba(226, 233, 246, 0.12);
   --glass-highlight: rgba(255, 255, 255, 0.18);
   --glass-blur: 24px;
   --glass-saturate: 150%;
-  --ios-glass-tint: rgba(18, 18, 20, 0.52);
+  --ios-glass-tint: rgba(18, 25, 44, 0.82);
   --ios-glass-active: rgba(255, 255, 255, 0.16);
   --ios-glass-stroke: rgba(255, 255, 255, 0.2);
   --shadow-soft:
-    0 18px 42px rgba(0, 0, 0, 0.38),
+    0 8px 28px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --shadow-lift:
     0 28px 70px rgba(0, 0, 0, 0.58),

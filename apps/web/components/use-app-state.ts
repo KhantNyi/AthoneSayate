@@ -242,16 +242,14 @@ export function useAppState() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setQuickAddOpen(false);
-        return;
-      }
+      if (document.querySelector("dialog[open]")) return;
       const target = event.target as HTMLElement | null;
       if (target && (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)) {
         return;
       }
       if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
+        setMobileMoreOpen(false);
         setQuickAddOpen(true);
       }
     }
@@ -260,12 +258,6 @@ export function useAppState() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = quickAddOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [quickAddOpen]);
 
   useEffect(() => {
     if (!dataNotice) {

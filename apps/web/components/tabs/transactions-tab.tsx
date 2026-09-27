@@ -38,7 +38,7 @@ function TransactionEditor({ transaction }: { transaction: Transaction }) {
   });
 
   return (
-    <form onSubmit={(event) => handleUpdateTransaction(transaction, event)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto_auto]">
+    <form onSubmit={(event) => handleUpdateTransaction(transaction, event)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 lg:grid-cols-3">
       <select value={draft.type} onChange={(event) => updateTransactionDraft(transaction.id, { type: event.target.value as TransactionType })} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
         <option value="expense">{t.expense}</option>
         <option value="income">{t.income}</option>
@@ -193,7 +193,7 @@ export default function TransactionsTab() {
               {type === "income" ? t.income : t.expense}
             </span>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[110px_110px_140px_140px_minmax(170px,1fr)_145px_auto]">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <select value={type} onChange={(event) => setType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
               <option value="expense">{t.expense}</option>
               <option value="income">{t.income}</option>

@@ -89,7 +89,7 @@ export default function BudgetsTab() {
 
           return (
           <article key={row.id} className={`rounded-lg border p-4 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
-            <div className="mb-4 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-start">
+            <div className={`mb-4 grid min-w-0 gap-3 text-sm ${isEditing ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
               <div className="min-w-0">
                 <p className="font-medium">{categoryLabel(row.name)}</p>
                 <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
@@ -97,7 +97,7 @@ export default function BudgetsTab() {
                 </p>
               </div>
               {isEditing ? (
-                <form onSubmit={(event) => handleSaveBudget(event, row.id)} noValidate className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:w-80">
+                <form onSubmit={(event) => handleSaveBudget(event, row.id)} noValidate className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
                   <input
                     value={budgetDrafts[row.id] ?? ""}
                     onChange={(event) => setBudgetDrafts((current) => ({ ...current, [row.id]: event.target.value }))}

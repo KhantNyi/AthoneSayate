@@ -6,6 +6,7 @@ out
 .env*.local
 
 *.tsbuildinfo
+artifacts/ui/
 
 # Serwist build output
 apps/web/public/sw.js

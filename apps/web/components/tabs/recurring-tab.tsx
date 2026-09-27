@@ -39,7 +39,7 @@ function RecurringEditor({ rule }: { rule: RecurringRule }) {
   });
 
   return (
-    <form onSubmit={(event) => handleUpdateRecurring(event, rule.id)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 sm:grid-cols-2 lg:grid-cols-[110px_110px_minmax(160px,1fr)_140px_140px_130px_130px_auto_auto]">
+    <form onSubmit={(event) => handleUpdateRecurring(event, rule.id)} noValidate className="grid gap-2 rounded-lg border border-river/15 bg-river/5 p-3 sm:grid-cols-2 lg:grid-cols-3">
       <select
         value={draft.type}
         onChange={(event) => {

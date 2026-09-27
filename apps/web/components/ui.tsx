@@ -87,8 +87,8 @@ export function DashboardPanel({
 }) {
   return (
     <section className={`liquid-panel min-w-0 rounded-2xl border border-ink/10 bg-white p-4 shadow-soft ${className}`}>
-      <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
-        <h2 className="min-w-0 truncate text-base font-semibold">{title}</h2>
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h2 className="min-w-0 text-base font-semibold">{title}</h2>
         {typeof action === "string" || typeof action === "number" ? (
           <span className="shrink-0 rounded-lg border border-ink/10 bg-white/55 px-3 py-1.5 text-xs font-medium text-ink/60">{action}</span>
         ) : action ? (
@@ -123,7 +123,7 @@ export function DashboardMonthControl({
         <input
           type="month"
           value={format(month, "yyyy-MM")}
-          onChange={(event) => onChange(parseISO(`${event.target.value}-01`))}
+          onChange={(event) => { if (event.target.value) onChange(parseISO(`${event.target.value}-01`)); }}
           className="absolute inset-0 cursor-pointer opacity-0"
           aria-label="Choose month"
         />
@@ -177,7 +177,7 @@ export function MonthField({
       <input
         type="month"
         value={format(month, "yyyy-MM")}
-        onChange={(event) => onChange(parseISO(`${event.target.value}-01`))}
+        onChange={(event) => { if (event.target.value) onChange(parseISO(`${event.target.value}-01`)); }}
         className="h-9 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink sm:w-auto"
       />
     </label>
@@ -263,7 +263,7 @@ export function ThemeToggle({ theme, onToggle }: { theme: "light" | "dark"; onTo
       type="button"
       onClick={onToggle}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      className="liquid-control grid h-10 w-10 place-items-center rounded-lg border border-ink/10 bg-white text-ink/60 transition hover:border-river/30 hover:text-river"
+      className="liquid-control grid size-11 shrink-0 place-items-center rounded-xl border border-ink/10 bg-white text-ink/60 transition hover:border-river/30 hover:text-river"
     >
       {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
     </button>
@@ -289,6 +289,7 @@ export function LanguageToggle({
           key={item}
           type="button"
           onClick={() => onChange(item)}
+          aria-pressed={language === item}
           className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
             language === item ? "bg-river text-bright" : "text-ink/55 hover:bg-river/10 hover:text-river"
           }`}

@@ -60,13 +60,13 @@ export default function GoalsTab() {
 
           return (
           <article key={goal.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
-            <div className="mb-2 grid gap-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+            <div className={`mb-2 grid min-w-0 gap-3 text-sm md:items-center ${isEditing ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
               <div className="min-w-0">
                 <p className="font-medium">{goal.name}</p>
                 <p className="text-ink/60">{currency.format(goal.currentAmount)} saved / {currency.format(goal.targetAmount)} target</p>
               </div>
               {isEditing ? (
-                <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} noValidate className="grid gap-2 sm:grid-cols-2 md:w-[560px] md:grid-cols-[minmax(0,1fr)_110px_110px_132px_auto_auto]">
+                <form onSubmit={(event) => handleUpdateGoal(event, goal.id)} noValidate className="grid gap-2 sm:grid-cols-2 w-full md:grid-cols-3">
                   <input value={draft.name} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, name: event.target.value } }))} aria-invalid={isMissing(draftIssues, "name") || undefined} className={`h-10 min-w-0 rounded-lg border bg-white px-3 text-sm ${isMissing(draftIssues, "name") ? INVALID_FIELD : "border-ink/10"}`} placeholder="Name" />
                   <input value={draft.targetAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, targetAmount: event.target.value } }))} aria-invalid={isMissing(draftIssues, "targetAmount") || undefined} className={`h-10 min-w-0 rounded-lg border bg-white px-3 text-sm ${isMissing(draftIssues, "targetAmount") ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder="Target" />
                   <input value={draft.currentAmount} onChange={(event) => setGoalDrafts((current) => ({ ...current, [goal.id]: { ...draft, currentAmount: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm" inputMode="decimal" placeholder="Saved" />

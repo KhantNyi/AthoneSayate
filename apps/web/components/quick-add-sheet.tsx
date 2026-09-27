@@ -5,6 +5,7 @@ import { preciseCurrency } from "@athonesayate/shared/metrics";
 import { isMissing } from "@/lib/validation";
 import { useApp } from "./app-context";
 import { FormAlert, INVALID_FIELD } from "./ui";
+import { Modal } from "./modal";
 
 export function QuickAddSheet() {
   const {
@@ -44,26 +45,20 @@ export function QuickAddSheet() {
   }
 
   return (
-    <div
-      className="liquid-overlay fixed inset-0 z-50 flex animate-fade-in items-end justify-center sm:items-center sm:p-6"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          setQuickAddOpen(false);
-        }
-      }}
-    >
+    <Modal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} labelledBy="quick-add-title">
       <form
         onSubmit={handleQuickAdd}
         noValidate
-        className="liquid-sheet liquid-scroll max-h-[92vh] w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 bg-white p-5 shadow-lift sm:rounded-2xl"
+        aria-busy={isSaving}
+        className="liquid-sheet liquid-scroll w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold">{t.quickAdd}</h2>
+          <h2 id="quick-add-title" className="font-display text-lg font-semibold">{t.quickAdd}</h2>
           <button
             type="button"
             onClick={() => setQuickAddOpen(false)}
             aria-label="Close quick add"
-            className="grid size-9 place-items-center rounded-lg text-ink/50 transition hover:bg-ink/5 hover:text-ink"
+            className="grid size-11 place-items-center rounded-lg text-ink/60 transition hover:bg-ink/5 hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -75,6 +70,7 @@ export function QuickAddSheet() {
               key={kind}
               type="button"
               onClick={() => setType(kind)}
+              aria-pressed={type === kind}
               className={`h-10 rounded-lg text-sm font-semibold transition ${
                 type === kind
                   ? kind === "income"
@@ -120,6 +116,7 @@ export function QuickAddSheet() {
                   key={category.id}
                   type="button"
                   onClick={() => setCategoryId(category.id)}
+                  aria-pressed={active}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                     active ? "border-transparent text-bright shadow" : "border-ink/15 text-ink/70 hover:border-ink/35"
                   }`}
@@ -143,7 +140,8 @@ export function QuickAddSheet() {
                   <button
                     key={subcategory.id}
                     type="button"
-                    onClick={() => setSubcategoryId(subcategory.id)}
+                  onClick={() => setSubcategoryId(subcategory.id)}
+                  aria-pressed={active}
                     className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                       active ? "border-river/30 bg-river/12 text-river" : "border-ink/15 text-ink/60 hover:border-ink/35"
                     }`}
@@ -186,6 +184,7 @@ export function QuickAddSheet() {
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           placeholder={t.optionalNote}
+          aria-label={t.optionalNote}
           className="mb-5 h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm"
         />
 
@@ -207,6 +206,6 @@ export function QuickAddSheet() {
           {isSaving ? "Saving..." : Number(amount) > 0 ? `${t.add} · ${preciseCurrency.format(Number(amount))}` : t.add}
         </button>
       </form>
-    </div>
+    </Modal>
   );
 }

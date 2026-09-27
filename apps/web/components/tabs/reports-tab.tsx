@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "../modal";
 import { Fragment } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -166,17 +167,11 @@ export default function ReportsTab() {
       </div>
 
       {monthlyReportFiltersOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button
-            type="button"
-            aria-label="Close report filters"
-            onClick={() => setMonthlyReportFiltersOpen(false)}
-            className="absolute inset-0 bg-ink/25"
-          />
-          <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-lg border border-ink/10 bg-white p-4 shadow-soft">
+        <Modal open={monthlyReportFiltersOpen} onClose={() => setMonthlyReportFiltersOpen(false)} labelledBy="report-filters-title">
+          <div className="liquid-sheet liquid-scroll w-full max-w-lg overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-semibold">Report filters</h3>
+                <h3 id="report-filters-title" className="text-base font-semibold">Report filters</h3>
                 <p className="text-xs text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</p>
               </div>
               <button
@@ -270,7 +265,7 @@ export default function ReportsTab() {
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       ) : null}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

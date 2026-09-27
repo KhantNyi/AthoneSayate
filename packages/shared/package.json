@@ -4,7 +4,8 @@
   "private": true,
   "exports": {
     "./theme.css": "./src/theme.css",
-    "./*": "./src/*.ts"
+    "./*": "./src/*.ts",
+    "./glass.css": "./src/glass.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -198,7 +198,7 @@ export function CategoryManager({
           };
           return (
             <div key={category.id} className={`rounded-lg border p-3 ${isEditingCategory ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
-              <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div className={`mb-3 grid min-w-0 gap-2 md:items-center ${isEditingCategory ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="size-3 shrink-0 rounded-full" style={{ background: category.color }} />
                   <div className="min-w-0">
@@ -213,7 +213,7 @@ export function CategoryManager({
                     event.preventDefault();
                     onUpdateCategory(category.id, categoryDraft);
                     setEditingCategoryId("");
-                  }} className="grid gap-2 md:w-[520px] md:grid-cols-[minmax(0,1fr)_120px_120px_auto_auto]">
+                  }} className="grid gap-2 w-full sm:grid-cols-2">
                     <input value={categoryDraft.name} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, name: event.target.value } }))} className="h-10 min-w-0 rounded-lg border border-ink/10 bg-white px-3 text-sm font-semibold" placeholder="Category name" />
                     <select value={categoryDraft.kind} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [category.id]: { ...categoryDraft, kind: event.target.value as TransactionType } }))} className="h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                       <option value="expense">Expense</option>
@@ -245,14 +245,14 @@ export function CategoryManager({
                   const isEditingSubcategory = editingSubcategoryId === subcategory.id;
 
                   return (
-                    <div key={subcategory.id} className={`grid gap-2 rounded-lg p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${isEditingSubcategory ? "bg-river/5" : "bg-ink/[0.03]"}`}>
+                    <div key={subcategory.id} className={`grid min-w-0 gap-2 rounded-lg p-2 sm:items-center ${isEditingSubcategory ? "bg-river/5" : "bg-ink/[0.03] sm:grid-cols-[minmax(0,1fr)_auto]"}`}>
                       <p className="min-w-0 truncate text-sm text-ink/75">{subcategory.name}</p>
                       {isEditingSubcategory ? (
                         <form onSubmit={(event) => {
                           event.preventDefault();
                           onUpdateSubcategory(subcategory.id, subcategoryDraft);
                           setEditingSubcategoryId("");
-                        }} className="grid gap-2 sm:w-[420px] sm:grid-cols-[minmax(0,1fr)_minmax(150px,0.6fr)_auto_auto]">
+                        }} className="grid gap-2 w-full sm:grid-cols-2">
                           <input value={subcategoryDraft.name} onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...subcategoryDraft, name: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm" placeholder="Subcategory" />
                           <select value={subcategoryDraft.categoryId} onChange={(event) => setSubcategoryDrafts((current) => ({ ...current, [subcategory.id]: { ...subcategoryDraft, categoryId: event.target.value } }))} className="h-9 rounded-lg border border-ink/10 bg-white px-3 text-sm">
                             {categories.map((item) => (

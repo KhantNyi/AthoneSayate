@@ -110,7 +110,7 @@ export default function DashboardTab() {
         </DashboardPanel>
 
         <DashboardPanel title={t.categoryMix} action="By amount">
-          <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
+          <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)] md:items-center xl:grid-cols-1 2xl:grid-cols-[160px_minmax(0,1fr)]">
             <div className="relative h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>

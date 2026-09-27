@@ -1,10 +1,52 @@
 /* Design tokens (:root / .dark custom properties) are shared with the
    landing app — they live in packages/shared/src/theme.css. */
 @import "@athonesayate/shared/theme.css";
+@import "@athonesayate/shared/glass.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* One safe-area baseline keeps the dock, its menu and page content aligned. */
+:root { --dock-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+.app-shell { padding-bottom: calc(8rem + var(--dock-bottom)); }
+.mobile-more {
+  bottom: calc(5.5rem + var(--dock-bottom));
+  max-width: 36rem;
+  margin-inline: auto;
+  max-height: calc(100dvh - 7rem - var(--dock-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.glass-dialog {
+  position: fixed;
+  inset: var(--modal-top, 0px) 0 auto;
+  width: 100%;
+  height: var(--modal-height, 100dvh);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 1rem 0 0;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--ink));
+  overflow: hidden;
+}
+.glass-dialog[open] { display: flex; align-items: flex-end; justify-content: center; }
+.glass-dialog::backdrop { background: rgb(5 10 24 / .45); }
+.glass-dialog > .liquid-sheet {
+  max-height: 100%;
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+.glass-dialog-centered[open] { align-items: center; padding: 1rem; }
+.glass-dialog-centered > .liquid-sheet { animation: none; }
+@media (min-width: 640px) {
+  .glass-dialog[open] { align-items: center; padding: 1.5rem; }
+}
+@media (min-width: 1280px) { .app-shell { padding-bottom: 0; } }
+@media (max-width: 1279px) {
+  .liquid-fab { bottom: calc(6.5rem + var(--dock-bottom)); }
+}
 
 * {
   box-sizing: border-box;
@@ -88,166 +130,6 @@ h3 {
   }
 }
 
-.liquid-ui {
-  isolation: isolate;
-  overflow-x: clip;
-}
-
-.liquid-ui::before {
-  pointer-events: none;
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(115deg, rgb(var(--surface) / 0.18), transparent 26%),
-    linear-gradient(285deg, rgb(var(--river) / 0.05), transparent 46%),
-    linear-gradient(135deg, var(--page-glow-a), transparent 34%),
-    linear-gradient(225deg, transparent 34%, var(--page-glow-b) 62%, transparent 86%),
-    linear-gradient(35deg, transparent 48%, var(--page-glow-c), transparent 72%),
-    repeating-linear-gradient(
-      135deg,
-      rgb(var(--ink) / 0.018) 0,
-      rgb(var(--ink) / 0.018) 1px,
-      transparent 1px,
-      transparent 22px
-    );
-  transform: translateZ(0);
-}
-
-/* Springy press feedback on every tappable control, like UIKit's
-   highlight scale. Uses the standalone `scale` property so it composes
-   with any transform utilities already on the element. */
-:where(button:not(:disabled)) {
-  transition-property: scale;
-  transition-duration: 0.35s;
-  transition-timing-function: var(--ease-spring);
-}
-
-button:not(:disabled):active {
-  scale: 0.96;
-  transition-duration: 0.08s;
-  transition-timing-function: ease-out;
-}
-
-/* In-flow surfaces sit on a static page background, so backdrop-filter
-   there is invisible cost (a full GPU blur pass per element — with ~130
-   of them it tanks scrolling on Android). The frost is baked into the
-   fill instead; real glass is reserved for floating chrome below. */
-.liquid-ui [class~="bg-white"],
-.liquid-ui input:not([class~="bg-transparent"]),
-.liquid-ui select,
-.liquid-ui textarea {
-  border-color: var(--glass-border-muted);
-  background-color: rgb(var(--surface) / var(--glass-alpha-strong));
-}
-
-  .liquid-ui input:not([class~="bg-transparent"]),
-  .liquid-ui select,
-  .liquid-ui textarea {
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 10px 24px rgb(var(--ink) / 0.04);
-  }
-
-  .liquid-panel,
-  .liquid-card,
-  .liquid-chrome,
-  .liquid-sheet,
-  .liquid-menu,
-  .liquid-toast,
-  .liquid-control {
-    overflow: hidden;
-    border-color: var(--glass-border);
-    background:
-      linear-gradient(145deg, rgb(var(--surface) / var(--glass-solid)), rgb(var(--surface) / var(--glass-solid-soft))),
-      linear-gradient(315deg, rgb(var(--river) / 0.06), transparent 42%);
-    box-shadow: var(--shadow-soft);
-  }
-
-  /* Floating surfaces have content scrolling/dimming behind them —
-     the only place backdrop blur is actually visible. */
-  .liquid-sheet,
-  .liquid-menu,
-  .liquid-toast {
-    background:
-      linear-gradient(145deg, rgb(var(--surface) / var(--glass-alpha-strong)), rgb(var(--surface) / var(--glass-alpha-soft))),
-      linear-gradient(315deg, rgb(var(--river) / 0.06), transparent 42%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  }
-
-  .liquid-panel:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-card:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-chrome:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-sheet:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-menu:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-toast:not(.fixed):not(.sticky):not(.absolute),
-  .liquid-control:not(.fixed):not(.sticky):not(.absolute) {
-    position: relative;
-  }
-
-  .liquid-panel::before,
-  .liquid-card::before,
-  .liquid-chrome::before,
-  .liquid-sheet::before,
-  .liquid-menu::before,
-  .liquid-toast::before,
-  .liquid-control::before {
-    pointer-events: none;
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background:
-      linear-gradient(135deg, var(--glass-highlight), transparent 28%),
-      linear-gradient(225deg, rgb(var(--surface) / 0.18), transparent 32%),
-      linear-gradient(to bottom, rgb(var(--surface) / 0.14), transparent 45%);
-    opacity: 0.72;
-  }
-
-  .liquid-panel::after,
-  .liquid-card::after,
-  .liquid-sheet::after {
-    pointer-events: none;
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: inherit;
-    box-shadow:
-      inset 0 0 0 1px rgb(var(--surface) / 0.18),
-      inset 16px 0 34px rgb(var(--river) / 0.035),
-      inset -18px -18px 38px rgb(var(--moss) / 0.035);
-    opacity: 0.92;
-  }
-
-  .liquid-panel > *,
-  .liquid-card > *,
-  .liquid-chrome > *,
-  .liquid-sheet > *,
-  .liquid-menu > *,
-  .liquid-toast > *,
-  .liquid-control > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .liquid-panel {
-    border-radius: 1rem;
-  }
-
-  .liquid-card {
-    transition:
-      transform 0.35s var(--ease-glide),
-      box-shadow 0.35s var(--ease-glide),
-      border-color 0.35s var(--ease-glide);
-  }
-
-  .liquid-card:hover {
-    border-color: rgb(var(--river) / 0.24);
-    box-shadow: var(--shadow-lift);
-  }
-
   .liquid-control[class~="bg-moss/10"] {
     border-color: rgb(var(--moss) / 0.22);
     background:
@@ -262,20 +144,13 @@ button:not(:disabled):active {
       linear-gradient(315deg, rgb(var(--river) / 0.08), transparent 44%);
   }
 
-  .liquid-topbar {
-    border: 1px solid var(--glass-border);
-    background: rgb(var(--surface) / var(--glass-alpha-soft));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    box-shadow: 0 16px 36px rgb(var(--ink) / 0.06);
-  }
 
   .liquid-nav {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
 
   .ios-tabbar {
-    bottom: max(0.9rem, env(safe-area-inset-bottom));
+    bottom: var(--dock-bottom);
     left: 50%;
     width: min(calc(100vw - 1rem), 36rem);
     transform: translateX(-50%);
@@ -283,8 +158,8 @@ button:not(:disabled):active {
     border: 1px solid var(--ios-glass-stroke);
     border-radius: 999px;
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 28%),
-      linear-gradient(180deg, var(--ios-glass-tint), rgba(255, 255, 255, 0.08));
+      linear-gradient(135deg, var(--glass-highlight), transparent 28%),
+      linear-gradient(180deg, var(--ios-glass-tint), rgb(var(--surface) / .72));
     -webkit-backdrop-filter: blur(28px) saturate(180%);
     backdrop-filter: blur(28px) saturate(180%);
     box-shadow:
@@ -301,7 +176,7 @@ button:not(:disabled):active {
     inset: 2px;
     border-radius: inherit;
     background:
-      radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.34), transparent 32%),
+      radial-gradient(circle at 18% 18%, var(--glass-highlight), transparent 32%),
       linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 34%, rgb(var(--river) / 0.12));
     opacity: 0.92;
   }
@@ -317,7 +192,6 @@ button:not(:disabled):active {
     overflow: hidden;
     border-radius: 999px;
     color: rgb(var(--ink) / 0.68);
-    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
     transform: translateZ(0);
     transition:
       color 0.26s var(--ease-glide),
@@ -350,7 +224,7 @@ button:not(:disabled):active {
   .ios-tab-active {
     color: rgb(var(--ink));
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 32%),
+      linear-gradient(135deg, var(--glass-highlight), transparent 32%),
       linear-gradient(180deg, var(--ios-glass-active), rgba(255, 255, 255, 0.05));
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.48),
@@ -376,7 +250,7 @@ button:not(:disabled):active {
     border-radius: 1.75rem;
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 30%),
-      linear-gradient(180deg, var(--ios-glass-tint), rgba(255, 255, 255, 0.1));
+      linear-gradient(180deg, rgb(var(--surface) / .96), rgb(var(--surface) / .88));
     -webkit-backdrop-filter: blur(28px) saturate(180%);
     backdrop-filter: blur(28px) saturate(180%);
     box-shadow:
@@ -389,8 +263,8 @@ button:not(:disabled):active {
   .liquid-fab {
     border: 1px solid rgb(255 255 255 / 0.44);
     background:
-      radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.8), transparent 34%),
-      linear-gradient(145deg, rgb(var(--surface) / 0.62), rgb(var(--surface) / 0.2)),
+      radial-gradient(circle at 30% 20%, var(--glass-highlight), transparent 34%),
+      linear-gradient(145deg, rgb(var(--surface) / 0.92), rgb(var(--surface) / 0.72)),
       linear-gradient(315deg, rgb(var(--river) / 0.18), transparent 52%);
     -webkit-backdrop-filter: blur(26px) saturate(180%);
     backdrop-filter: blur(26px) saturate(180%);
@@ -409,7 +283,7 @@ button:not(:disabled):active {
     backdrop-filter: blur(8px);
   }
 
-  .liquid-scroll {
+.liquid-scroll {
     scrollbar-gutter: stable;
     /* Contained rubber-banding: scrolling a sheet never drags the page */
     overscroll-behavior: contain;
@@ -421,6 +295,15 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid rgb(var(--river));
   outline-offset: 2px;
+}
+
+/* Validation must remain visible over the neutral glass input treatment. */
+.liquid-ui :is(input, select, textarea)[aria-invalid="true"] {
+  border-color: rgb(var(--coral));
+  background-color: rgb(var(--coral) / .08);
+}
+.liquid-ui :is(input, select, textarea):not([class~="bg-transparent"]) {
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 ::selection {
@@ -526,10 +409,10 @@ textarea:focus-visible {
 }
 
 @media (max-width: 640px) {
-  input,
+  input:not([class~="text-4xl"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: max(1rem, 16px);
   }
 
   .liquid-panel,
