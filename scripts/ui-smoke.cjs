@@ -26,7 +26,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }
       await page.locator('nav:visible').getByRole('button', { name, exact: true }).click();
     };
-    for (const width of [360, 768, 1280, 1600]) {
+    for (const width of [320, 360, 390, 768, 1280, 1600]) {
       await page.setViewportSize({ width, height: 900 });
       for (const tab of ['Dashboard', 'Transactions', 'Reports', 'Budgets', 'Recurring', 'Goals', 'Category']) {
         await selectTab(tab, width < 1280);
@@ -45,6 +45,24 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       await page.waitForTimeout(1600); // Recharts animates in JS, independently of CSS motion.
       await page.screenshot({ path: `${output}/dashboard-${width}.png`, fullPage: true });
     }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await selectTab('Transactions', true);
+    assert.equal(await page.evaluate(() => window.scrollY), 0, 'Tab change must return to the top');
+    await selectTab('Dashboard', true);
+    await page.evaluate(() => {
+      const event = new Event('beforeinstallprompt', { cancelable: true });
+      event.prompt = async () => { window.installPromptCalled = true; };
+      event.userChoice = Promise.resolve({ outcome: 'accepted' });
+      window.dispatchEvent(event);
+    });
+    await page.getByRole('button', { name: 'Install app', exact: true }).click();
+    assert(await page.evaluate(() => window.installPromptCalled), 'Install prompt was not called');
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.getByRole('button', { name: 'Quick add', exact: true }).click();
+    const landscapeSheet = await page.locator('dialog[open] form').boundingBox();
+    assert(landscapeSheet.y >= 0 && landscapeSheet.y + landscapeSheet.height <= 391, 'Landscape sheet exceeds viewport');
+    await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 844 });
     const more = page.getByRole('button', { name: 'More', exact: true });
     await more.click();
@@ -130,7 +148,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       await page.screenshot({ path: `${output}/landing-myanmar-dark.png` });
     }
     assert.deepEqual(errors, [], 'Browser errors');
-    console.log('PASS: seven tabs at four widths, form bounds, menu dismissal, modal focus/restore, short viewport, report overlay; screenshots saved.');
+    console.log('PASS: seven tabs at six widths, form bounds, tab scroll reset, install prompt, landscape sheet, menu dismissal, modal focus/restore, short viewport, report overlay; screenshots saved.');
   } catch (error) {
     await page.screenshot({ path: `${output}/failure.png`, fullPage: true });
     console.error('Browser errors:', errors);

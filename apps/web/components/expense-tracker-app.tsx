@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef } from "react";
 import { Modal } from "./modal";
+import { PwaExperience } from "./pwa-experience";
 import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
@@ -252,7 +253,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           </div>
         ) : null}
 
-        <section className="min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
+        <section className="app-content min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
           {demoMode ? (
             <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-river/25 bg-river/5 px-4 py-2.5 text-sm">
               <span className="font-semibold text-river">Demo</span>
@@ -266,7 +267,8 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               </button>
             </div>
           ) : null}
-          <header className="mb-5 grid min-w-0 items-center gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(240px,1fr)_auto]">
+          <PwaExperience />
+          <header className="mb-5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_minmax(240px,1fr)_auto]">
             <div className="min-w-0">
               <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
               <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
@@ -357,7 +359,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           type="button"
           onClick={() => { setMobileMoreOpen(false); setQuickAddOpen(true); }}
           aria-label={t.quickAdd}
-          className="liquid-fab group fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8"
+          className={`liquid-fab group fixed bottom-32 right-4 z-40 grid size-14 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 sm:size-16 xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
         >
           <Plus size={30} strokeWidth={2.6} className="transition duration-300 group-hover:rotate-90" />
         </button>

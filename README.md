@@ -91,4 +91,8 @@ Then enable the **Email** provider under Authentication in the Supabase dashboar
 
 ## Status
 
-Personal project, actively developed. There is no automated test suite yet — type checking and production builds are the current quality gates, and the highest-value tests to add first are listed in the design doc's testing section.
+Personal project, actively developed. Quality checks include `npm run typecheck`, production builds, and browser smoke tests.
+
+To run the browser checks, build the app, start it with `npm run start --workspace @athonesayate/web -- --port 3100`, then run `node scripts/ui-smoke.cjs` and `node scripts/pwa-smoke.cjs` sequentially. They require Playwright and a browser; `PLAYWRIGHT_MODULE` and `BROWSER_EXECUTABLE` can point to existing installations. `UI_URL` overrides the default local URL.
+
+The UI check covers seven tabs at six widths, modal focus, short and landscape viewports, install prompts, and tab navigation. The PWA check requires a local production server: it temporarily modifies the generated worker (and restores it) to test update approval, offline reloads, and the offline fallback. These checks use the signed-out demo; they do not verify authenticated data sync or physical iOS/Android devices.

@@ -7,8 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "A practical expense tracker for accounts, budgets, bills and goals.",
     id: "/",
     start_url: "/",
+    scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    orientation: "any",
     background_color: "#f6f8fc",
     theme_color: "#f6f8fc",
     shortcuts: [

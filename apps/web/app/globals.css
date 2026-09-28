@@ -10,6 +10,14 @@
 /* One safe-area baseline keeps the dock, its menu and page content aligned. */
 :root { --dock-bottom: max(.75rem, env(safe-area-inset-bottom)); }
 .app-shell { padding-bottom: calc(8rem + var(--dock-bottom)); }
+.app-shell > .app-content {
+  padding-top: max(var(--page-top, .75rem), env(safe-area-inset-top));
+  padding-left: max(var(--page-gutter, .75rem), env(safe-area-inset-left));
+  padding-right: max(var(--page-gutter, .75rem), env(safe-area-inset-right));
+}
+@media (min-width: 640px) { .app-content { --page-top: 1.25rem; --page-gutter: 1.25rem; } }
+@media (min-width: 1024px) { .app-content { --page-gutter: 1.75rem; } }
+@media (min-width: 1280px) { .app-content { --page-gutter: 2rem; } }
 .mobile-more {
   bottom: calc(5.5rem + var(--dock-bottom));
   max-width: 36rem;
@@ -26,7 +34,7 @@
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: 1rem 0 0;
+  padding: max(1rem, env(safe-area-inset-top)) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   border: 0;
   background: transparent;
   color: rgb(var(--ink));
@@ -53,6 +61,7 @@
 }
 
 html {
+  scroll-padding-bottom: calc(9rem + var(--dock-bottom));
   background: rgb(var(--paper));
   overflow-x: clip;
   /* Native-feeling touch: no gray tap flash, no double-tap zoom delay */
@@ -152,7 +161,7 @@ h3 {
   .ios-tabbar {
     bottom: var(--dock-bottom);
     left: 50%;
-    width: min(calc(100vw - 1rem), 36rem);
+    width: min(calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 36rem);
     transform: translateX(-50%);
     transform-origin: 50% 100%;
     border: 1px solid var(--ios-glass-stroke);
@@ -409,6 +418,8 @@ textarea:focus-visible {
 }
 
 @media (max-width: 640px) {
+  input, select, textarea { min-width: 0; max-width: 100%; }
+
   input:not([class~="text-4xl"]),
   select,
   textarea {

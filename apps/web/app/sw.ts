@@ -12,10 +12,13 @@ declare const self: ServiceWorkerGlobalScope;
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: defaultCache
+  runtimeCaching: defaultCache,
+  fallbacks: {
+    entries: [{ url: "/offline.html", matcher: ({ request }) => request.destination === "document" }]
+  }
 });
 
 serwist.addEventListeners();

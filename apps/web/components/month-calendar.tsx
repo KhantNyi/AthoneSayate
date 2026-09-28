@@ -49,7 +49,7 @@ export function MonthCalendar({
               : variant === "activity" ? labels.scanActivityMonth : labels.pickDayToFilter}
           </p>
         </div>
-        <div className="inline-flex items-center gap-1">
+        <div className="inline-flex flex-wrap items-center gap-1">
           <button type="button" onClick={() => onMonthChange(startOfMonth(subMonths(month, 1)))} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Previous month">
             <ChevronLeft size={17} className="absolute text-ink/55" />
             ‹
@@ -66,18 +66,18 @@ export function MonthCalendar({
           ) : null}
         </div>
       </div>
+      {variant === "activity" ? (
+        <div className="mb-2 flex flex-wrap gap-2 text-xs text-ink/55">
+          <span className="inline-flex flex-wrap items-center gap-1"><span className="size-2 rounded-full bg-coral" /> {labels.spending}</span>
+          <span className="inline-flex flex-wrap items-center gap-1"><span className="size-2 rounded-full bg-moss" /> {labels.incomeLegend}</span>
+          <span className="inline-flex flex-wrap items-center gap-1"><span className="rounded bg-amber/15 px-1.5 py-0.5 font-semibold text-amber">{labels.due}</span> {labels.recurringDue}</span>
+        </div>
+      ) : null}
       <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-ink/40">
         {weekdays.map((weekday) => (
           <span key={weekday} className="py-1">{weekday}</span>
         ))}
       </div>
-      {variant === "activity" ? (
-        <div className="mb-2 flex flex-wrap gap-2 text-xs text-ink/55">
-          <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-coral" /> {labels.spending}</span>
-          <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-moss" /> {labels.incomeLegend}</span>
-          <span className="inline-flex items-center gap-1"><span className="rounded bg-amber/15 px-1.5 py-0.5 font-semibold text-amber">{labels.due}</span> {labels.recurringDue}</span>
-        </div>
-      ) : null}
       <div className="grid grid-cols-7 gap-1">
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
@@ -93,7 +93,9 @@ export function MonthCalendar({
               key={key}
               type="button"
               onClick={() => onDateSelect(key)}
-              className={`min-h-16 rounded-lg border p-1 text-left transition sm:min-h-20 sm:p-1.5 ${
+              aria-label={`${format(day, "MMMM d, yyyy")}, spent ${currency.format(summary?.expense ?? 0)}, income ${currency.format(summary?.income ?? 0)}, ${summary?.recurringCount ?? 0} bills due`}
+              aria-pressed={selected}
+              className={`min-w-0 min-h-16 rounded-lg border p-1 text-left transition sm:min-h-20 sm:p-1.5 ${
                 selected
                   ? "border-river bg-river/10 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.14)]"
                   : variant === "activity" && inSelectedWeek
@@ -109,10 +111,13 @@ export function MonthCalendar({
               </span>
               {variant === "activity" ? (
                 <span className="mt-1 block space-y-0.5">
-                  {summary?.expense ? <span className="block truncate text-[11px] font-semibold text-coral">{compactCurrency(summary.expense)}</span> : null}
-                  <span className="flex min-h-4 items-center gap-1">
-                    {summary?.income ? <span className="rounded bg-moss/10 px-1 text-[10px] font-semibold text-moss">+</span> : null}
-                    {summary?.recurringCount ? <span className="rounded bg-amber/15 px-1 text-[10px] font-semibold text-amber">{labels.due}</span> : null}
+                  {summary?.expense ? <span className="hidden truncate text-[11px] font-semibold text-coral sm:block">{compactCurrency(summary.expense)}</span> : null}
+                  <span className="flex min-h-4 flex-wrap items-center gap-1">
+                    {summary?.expense ? <span className="size-1.5 rounded-full bg-coral sm:hidden" /> : null}
+                    {summary?.income ? <span className="size-1.5 rounded-full bg-moss sm:hidden" /> : null}
+                    {summary?.recurringCount ? <span className="size-1.5 rounded-full bg-amber sm:hidden" /> : null}
+                    {summary?.income ? <span className="hidden rounded bg-moss/10 px-1 text-[10px] font-semibold text-moss sm:inline">+</span> : null}
+                    {summary?.recurringCount ? <span className="hidden rounded bg-amber/15 px-1 text-[10px] font-semibold text-amber sm:inline">{labels.due}</span> : null}
                   </span>
                 </span>
               ) : variant === "transactions" ? (

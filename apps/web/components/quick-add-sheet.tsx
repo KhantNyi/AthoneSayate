@@ -96,7 +96,7 @@ export function QuickAddSheet() {
               placeholder="0"
               aria-label={t.amount}
               aria-invalid={isMissing(issues, "amount", showIssues) || undefined}
-              className="tnum w-full border-none bg-transparent font-display text-4xl font-semibold outline-none"
+              className="tnum min-w-0 w-full border-none bg-transparent font-display text-4xl font-semibold outline-none"
             />
           </div>
         </label>

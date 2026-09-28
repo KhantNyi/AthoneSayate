@@ -824,6 +824,7 @@ export function useAppState() {
   function chooseTab(tab: TabKey) {
     setActiveTab(tab);
     setMobileMoreOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {

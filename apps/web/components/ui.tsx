@@ -124,7 +124,7 @@ export function DashboardMonthControl({
           type="month"
           value={format(month, "yyyy-MM")}
           onChange={(event) => { if (event.target.value) onChange(parseISO(`${event.target.value}-01`)); }}
-          className="absolute inset-0 cursor-pointer opacity-0"
+          className="absolute inset-0 min-w-0 w-full max-w-full cursor-pointer opacity-0"
           aria-label="Choose month"
         />
       </label>
@@ -242,13 +242,13 @@ export function MetricCard({
     <article className="liquid-card relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3 shadow-soft transition duration-300 hover:-translate-y-0.5 hover:shadow-lift sm:p-4">
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tones[tone].wash} to-transparent`} />
       <div className="relative">
-        <div className="mb-4 flex items-center justify-between">
-          <span className={`grid size-10 place-items-center rounded-xl ${tones[tone].chip}`}>
+        <div className="mb-3 flex flex-wrap items-center gap-2 sm:justify-between">
+          <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tones[tone].chip}`}>
             <Icon size={20} />
           </span>
           <span className="text-xs font-medium uppercase tracking-normal text-ink/45">{label}</span>
         </div>
-        <p className="font-display text-xl font-semibold sm:text-2xl">
+        <p className="break-words font-display text-lg font-semibold sm:text-2xl">
           <AnimatedNumber value={value} format={formatValue} />
         </p>
         <p className="mt-1 text-sm text-ink/55">{sub}</p>
