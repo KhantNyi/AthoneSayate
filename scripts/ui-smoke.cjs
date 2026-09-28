@@ -115,7 +115,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('input[type="month"]:visible').first().fill('');
     await quickAdd.click();
     await dialog.getByRole('textbox', { name: 'Amount', exact: true }).fill('10');
-    await dialog.locator('button:not([type])').click();
+    await dialog.locator('button[type="submit"]').click();
     const signup = page.getByRole('dialog', { name: 'Create an account to save this' });
     await signup.waitFor();
     await page.keyboard.press('Escape');

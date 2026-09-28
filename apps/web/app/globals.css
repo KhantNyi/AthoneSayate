@@ -46,6 +46,10 @@
   max-height: 100%;
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
+.glass-dialog > .quick-add-form { padding-bottom: 0; }
+.quick-add-footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+/* Keep the fixed actions visible while only the fields scroll above the keyboard. */
+.quick-add-form [data-modal-scroll] { scroll-padding-block: 1rem; }
 .glass-dialog-centered[open] { align-items: center; padding: 1rem; }
 .glass-dialog-centered > .liquid-sheet { animation: none; }
 @media (min-width: 640px) {
