@@ -359,7 +359,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           type="button"
           onClick={() => { setMobileMoreOpen(false); setQuickAddOpen(true); }}
           aria-label={t.quickAdd}
-          className={`liquid-fab group fixed bottom-32 right-4 z-40 grid size-14 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 sm:size-16 xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
+          className={`liquid-fab group fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
         >
           <Plus size={30} strokeWidth={2.6} className="transition duration-300 group-hover:rotate-90" />
         </button>

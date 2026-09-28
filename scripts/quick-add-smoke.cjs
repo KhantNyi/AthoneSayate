@@ -15,9 +15,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const dialog = page.getByRole('dialog', { name: 'Quick add', exact: true });
     for (const width of [320, 360, 390, 430, 844]) {
       await page.setViewportSize({ width, height: width === 844 ? 390 : 844 });
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const launcher = await quickAdd.boundingBox();
+      assert(launcher.y >= 0 && launcher.y + launcher.height <= page.viewportSize().height, 'Quick Add launcher must stay on screen after scrolling');
       await quickAdd.click();
+      await dialog.waitFor();
+      const sheet = await dialog.locator('form').boundingBox();
+      assert(sheet.y >= 0 && sheet.y + sheet.height <= page.viewportSize().height + 1, 'Opening Quick Add from a scrolled page must fit the screen');
       const close = dialog.getByRole('button', { name: 'Close quick add' });
-      assert(await close.evaluate(node => node === document.activeElement), 'Opening the sheet must not summon the keyboard');
+      await dialog.waitFor();
+      assert(await dialog.evaluate(node => node.contains(document.activeElement)), 'Focus must stay inside Quick Add');
       const overflow = await dialog.locator('input, select, button').evaluateAll(nodes => nodes.filter(node => {
         const r = node.getBoundingClientRect();
         return r.left < 0 || r.right > innerWidth + 1;
@@ -34,6 +41,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       });
       await page.waitForTimeout(100);
       for (const control of [close, dialog.locator('button[type="submit"]'), dialog.getByRole('textbox', { name: 'Optional note' })]) {
+        await control.scrollIntoViewIfNeeded();
         const r = await control.boundingBox();
         assert(r.y >= 60 && r.y + r.height <= 361, `Control hidden by keyboard at ${width}: ${JSON.stringify(r)}`);
         assert(await control.evaluate(node => {
@@ -50,7 +58,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       });
       assert.equal(await page.locator('dialog[open]').count(), 0);
     }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const amounts = page.locator('#dashboard button span.text-coral');
+    assert(await amounts.count() > 0, 'Calendar must show daily spending amounts');
+    for (const amount of await amounts.all()) assert(await amount.isVisible(), 'Daily spending hidden on mobile');
     assert.deepEqual(errors, []);
-    console.log('PASS: Quick Add fields, focus, pinned actions and simulated panned keyboard viewport at five mobile sizes.');
+    console.log('PASS: Original Quick Add scrolling and focus at five mobile sizes; daily calendar amounts visible.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

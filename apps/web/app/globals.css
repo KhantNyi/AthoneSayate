@@ -34,7 +34,7 @@
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  padding: 1rem 0 0;
   border: 0;
   background: transparent;
   color: rgb(var(--ink));
@@ -46,10 +46,6 @@
   max-height: 100%;
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
-.glass-dialog > .quick-add-form { padding-bottom: 0; }
-.quick-add-footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
-/* Keep the fixed actions visible while only the fields scroll above the keyboard. */
-.quick-add-form [data-modal-scroll] { scroll-padding-block: 1rem; }
 .glass-dialog-centered[open] { align-items: center; padding: 1rem; }
 .glass-dialog-centered > .liquid-sheet { animation: none; }
 @media (min-width: 640px) {
@@ -65,7 +61,6 @@
 }
 
 html {
-  scroll-padding-bottom: calc(9rem + var(--dock-bottom));
   background: rgb(var(--paper));
   overflow-x: clip;
   /* Native-feeling touch: no gray tap flash, no double-tap zoom delay */

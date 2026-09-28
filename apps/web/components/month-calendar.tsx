@@ -111,13 +111,10 @@ export function MonthCalendar({
               </span>
               {variant === "activity" ? (
                 <span className="mt-1 block space-y-0.5">
-                  {summary?.expense ? <span className="hidden truncate text-[11px] font-semibold text-coral sm:block">{compactCurrency(summary.expense)}</span> : null}
+                  {summary?.expense ? <span className="block truncate text-[11px] font-semibold text-coral">{compactCurrency(summary.expense)}</span> : null}
                   <span className="flex min-h-4 flex-wrap items-center gap-1">
-                    {summary?.expense ? <span className="size-1.5 rounded-full bg-coral sm:hidden" /> : null}
-                    {summary?.income ? <span className="size-1.5 rounded-full bg-moss sm:hidden" /> : null}
-                    {summary?.recurringCount ? <span className="size-1.5 rounded-full bg-amber sm:hidden" /> : null}
-                    {summary?.income ? <span className="hidden rounded bg-moss/10 px-1 text-[10px] font-semibold text-moss sm:inline">+</span> : null}
-                    {summary?.recurringCount ? <span className="hidden rounded bg-amber/15 px-1 text-[10px] font-semibold text-amber sm:inline">{labels.due}</span> : null}
+                    {summary?.income ? <span className="rounded bg-moss/10 px-1 text-[10px] font-semibold text-moss">+</span> : null}
+                    {summary?.recurringCount ? <span className="rounded bg-amber/15 px-1 text-[10px] font-semibold text-amber">{labels.due}</span> : null}
                   </span>
                 </span>
               ) : variant === "transactions" ? (
