@@ -7,6 +7,12 @@ backdrop dismissal, and visual-viewport sizing.
 
 ## Repeatable browser check
 
+Run `node scripts/desktop-menu-smoke.cjs` against a local production server to
+check the signed-in sidebar with a long email and large balance, in English and
+Myanmar at three desktop sizes including a short window. It uses a fake local
+session and intercepts every backend request. It checks menu and header widths,
+email truncation, and access to every navigation item and the sign-out button.
+
 Start the app on port 3100 and optionally the landing page on 3101. With Playwright
 available, run `node scripts/ui-smoke.cjs`. Environment variables:
 

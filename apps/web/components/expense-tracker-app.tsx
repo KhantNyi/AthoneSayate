@@ -103,35 +103,36 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
   return (
     <AppProvider value={app}>
       <main className="liquid-ui app-shell min-h-screen text-ink xl:grid xl:grid-cols-[16rem_minmax(0,1fr)]" lang={language === "my" ? "my" : "en"}>
-        <aside className="liquid-chrome sticky top-0 z-20 hidden h-screen min-h-0 w-64 grid-rows-[auto_minmax(0,1fr)_auto] border-r border-ink/10 bg-white px-4 py-5 xl:grid">
-          <div className="mb-7 flex items-center gap-3 px-2">
-            <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
+        <aside className="liquid-chrome sticky top-0 z-20 hidden h-dvh min-h-0 min-w-0 w-64 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(8rem,1fr)_auto] overflow-x-hidden overflow-y-auto border-r border-ink/10 bg-white px-4 py-5 xl:grid">
+          <div className="mb-7 flex min-w-0 items-center gap-3 px-2">
+            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
               <WalletCards size={22} />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text font-display text-lg font-bold tracking-tight text-transparent">athonesayate</p>
               <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
             </div>
           </div>
-          <nav className="min-h-0 space-y-1 overflow-y-auto pr-1" aria-label="Primary navigation">
+          <nav className="min-h-0 min-w-0 space-y-1 overflow-x-hidden overflow-y-auto pr-1" aria-label="Primary navigation">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
                 onClick={() => chooseTab(item.key)}
                 aria-current={activeTab === item.key ? "page" : undefined}
-                className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition duration-200 ${
+                title={t[item.label]}
+                className={`flex h-11 min-w-0 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition duration-200 ${
                   activeTab === item.key
                     ? "bg-gradient-to-r from-river to-indigo-500 text-bright shadow-glow"
                     : "text-ink/70 hover:translate-x-0.5 hover:bg-river/10 hover:text-river"
                 }`}
               >
-                <item.icon size={18} />
-                {t[item.label]}
+                <item.icon size={18} className="shrink-0" />
+                <span className="min-w-0 truncate">{t[item.label]}</span>
               </button>
             ))}
           </nav>
-          <div className="mt-4 grid gap-3">
+          <div className="mt-4 grid min-w-0 gap-3">
             {demoMode ? (
               <button
                 type="button"
@@ -142,12 +143,12 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                 <span className="mt-0.5 block text-xs text-ink/55">Sign in to track your own</span>
               </button>
             ) : (
-              <div className="liquid-control flex items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
+              <div className="liquid-control flex min-w-0 items-center gap-3 rounded-xl border border-ink/10 bg-white p-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss text-sm font-bold uppercase text-bright">
                   {session.email?.charAt(0) ?? "A"}
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{session.email ?? "Signed in"}</span>
+                <span className="min-w-0 flex-1">
+                  <span title={session.email ?? undefined} className="block truncate text-sm font-semibold">{session.email ?? "Signed in"}</span>
                   <span className="block text-xs text-ink/45">Free plan</span>
                 </span>
                 <button
@@ -161,7 +162,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                 </button>
               </div>
             )}
-            <div className="liquid-card rounded-xl border border-ink/10 bg-white p-4 text-sm">
+            <div className="liquid-card min-w-0 rounded-xl border border-ink/10 bg-white p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-ink/55">{t.accountBalance}</span>
                 <ChevronRight className="shrink-0 text-ink/40" size={16} />
