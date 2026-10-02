@@ -4,7 +4,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   fs.mkdirSync('artifacts/ui', { recursive: true });
@@ -16,6 +16,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     for (const width of [320, 360, 390, 430, 844]) {
       await page.setViewportSize({ width, height: width === 844 ? 390 : 844 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const originalScroll = await page.evaluate(() => window.scrollY);
       const launcher = await quickAdd.boundingBox();
       assert(launcher.y >= 0 && launcher.y + launcher.height <= page.viewportSize().height, 'Quick Add launcher must stay on screen after scrolling');
       await quickAdd.click();
@@ -24,6 +25,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       assert(sheet.y >= 0 && sheet.y + sheet.height <= page.viewportSize().height + 1, 'Opening Quick Add from a scrolled page must fit the screen');
       const close = dialog.getByRole('button', { name: 'Close quick add' });
       await dialog.waitFor();
+      assert(await page.evaluate(() => !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)), `Mobile opening must not focus an input or summon the keyboard at ${width}`);
+      assert.equal(await page.evaluate(() => document.body.style.position), 'fixed', 'The background must not pan when the keyboard opens');
       assert(await dialog.evaluate(node => node.contains(document.activeElement)), 'Focus must stay inside Quick Add');
       const overflow = await dialog.locator('input, select, button').evaluateAll(nodes => nodes.filter(node => {
         const r = node.getBoundingClientRect();
@@ -57,6 +60,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         visualViewport.dispatchEvent(new Event('resize'));
       });
       assert.equal(await page.locator('dialog[open]').count(), 0);
+      assert.equal(await page.evaluate(() => window.scrollY), originalScroll, 'Closing must restore the original page position');
+      // A previously panned viewport must also be respected on the first frame.
+      await page.evaluate(() => {
+        Object.defineProperty(visualViewport, 'height', { configurable: true, value: 300 });
+        Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 60 });
+      });
+      await quickAdd.click();
+      const reopened = await dialog.locator('form').boundingBox();
+      assert(reopened.y >= 60 && reopened.y + reopened.height <= 361, 'First opening must use the current visual viewport');
+      await close.click();
+      await page.evaluate(() => {
+        delete visualViewport.height;
+        delete visualViewport.offsetTop;
+      });
     }
     await page.setViewportSize({ width: 390, height: 844 });
     const amounts = page.locator('#dashboard button span.text-coral');

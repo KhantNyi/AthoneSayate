@@ -26,3 +26,22 @@ intercepting dock taps; browser runtime errors still fail the check.
 Run both workspace production builds and the shared package type check as well.
 Builds require access to Google Fonts. Browser automation uses Chromium; physical
 iOS/Android keyboard behavior, notches and GPU performance still need device QA.
+
+## Quick Add and data export
+
+Run `node scripts/quick-add-smoke.cjs` for touch-device opening with normal motion,
+scroll restoration, keyboard viewport resizing/panning and reopening at five sizes.
+Run `node scripts/data-export-smoke.cjs` to verify real JSON/CSV downloads from
+Reports and Settings, inclusive month/date ranges, invalid and empty ranges,
+category labels and mobile layouts. Both use the browser variables above.
+
+Run `node scripts/data-export-test.cjs` without a server to check leap-day boundaries,
+precise money totals, missing/archived category labels, CSV escaping and spreadsheet
+formula handling, and history pagination beyond 1,000 rows, including page failures.
+
+JSON exports include selected transactions and budgets, categorized summaries,
+and current settings for context. CSV exports contain labeled transaction rows.
+Exports identify demo data, cached snapshots and pending sync changes. Periods use
+recorded calendar dates, including both endpoints; current settings are not historical
+snapshots. Archived settings are excluded by the existing app data model, so retained
+transactions use explicit unknown/archived labels when their settings are unavailable.

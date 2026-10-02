@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { preciseCurrency } from "@athonesayate/shared/metrics";
 import { isMissing } from "@/lib/validation";
 import { useApp } from "./app-context";
@@ -39,6 +40,14 @@ export function QuickAddSheet() {
 
   const issues = formIssues.transaction;
   const showIssues = formAttempted("transaction");
+  const amountInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Touch devices should open the sheet before the user opens the keyboard.
+    if (quickAddOpen && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      amountInput.current?.focus({ preventScroll: true });
+    }
+  }, [quickAddOpen]);
 
   if (!quickAddOpen) {
     return null;
@@ -50,12 +59,13 @@ export function QuickAddSheet() {
         onSubmit={handleQuickAdd}
         noValidate
         aria-busy={isSaving}
-        className="liquid-sheet liquid-scroll w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl"
+        className="quick-add-sheet liquid-sheet liquid-scroll w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="quick-add-title" className="font-display text-lg font-semibold">{t.quickAdd}</h2>
           <button
             type="button"
+            autoFocus
             onClick={() => setQuickAddOpen(false)}
             aria-label="Close quick add"
             className="grid size-11 place-items-center rounded-lg text-ink/60 transition hover:bg-ink/5 hover:text-ink"
@@ -89,7 +99,7 @@ export function QuickAddSheet() {
           <div className={`flex items-baseline gap-2 border-b-2 pb-1 transition focus-within:border-river ${isMissing(issues, "amount", showIssues) ? "border-coral" : "border-ink/10"}`}>
             <span className="font-display text-3xl font-semibold text-ink/35">฿</span>
             <input
-              autoFocus
+              ref={amountInput}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"

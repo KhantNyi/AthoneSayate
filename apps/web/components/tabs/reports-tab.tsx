@@ -1,6 +1,7 @@
 "use client";
 
 import { Modal } from "../modal";
+import { DataExportButton } from "../data-export-button";
 import { Fragment } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -60,6 +61,7 @@ export default function ReportsTab() {
 
   return (
     <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
+      <div className="mb-4 flex justify-end"><DataExportButton /></div>
       <div className="mb-4 hidden min-w-0 gap-3 md:grid lg:grid-cols-[220px_minmax(0,1fr)]">
         <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
         <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">

@@ -9,6 +9,7 @@ import { disablePushNotifications, enablePushNotifications, getCurrentPushSubscr
 import { isMissing, validateAccount } from "@/lib/validation";
 import { useApp } from "../app-context";
 import { CategoryManager } from "../category-manager";
+import { DataExportButton } from "../data-export-button";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function BillRemindersCard() {
@@ -129,6 +130,13 @@ export default function SettingsTab() {
   return (
     <Panel id="settings" title="Settings" action="Manage accounts, categories and subcategories">
       <div className="grid gap-4">
+        <div className="grid gap-3 rounded-lg border border-ink/10 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div>
+            <h3 className="font-semibold">Data export</h3>
+            <p className="mt-1 text-xs text-ink/55">Choose all data, a month range or custom dates to analyze your income and spending.</p>
+          </div>
+          <DataExportButton />
+        </div>
         <BillRemindersCard />
 
         <div className="rounded-lg border border-ink/10 bg-white p-3">

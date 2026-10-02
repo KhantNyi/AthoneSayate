@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "./supabase";
+import { fetchAllRows } from "./pagination";
 import type { Account, AccountType, Budget, Category, Goal, RecurringRule, Subcategory, Transaction, TransactionType } from "./types";
 
 /**
@@ -218,13 +219,13 @@ export async function fetchExpenseData(): Promise<ExpenseData> {
   const userId = await requireUserId();
 
   const [accountsResult, budgetsResult, categoriesResult, subcategoriesResult, transactionsResult, recurringResult, goalsResult] = await Promise.all([
-    supabase.from("accounts").select("*").eq("user_id", userId).eq("archived", false).order("created_at", { ascending: true }),
-    supabase.from("budgets").select("*").eq("user_id", userId).order("month", { ascending: false }),
-    supabase.from("categories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }),
-    supabase.from("subcategories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }),
-    supabase.from("transactions").select("*").eq("user_id", userId).order("occurred_on", { ascending: false }),
-    supabase.from("recurring_rules").select("*").eq("user_id", userId).eq("active", true).order("next_due_on", { ascending: true }),
-    supabase.from("goals").select("*").eq("user_id", userId).eq("archived", false).order("target_date", { ascending: true })
+    fetchAllRows((from, to) => supabase.from("accounts").select("*").eq("user_id", userId).eq("archived", false).order("created_at", { ascending: true }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("budgets").select("*").eq("user_id", userId).order("month", { ascending: false }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("categories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("subcategories").select("*").eq("user_id", userId).eq("archived", false).order("name", { ascending: true }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("transactions").select("*").eq("user_id", userId).order("occurred_on", { ascending: false }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("recurring_rules").select("*").eq("user_id", userId).eq("active", true).order("next_due_on", { ascending: true }).order("id").range(from, to)),
+    fetchAllRows((from, to) => supabase.from("goals").select("*").eq("user_id", userId).eq("archived", false).order("target_date", { ascending: true }).order("id").range(from, to))
   ]);
 
   const firstError =

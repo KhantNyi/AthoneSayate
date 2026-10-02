@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 let openModals = 0;
-let previousOverflow = "";
+let restoreBody: (() => void) | undefined;
 
 /** Native top-layer dialogs stay above transformed cards and make the page inert. */
 export function Modal({ open, onClose, labelledBy, children, centered = false }: {
@@ -16,14 +16,20 @@ export function Modal({ open, onClose, labelledBy, children, centered = false }:
   const ref = useRef<HTMLDialogElement>(null);
   const backdropPressed = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!open || !dialog) return;
     const trigger = document.activeElement;
-    dialog.showModal();
     if (openModals++ === 0) {
-      previousOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
+      const { scrollX, scrollY } = window;
+      const body = document.body;
+      const previous = { overflow: body.style.overflow, position: body.style.position, top: body.style.top, left: body.style.left, width: body.style.width };
+      // overflow:hidden alone does not stop iOS from panning the page on focus.
+      Object.assign(body.style, { overflow: "hidden", position: "fixed", top: `${-scrollY}px`, left: `${-scrollX}px`, width: "100%" });
+      restoreBody = () => {
+        Object.assign(body.style, previous);
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
+      };
     }
     const viewport = window.visualViewport;
     const resize = () => {
@@ -33,11 +39,18 @@ export function Modal({ open, onClose, labelledBy, children, centered = false }:
     resize();
     viewport?.addEventListener("resize", resize);
     viewport?.addEventListener("scroll", resize);
+    window.addEventListener("resize", resize);
+    // Set the visible bounds and lock scrolling before native dialog focus runs.
+    dialog.showModal();
     return () => {
       viewport?.removeEventListener("resize", resize);
       viewport?.removeEventListener("scroll", resize);
+      window.removeEventListener("resize", resize);
       dialog.close();
-      if (--openModals === 0) document.body.style.overflow = previousOverflow;
+      if (--openModals === 0) {
+        restoreBody?.();
+        restoreBody = undefined;
+      }
       if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [open]);
