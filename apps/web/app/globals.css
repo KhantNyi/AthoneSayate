@@ -39,6 +39,7 @@
   background: transparent;
   color: rgb(var(--ink));
   overflow: hidden;
+  transition: none;
 }
 .glass-dialog[open] { display: flex; align-items: flex-end; justify-content: center; }
 .glass-dialog::backdrop { background: rgb(5 10 24 / .45); }
@@ -46,11 +47,12 @@
   min-height: 0;
   max-height: 100%;
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  /* Native focus and keyboard panning must always see the final sheet bounds. */
+  animation: none;
+  transform: none;
+  transition: none;
 }
 .glass-dialog-centered[open] { align-items: center; padding: 1rem; }
-.glass-dialog-centered > .liquid-sheet { animation: none; }
-/* Native focus must never target a sheet while it is moving off screen. */
-.glass-dialog > .quick-add-sheet { animation: none; }
 @media (min-width: 640px) {
   .glass-dialog[open] { align-items: center; padding: 1.5rem; }
 }

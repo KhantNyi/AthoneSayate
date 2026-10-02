@@ -29,6 +29,14 @@ iOS/Android keyboard behavior, notches and GPU performance still need device QA.
 
 ## Quick Add and data export
 
+Run `node scripts/mobile-popups-smoke.cjs` with normal motion to capture the first
+native opening frame of every dialog (Quick Add, Export from Reports and Settings,
+report filters and nested sign-up). It verifies visible titles, static initial focus,
+keyboard panning, reopening, and nested scroll restoration at four mobile sizes.
+Set `BROWSER_ENGINE=webkit` and omit `BROWSER_EXECUTABLE` to run with an installed
+Playwright WebKit browser. All dialog sheets share stable geometry and focus their
+titles before native opening; keyboard focus is not placed on a mobile form field.
+
 Run `node scripts/quick-add-smoke.cjs` for touch-device opening with normal motion,
 scroll restoration, keyboard viewport resizing/panning and reopening at five sizes.
 Run `node scripts/data-export-smoke.cjs` to verify real JSON/CSV downloads from

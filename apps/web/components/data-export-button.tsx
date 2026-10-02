@@ -65,7 +65,7 @@ export function DataExportButton() {
         <form onSubmit={download} noValidate className="liquid-sheet liquid-scroll w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink/10 p-5 sm:rounded-2xl">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 id={titleId} className="text-lg font-semibold">Export data</h2>
-            <button type="button" autoFocus aria-label="Close data export" onClick={() => setOpen(false)} className="grid size-11 shrink-0 place-items-center rounded-lg text-ink/60"><X size={18} /></button>
+            <button type="button" aria-label="Close data export" onClick={() => setOpen(false)} className="grid size-11 shrink-0 place-items-center rounded-lg text-ink/60"><X size={18} /></button>
           </div>
           <p className="mb-4 text-sm text-ink/55">Download your records to analyze with AI or a spreadsheet.</p>
           {app.demoMode ? <p className="mb-4 rounded-lg bg-amber/10 p-3 text-sm text-amber">You are viewing sample data. This export contains demo records.</p> : null}

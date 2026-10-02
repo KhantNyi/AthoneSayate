@@ -59,13 +59,12 @@ export function QuickAddSheet() {
         onSubmit={handleQuickAdd}
         noValidate
         aria-busy={isSaving}
-        className="quick-add-sheet liquid-sheet liquid-scroll w-full max-w-lg animate-sheet-in overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl"
+        className="liquid-sheet liquid-scroll w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="quick-add-title" className="font-display text-lg font-semibold">{t.quickAdd}</h2>
           <button
             type="button"
-            autoFocus
             onClick={() => setQuickAddOpen(false)}
             aria-label="Close quick add"
             className="grid size-11 place-items-center rounded-lg text-ink/60 transition hover:bg-ink/5 hover:text-ink"

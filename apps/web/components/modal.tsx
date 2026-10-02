@@ -20,6 +20,14 @@ export function Modal({ open, onClose, labelledBy, children, centered = false }:
     const dialog = ref.current;
     if (!open || !dialog) return;
     const trigger = document.activeElement;
+    const title = document.getElementById(labelledBy);
+    const initialFocus = dialog.contains(title) ? title : null;
+    const previousTabIndex = initialFocus?.getAttribute("tabindex") ?? null;
+    const previousAutofocus = initialFocus?.getAttribute("autofocus") ?? null;
+    // Native dialog autofocus runs during showModal. Choose static content
+    // before opening so Safari never focuses a field and pans the viewport.
+    initialFocus?.setAttribute("tabindex", "-1");
+    initialFocus?.setAttribute("autofocus", "");
     if (openModals++ === 0) {
       const { scrollX, scrollY } = window;
       const body = document.body;
@@ -42,18 +50,28 @@ export function Modal({ open, onClose, labelledBy, children, centered = false }:
     window.addEventListener("resize", resize);
     // Set the visible bounds and lock scrolling before native dialog focus runs.
     dialog.showModal();
+    initialFocus?.focus({ preventScroll: true });
+    dialog.scrollTop = 0;
+    dialog.querySelector<HTMLElement>(".liquid-sheet")?.scrollTo({ top: 0, behavior: "instant" });
+    resize();
     return () => {
       viewport?.removeEventListener("resize", resize);
       viewport?.removeEventListener("scroll", resize);
       window.removeEventListener("resize", resize);
       dialog.close();
+      if (initialFocus) {
+        if (previousTabIndex === null) initialFocus.removeAttribute("tabindex");
+        else initialFocus.setAttribute("tabindex", previousTabIndex);
+        if (previousAutofocus === null) initialFocus.removeAttribute("autofocus");
+        else initialFocus.setAttribute("autofocus", previousAutofocus);
+      }
       if (--openModals === 0) {
         restoreBody?.();
         restoreBody = undefined;
       }
       if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, labelledBy]);
 
   return (
     <dialog
@@ -68,7 +86,7 @@ export function Modal({ open, onClose, labelledBy, children, centered = false }:
         )).filter(node => node.tabIndex >= 0 && node.getClientRects().length > 0);
         const first = controls[0];
         const last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) {
+        if (event.shiftKey && (document.activeElement === first || document.activeElement?.id === labelledBy)) {
           event.preventDefault();
           last?.focus();
         } else if (!event.shiftKey && document.activeElement === last) {
