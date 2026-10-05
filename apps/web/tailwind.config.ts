@@ -23,8 +23,8 @@ const config: Config = {
         // Transform + opacity only: animating filter/blur on backdrop-filter
         // surfaces forces full repaints and drops frames on mobile Safari.
         "tab-in": {
-          from: { opacity: "0", transform: "translateY(10px) scale(0.99)" },
-          to: { opacity: "1", transform: "translateY(0) scale(1)" }
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "translateY(0)" }
         },
         "toast-in": {
           "0%": { opacity: "0", transform: "translateY(18px) scale(0.94)" },
@@ -45,7 +45,7 @@ const config: Config = {
         }
       },
       animation: {
-        "tab-in": "tab-in 0.3s cubic-bezier(0.21, 1, 0.32, 1) both",
+        "tab-in": "tab-in 0.18s cubic-bezier(0.21, 1, 0.32, 1) both",
         "toast-in": "toast-in 0.45s cubic-bezier(0.34, 1.36, 0.44, 1) both",
         "sheet-in": "sheet-in 0.45s cubic-bezier(0.32, 0.72, 0, 1) both",
         "fade-in": "fade-in 0.22s ease-out both",

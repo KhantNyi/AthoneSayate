@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  const browser = await playwright[process.env.BROWSER_ENGINE || 'chromium'].launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -21,6 +21,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       assert(launcher.y >= 0 && launcher.y + launcher.height <= page.viewportSize().height, 'Quick Add launcher must stay on screen after scrolling');
       await quickAdd.click();
       await dialog.waitFor();
+      await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
       const sheet = await dialog.locator('form').boundingBox();
       assert(sheet.y >= 0 && sheet.y + sheet.height <= page.viewportSize().height + 1, 'Opening Quick Add from a scrolled page must fit the screen');
       const close = dialog.getByRole('button', { name: 'Close quick add' });
@@ -54,6 +55,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }
       await page.screenshot({ path: `artifacts/ui/quick-add-keyboard-${width}.png` });
       await close.click();
+      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       await page.evaluate(() => {
         delete visualViewport.height;
         delete visualViewport.offsetTop;
@@ -67,9 +69,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 60 });
       });
       await quickAdd.click();
+      await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
       const reopened = await dialog.locator('form').boundingBox();
       assert(reopened.y >= 60 && reopened.y + reopened.height <= 361, 'First opening must use the current visual viewport');
       await close.click();
+      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       await page.evaluate(() => {
         delete visualViewport.height;
         delete visualViewport.offsetTop;

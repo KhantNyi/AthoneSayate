@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
   const base = process.env.UI_URL || 'http://localhost:3100';
@@ -16,8 +16,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     Buffer.from(JSON.stringify({ sub: user.id, exp: now + 3600, aud: 'authenticated' })).toString('base64url'),
     'fixture'
   ].join('.');
-  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+  const browser = await playwright[process.env.BROWSER_ENGINE || 'chromium'].launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 720 }, reducedMotion: 'reduce' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   fs.mkdirSync('artifacts/ui', { recursive: true });
@@ -35,10 +35,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.goto(base, { waitUntil: 'networkidle' });
     const sidebar = page.locator('aside.liquid-chrome');
     await sidebar.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+    // Windows WebKit reserves space for classic scrollbars. Compare the same
+    // usable CSS width as Chromium, whose scrollbars overlay the content.
+    const scrollbarWidth = await page.evaluate(() => innerWidth - document.documentElement.clientWidth);
     for (const language of ['en', 'my']) {
       if (language === 'my') await page.locator('header button[aria-pressed="false"]').click();
       for (const size of [{ width: 1280, height: 720 }, { width: 1440, height: 350 }, { width: 1600, height: 900 }]) {
-        await page.setViewportSize(size);
+        await page.setViewportSize({ width: size.width + scrollbarWidth, height: size.height });
         assert(await sidebar.evaluate(node => node.scrollWidth <= node.clientWidth), `Sidebar width overflow: ${language} ${JSON.stringify(size)}`);
         assert(await page.locator('header').evaluate(node => node.scrollWidth <= node.clientWidth), 'Top-right controls must fit the header');
         const nav = sidebar.getByRole('navigation');

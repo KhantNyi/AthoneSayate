@@ -168,107 +168,105 @@ export default function ReportsTab() {
         </button>
       </div>
 
-      {monthlyReportFiltersOpen ? (
-        <Modal open={monthlyReportFiltersOpen} onClose={() => setMonthlyReportFiltersOpen(false)} labelledBy="report-filters-title">
-          <div className="liquid-sheet liquid-scroll w-full max-w-lg overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 id="report-filters-title" className="text-base font-semibold">Report filters</h3>
-                <p className="text-xs text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</p>
+      <Modal open={monthlyReportFiltersOpen} onClose={() => setMonthlyReportFiltersOpen(false)} labelledBy="report-filters-title">
+        <div className="liquid-sheet liquid-scroll w-full max-w-lg overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 id="report-filters-title" className="text-base font-semibold">Report filters</h3>
+              <p className="text-xs text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close report filters"
+              onClick={() => setMonthlyReportFiltersOpen(false)}
+              className="grid size-10 place-items-center rounded-lg text-ink/45"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-sm font-medium text-ink/55">
+              Category
+              <select
+                value={monthlyReportCategoryId}
+                onChange={(event) => {
+                  setMonthlyReportCategoryId(event.target.value);
+                  setMonthlyReportSubcategoryId("all");
+                }}
+                className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+              >
+                <option value="all">All categories</option>
+                {displayCategories.filter((category) => category.kind === "expense").map((category) => (
+                  <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-ink/55">
+              Subcategory
+              <select
+                value={monthlyReportSubcategoryId}
+                onChange={(event) => setMonthlyReportSubcategoryId(event.target.value)}
+                className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+              >
+                <option value="all">All subcategories</option>
+                {monthlyReportSubcategories.map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-ink/55">
+              Account
+              <select
+                value={monthlyReportAccountId}
+                onChange={(event) => setMonthlyReportAccountId(event.target.value)}
+                className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
+              >
+                <option value="all">All accounts</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="grid gap-1 text-sm font-medium text-ink/55">
+              Entries
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-ink/10 bg-white p-1">
+                {([
+                  ["all", "All"],
+                  ["recurring", "Recurring"],
+                  ["manual", "Manual"]
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setMonthlyReportRecurringFilter(value)}
+                    className={`h-9 rounded-md text-xs font-semibold transition ${
+                      monthlyReportRecurringFilter === value ? "bg-river text-bright" : "text-ink/55"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <button
                 type="button"
-                aria-label="Close report filters"
-                onClick={() => setMonthlyReportFiltersOpen(false)}
-                className="grid size-10 place-items-center rounded-lg text-ink/45"
+                onClick={clearMonthlyReportFilters}
+                className="h-11 rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink/60"
               >
-                <X size={18} />
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyReportFiltersOpen(false)}
+                className="h-11 rounded-lg bg-river px-4 text-sm font-semibold text-bright"
+              >
+                Apply
               </button>
             </div>
-            <div className="grid gap-3">
-              <label className="grid gap-1 text-sm font-medium text-ink/55">
-                Category
-                <select
-                  value={monthlyReportCategoryId}
-                  onChange={(event) => {
-                    setMonthlyReportCategoryId(event.target.value);
-                    setMonthlyReportSubcategoryId("all");
-                  }}
-                  className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
-                >
-                  <option value="all">All categories</option>
-                  {displayCategories.filter((category) => category.kind === "expense").map((category) => (
-                    <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-medium text-ink/55">
-                Subcategory
-                <select
-                  value={monthlyReportSubcategoryId}
-                  onChange={(event) => setMonthlyReportSubcategoryId(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
-                >
-                  <option value="all">All subcategories</option>
-                  {monthlyReportSubcategories.map((subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-medium text-ink/55">
-                Account
-                <select
-                  value={monthlyReportAccountId}
-                  onChange={(event) => setMonthlyReportAccountId(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
-                >
-                  <option value="all">All accounts</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="grid gap-1 text-sm font-medium text-ink/55">
-                Entries
-                <div className="grid grid-cols-3 gap-1 rounded-lg border border-ink/10 bg-white p-1">
-                  {([
-                    ["all", "All"],
-                    ["recurring", "Recurring"],
-                    ["manual", "Manual"]
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setMonthlyReportRecurringFilter(value)}
-                      className={`h-9 rounded-md text-xs font-semibold transition ${
-                        monthlyReportRecurringFilter === value ? "bg-river text-bright" : "text-ink/55"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={clearMonthlyReportFilters}
-                  className="h-11 rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink/60"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthlyReportFiltersOpen(false)}
-                  className="h-11 rounded-lg bg-river px-4 text-sm font-semibold text-bright"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
           </div>
-        </Modal>
-      ) : null}
+        </div>
+      </Modal>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex h-10 w-full items-center rounded-lg border border-ink/10 bg-white p-1 sm:w-auto">

@@ -49,10 +49,6 @@ export function QuickAddSheet() {
     }
   }, [quickAddOpen]);
 
-  if (!quickAddOpen) {
-    return null;
-  }
-
   return (
     <Modal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} labelledBy="quick-add-title">
       <form

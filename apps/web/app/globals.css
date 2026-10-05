@@ -42,12 +42,12 @@
   transition: none;
 }
 .glass-dialog[open] { display: flex; align-items: flex-end; justify-content: center; }
-.glass-dialog::backdrop { background: rgb(5 10 24 / .45); }
+.glass-dialog::backdrop { background: rgb(5 10 24 / .45); opacity: var(--modal-backdrop-opacity, 1); }
 .glass-dialog > .liquid-sheet {
   min-height: 0;
   max-height: 100%;
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
-  /* Native focus and keyboard panning must always see the final sheet bounds. */
+  /* Modal establishes resting bounds before native focus and playback. */
   animation: none;
   transform: none;
   transition: none;
@@ -158,143 +158,29 @@ h3 {
   }
 
 
-  .liquid-nav {
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-  }
-
-  .ios-tabbar {
-    bottom: var(--dock-bottom);
-    left: 50%;
-    width: min(calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 36rem);
-    transform: translateX(-50%);
-    transform-origin: 50% 100%;
-    border: 1px solid var(--ios-glass-stroke);
-    border-radius: 999px;
-    background:
-      linear-gradient(135deg, var(--glass-highlight), transparent 28%),
-      linear-gradient(180deg, var(--ios-glass-tint), rgb(var(--surface) / .72));
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    backdrop-filter: blur(28px) saturate(180%);
-    box-shadow:
-      0 24px 60px rgba(0, 0, 0, 0.24),
-      inset 0 1px 0 rgba(255, 255, 255, 0.34),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.08);
-    animation: ios-tabbar-rise 0.55s var(--ease-glide) both;
-  }
-
-  .ios-tabbar::before {
-    pointer-events: none;
-    content: "";
-    position: absolute;
-    inset: 2px;
-    border-radius: inherit;
-    background:
-      radial-gradient(circle at 18% 18%, var(--glass-highlight), transparent 32%),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 34%, rgb(var(--river) / 0.12));
-    opacity: 0.92;
-  }
-
-  .ios-tabbar > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .ios-tab-item {
-    position: relative;
-    min-height: 4rem;
-    overflow: hidden;
-    border-radius: 999px;
-    color: rgb(var(--ink) / 0.68);
-    transform: translateZ(0);
-    transition:
-      color 0.26s var(--ease-glide),
-      background 0.32s var(--ease-glide),
-      box-shadow 0.32s var(--ease-glide),
-      scale 0.35s var(--ease-spring);
-  }
-
-  .ios-tab-item::after {
-    pointer-events: none;
-    content: "";
-    position: absolute;
-    inset: 7px 16%;
-    border-radius: inherit;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.6), transparent 42%);
-    opacity: 0;
-    transform: translateY(8px) scale(0.92);
-    transition:
-      opacity 0.26s ease,
-      transform 0.4s var(--ease-spring);
-  }
-
-  .ios-tab-item svg {
-    filter: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.16));
-    transition:
-      transform 0.35s var(--ease-spring),
-      filter 0.35s var(--ease-glide);
-  }
-
-  .ios-tab-active {
-    color: rgb(var(--ink));
-    background:
-      linear-gradient(135deg, var(--glass-highlight), transparent 32%),
-      linear-gradient(180deg, var(--ios-glass-active), rgba(255, 255, 255, 0.05));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.48),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.12),
-      0 10px 28px rgba(0, 0, 0, 0.16);
-    animation: ios-tab-pop 0.45s var(--ease-glide) both;
-  }
-
-  .ios-tab-active::after {
-    opacity: 0.58;
-    transform: translateY(0) scale(1);
-  }
-
-  .ios-tab-active svg {
-    transform: translateY(-2px) scale(1.08);
-    filter:
-      drop-shadow(0 8px 16px rgb(var(--river) / 0.18))
-      drop-shadow(0 1px 8px rgba(0, 0, 0, 0.12));
-  }
-
-  .ios-popover {
-    border: 1px solid var(--ios-glass-stroke);
-    border-radius: 1.75rem;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 30%),
-      linear-gradient(180deg, rgb(var(--surface) / .96), rgb(var(--surface) / .88));
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    backdrop-filter: blur(28px) saturate(180%);
-    box-shadow:
-      0 24px 60px rgba(0, 0, 0, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 0.34);
-    transform-origin: 50% 100%;
-    animation: ios-popover-in 0.4s var(--ease-spring) both;
-  }
-
-  .liquid-fab {
-    border: 1px solid rgb(255 255 255 / 0.44);
-    background:
-      radial-gradient(circle at 30% 20%, var(--glass-highlight), transparent 34%),
-      linear-gradient(145deg, rgb(var(--surface) / 0.92), rgb(var(--surface) / 0.72)),
-      linear-gradient(315deg, rgb(var(--river) / 0.18), transparent 52%);
-    -webkit-backdrop-filter: blur(26px) saturate(180%);
-    backdrop-filter: blur(26px) saturate(180%);
-    box-shadow:
-      0 20px 52px rgb(var(--river) / 0.26),
-      0 10px 32px rgba(0, 0, 0, 0.14),
-      inset 0 1px 0 rgb(255 255 255 / 0.62),
-      inset 0 -1px 0 rgb(255 255 255 / 0.14);
-    color: rgb(var(--river));
-  }
-
-  .liquid-overlay {
-    background:
-      linear-gradient(180deg, rgb(var(--ink) / 0.08), rgb(var(--ink) / 0.24));
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-  }
+.ios-tabbar {
+  bottom: var(--dock-bottom);
+  left: 50%;
+  width: min(calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)), 36rem);
+  transform: translateX(-50%);
+  border: 1px solid var(--ios-glass-stroke);
+  border-radius: 999px;
+}
+.ios-tabbar > * { position: relative; z-index: 1; }
+.ios-tab-item {
+  position: relative;
+  min-height: 4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  color: rgb(var(--ink) / .68);
+}
+.ios-popover {
+  border: 1px solid var(--ios-glass-stroke);
+  border-radius: 1.75rem;
+  transform-origin: 50% 100%;
+}
+.liquid-fab { border: 1px solid var(--ios-glass-stroke); }
+.liquid-overlay { background: rgb(var(--ink) / .24); }
 
 .liquid-scroll {
     scrollbar-gutter: stable;
@@ -373,54 +259,6 @@ textarea:focus-visible {
   }
 }
 
-/* Transform + opacity only — animating filter/blur alongside
-   backdrop-filter repaints the whole glass surface every frame. */
-@keyframes ios-tabbar-rise {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(18px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-}
-
-@keyframes ios-tab-pop {
-  0% {
-    transform: scale(0.92);
-  }
-  55% {
-    transform: scale(1.06);
-  }
-  80% {
-    transform: scale(0.99);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes ios-popover-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes ios-sheet-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
 @media (max-width: 640px) {
   input, select, textarea { min-width: 0; max-width: 100%; }
 
@@ -436,12 +274,6 @@ textarea:focus-visible {
     --glass-blur: 18px;
   }
 
-  /* Bottom sheets slide up from the edge like a native iOS sheet —
-     no fade, no scale — while the overlay fades independently. */
-  .liquid-sheet {
-    animation: ios-sheet-up 0.5s var(--ease-ios) both;
-  }
-
   @supports (height: 100dvh) {
     /* 92vh overflows when the Android URL bar is visible; dvh doesn't */
     .liquid-sheet {
@@ -450,43 +282,175 @@ textarea:focus-visible {
   }
 }
 
-/* Touch devices (Android especially) blur far slower than desktop GPUs;
-   cost scales with radius², so trimming the radius keeps the look while
-   roughly halving the work. */
-@media (pointer: coarse) {
-  .ios-tabbar,
-  .ios-popover {
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    backdrop-filter: blur(20px) saturate(160%);
-  }
-
-  .liquid-fab {
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    backdrop-filter: blur(18px) saturate(160%);
-  }
-
-  .liquid-overlay {
-    -webkit-backdrop-filter: blur(5px);
-    backdrop-filter: blur(5px);
-  }
+/* App-only material. The shared tokens and the marketing site keep their
+   existing recipe. Blur belongs to floating chrome, never the data panels. */
+.app-shell {
+  --chrome-alpha: .62;
+  --chrome-soft: .52;
+  --floating-alpha: .94;
+  --floating-soft: .88;
+  --chrome-blur: 22px;
+  --chrome-saturate: 145%;
+  --chrome-rim: rgb(255 255 255 / .82);
+  --chrome-lower-rim: rgb(var(--ink) / .08);
+  --chrome-light: rgb(255 255 255 / .38);
+  --selection-fill: rgb(var(--surface) / .5);
+}
+.dark .app-shell {
+  --chrome-alpha: .74;
+  --chrome-soft: .64;
+  --floating-alpha: .96;
+  --floating-soft: .9;
+  --chrome-rim: rgb(255 255 255 / .24);
+  --chrome-lower-rim: rgb(255 255 255 / .07);
+  --chrome-light: rgb(255 255 255 / .14);
+  --selection-fill: rgb(255 255 255 / .09);
 }
 
-/* Old Android WebViews without backdrop-filter: fall back to nearly
-   opaque fills so floating chrome stays legible instead of see-through. */
+.app-shell :is(.liquid-panel, .liquid-card) {
+  background: rgb(var(--surface) / .94);
+  border-color: rgb(var(--ink) / .08);
+  box-shadow: 0 4px 20px rgb(var(--ink) / .035);
+}
+.app-shell :is(.liquid-panel, .liquid-card)::before { opacity: .28; }
+.app-shell :is(.liquid-panel, .liquid-card)::after { opacity: .16; }
+.app-shell .liquid-chrome { background: rgb(var(--surface) / .8); }
+
+.app-shell :is(.ios-tabbar, .ios-popover, .liquid-fab, .liquid-sheet, .liquid-menu, .liquid-toast, .liquid-topbar) {
+  isolation: isolate;
+  border-color: var(--chrome-rim);
+  background: linear-gradient(155deg, rgb(var(--surface) / var(--chrome-alpha)), rgb(var(--surface) / var(--chrome-soft)));
+  -webkit-backdrop-filter: blur(var(--chrome-blur)) saturate(var(--chrome-saturate));
+  backdrop-filter: blur(var(--chrome-blur)) saturate(var(--chrome-saturate));
+  box-shadow:
+    0 12px 32px rgb(5 10 24 / .12),
+    0 2px 6px rgb(5 10 24 / .04),
+    inset 0 1px 0 var(--chrome-rim),
+    inset 0 -1px 0 var(--chrome-lower-rim);
+}
+.app-shell :is(.ios-popover, .liquid-sheet, .liquid-menu, .liquid-toast) {
+  --chrome-alpha: var(--floating-alpha);
+  --chrome-soft: var(--floating-soft);
+}
+.app-shell :is(.ios-tabbar, .ios-popover, .liquid-fab, .liquid-sheet, .liquid-menu, .liquid-toast)::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(130deg, rgb(255 255 255 / .14), transparent 28%, transparent 72%, rgb(var(--river) / .035));
+  opacity: 1;
+}
+.app-shell .liquid-fab { color: rgb(var(--river)); overflow: hidden; }
+.app-shell .liquid-overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+.app-shell button:not(:disabled), .app-shell a.press {
+  transition:
+    color 140ms ease-out, background-color 140ms ease-out,
+    border-color 140ms ease-out, opacity 140ms ease-out,
+    transform 180ms var(--ease-glide), scale 280ms var(--ease-spring);
+}
+.app-shell button:not(:disabled):not([aria-disabled="true"]):active,
+.app-shell a.press:active {
+  scale: .98;
+  transition-duration: 80ms;
+  transition-timing-function: ease-out;
+}
+
+.app-shell .glass-nav-track { position: relative; isolation: isolate; overflow: hidden; }
+.app-shell .glass-nav-track > button { position: relative; z-index: 2; }
+.app-shell .glass-nav-track > button:focus-visible { outline-offset: -3px; }
+.app-shell .glass-nav-indicator {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: inherit;
+  border: 1px solid var(--chrome-rim);
+  background:
+    linear-gradient(140deg, rgb(255 255 255 / .16), transparent 45%),
+    var(--selection-fill);
+  box-shadow: inset 0 1px 0 var(--chrome-rim), inset 0 -1px 0 var(--chrome-lower-rim), 0 2px 6px rgb(5 10 24 / .06);
+  opacity: 0;
+  will-change: transform;
+}
+.app-shell .glass-nav-indicator[data-ready="true"] { opacity: 1; }
+.app-shell .glass-sidebar-track > .glass-nav-indicator {
+  border-color: rgb(var(--river) / .16);
+  background: linear-gradient(115deg, rgb(var(--river) / .14), rgb(var(--river) / .06));
+  box-shadow: inset 0 1px 0 var(--chrome-rim);
+}
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .glass-sidebar-item:hover:not([aria-current="page"]) { background-color: rgb(var(--river) / .045); }
+}
+.app-shell .ios-tabbar { animation: none; }
+.app-shell .ios-tab-item {
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+.app-shell .ios-tab-item::after { content: none; }
+.app-shell .ios-tab-item svg { filter: none; transform: none; transition: transform 280ms var(--ease-spring); }
+.app-shell .ios-tab-active { color: rgb(var(--ink)); }
+.app-shell .ios-tab-active svg { transform: translateY(-1px) scale(1.04); }
+
+.app-shell .glass-light-clip {
+  position: absolute;
+  pointer-events: none;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.app-shell .glass-light {
+  position: absolute;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  contain: strict;
+  background: radial-gradient(circle, var(--chrome-light), transparent 68%);
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+.app-shell .glass-light[data-lit="true"] { opacity: 1; }
+.app-shell .glass-nav-track > .glass-light-clip { z-index: 1; }
+.app-shell .ios-popover { overflow-x: hidden; }
+.app-shell .ios-popover[data-state="closing"] { pointer-events: none; }
+.app-shell .glass-dialog[data-state="closing"] { pointer-events: none; }
+
+/* Playback can reverse from the visible pose. The viewport container stays
+   stationary while the browser animates the sheet's transform and opacity. */
+.app-shell .glass-dialog > .liquid-sheet { transform-origin: 50% 100%; }
+.app-shell .glass-dialog-centered > .liquid-sheet { transform-origin: 50% 50%; }
+@media (min-width: 640px) { .app-shell .glass-dialog > .liquid-sheet { transform-origin: 50% 50%; } }
+
+@media (pointer: coarse) { .app-shell { --chrome-blur: 16px; --chrome-saturate: 135%; } }
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .glass-light { display: none; }
+  .app-shell :is(.ios-popover, .ios-tab-item svg, .glass-dialog > .liquid-sheet) { animation: none; transform: none; }
+  .app-shell button:not(:disabled):active, .app-shell a.press:active { scale: 1; }
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .app-shell :is(.ios-tabbar, .ios-popover, .liquid-fab, .liquid-sheet, .liquid-menu, .liquid-toast, .liquid-topbar) {
+    background: rgb(var(--surface));
+    border-color: rgb(var(--ink) / .3);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .app-shell .glass-nav-indicator { border-color: rgb(var(--river) / .5); background: rgb(var(--river) / .16); }
+  .app-shell .glass-light { display: none; }
+}
+@media (forced-colors: active) {
+  .app-shell .glass-nav-indicator { border: 2px solid Highlight; }
+  .app-shell .glass-light { display: none; }
+}
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .ios-tabbar,
-  .ios-popover,
-  .liquid-fab {
-    background: rgb(var(--surface) / 0.96);
-  }
-
-  .liquid-sheet,
-  .liquid-menu,
-  .liquid-toast {
-    background: rgb(var(--surface) / 0.97);
-  }
-
-  .liquid-overlay {
-    background: rgb(var(--ink) / 0.38);
-  }
+  .app-shell :is(.ios-tabbar, .ios-popover, .liquid-fab, .liquid-sheet, .liquid-menu, .liquid-toast, .liquid-topbar) { background: rgb(var(--surface)); }
 }

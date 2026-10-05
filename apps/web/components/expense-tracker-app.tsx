@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Modal } from "./modal";
+import { createPopupMotion, GlassLight, GlassNav, useAnimatedPresence } from "./glass-motion";
 import { PwaExperience } from "./pwa-experience";
 import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
@@ -69,6 +70,35 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
   const moreButton = useRef<HTMLButtonElement>(null);
   const morePanel = useRef<HTMLDivElement>(null);
+  const { present: morePresent, finishExit: finishMoreExit } = useAnimatedPresence(mobileMoreOpen);
+  const moreMotion = useRef<ReturnType<typeof createPopupMotion> | null>(null);
+  const moreEntered = useRef(false);
+  const restoreMoreFocus = useRef(false);
+  useLayoutEffect(() => {
+    const panel = morePanel.current;
+    if (!morePresent || !panel) return;
+    moreMotion.current = createPopupMotion(panel);
+    moreEntered.current = false;
+    return () => { moreMotion.current?.destroy(); moreMotion.current = null; };
+  }, [morePresent]);
+  useLayoutEffect(() => {
+    if (!moreMotion.current || !morePanel.current) return;
+    if (mobileMoreOpen) restoreMoreFocus.current = false;
+    const closed = { transform: "translateY(12px) scale(0.98)", opacity: "0" };
+    moreMotion.current.play({
+      open: mobileMoreOpen,
+      from: moreEntered.current ? undefined : closed,
+      to: mobileMoreOpen ? { transform: "none", opacity: "1" } : closed,
+      duration: mobileMoreOpen ? 220 : 180,
+      easing: mobileMoreOpen ? getComputedStyle(morePanel.current).getPropertyValue("--ease-glide").trim() || "ease-out" : "ease-in",
+      onFinish: mobileMoreOpen ? undefined : () => {
+        finishMoreExit();
+        if (restoreMoreFocus.current) moreButton.current?.focus({ preventScroll: true });
+        restoreMoreFocus.current = false;
+      }
+    });
+    moreEntered.current = true;
+  }, [mobileMoreOpen, morePresent, finishMoreExit]);
   useEffect(() => {
     if (!mobileMoreOpen) return;
     const dismiss = (event: PointerEvent) => {
@@ -78,8 +108,8 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        restoreMoreFocus.current = true;
         setMobileMoreOpen(false);
-        moreButton.current?.focus();
       }
     };
     const desktop = window.matchMedia("(min-width: 1280px)");
@@ -113,24 +143,27 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
             </div>
           </div>
-          <nav className="min-h-0 min-w-0 space-y-1 overflow-x-hidden overflow-y-auto pr-1" aria-label="Primary navigation">
-            {navItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => chooseTab(item.key)}
-                aria-current={activeTab === item.key ? "page" : undefined}
-                title={t[item.label]}
-                className={`flex h-11 min-w-0 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition duration-200 ${
-                  activeTab === item.key
-                    ? "bg-gradient-to-r from-river to-indigo-500 text-bright shadow-glow"
-                    : "text-ink/70 hover:translate-x-0.5 hover:bg-river/10 hover:text-river"
-                }`}
-              >
-                <item.icon size={18} className="shrink-0" />
-                <span className="min-w-0 truncate">{t[item.label]}</span>
-              </button>
-            ))}
+          <nav className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1" aria-label="Primary navigation">
+            <GlassNav activeKey={activeTab} className="glass-sidebar-track grid gap-1 rounded-xl">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  data-glass-key={item.key}
+                  type="button"
+                  onClick={() => chooseTab(item.key)}
+                  aria-current={activeTab === item.key ? "page" : undefined}
+                  title={t[item.label]}
+                  className={`glass-sidebar-item flex h-11 min-w-0 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium ${
+                    activeTab === item.key
+                      ? "text-river"
+                      : "text-ink/70 hover:text-river"
+                  }`}
+                >
+                  <item.icon size={18} className="shrink-0" />
+                  <span className="min-w-0 truncate">{t[item.label]}</span>
+                </button>
+              ))}
+            </GlassNav>
           </nav>
           <div className="mt-4 grid min-w-0 gap-3">
             {demoMode ? (
@@ -179,23 +212,25 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         </aside>
 
         <nav className="ios-tabbar fixed z-30 px-1.5 py-1.5 xl:hidden" aria-label="Primary navigation">
-          <div className="grid grid-cols-5 gap-1">
+          <GlassNav activeKey={mobileMoreOpen || mobileMoreActive ? "more" : activeTab} className="grid grid-cols-5 gap-1 rounded-full">
             {mobilePrimaryNavItems.map((item) => (
               <button
                 key={item.key}
+                data-glass-key={item.key}
                 type="button"
                 onClick={() => chooseTab(item.key)}
                 aria-current={activeTab === item.key ? "page" : undefined}
                 className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
-                  activeTab === item.key ? "ios-tab-active" : ""
+                  activeTab === item.key && !mobileMoreOpen ? "ios-tab-active" : ""
                 }`}
               >
-                <item.icon size={20} strokeWidth={activeTab === item.key ? 2.6 : 2.2} />
+                <item.icon size={20} strokeWidth={activeTab === item.key && !mobileMoreOpen ? 2.6 : 2.2} />
                 <span className="max-w-full truncate">{t[item.label]}</span>
               </button>
             ))}
             <button
               ref={moreButton}
+              data-glass-key="more"
               type="button"
               onClick={() => setMobileMoreOpen(!mobileMoreOpen)}
               aria-expanded={mobileMoreOpen}
@@ -207,11 +242,12 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               <MoreHorizontal size={20} strokeWidth={mobileMoreOpen || mobileMoreActive ? 2.6 : 2.2} />
               <span className="max-w-full truncate">More</span>
             </button>
-          </div>
+          </GlassNav>
         </nav>
 
-        {mobileMoreOpen ? (
-          <div ref={morePanel} id="mobile-more-navigation" className="ios-popover mobile-more fixed inset-x-3 z-40 p-2 xl:hidden" aria-label="More navigation">
+        {morePresent ? (
+          <div ref={morePanel} id="mobile-more-navigation" data-state={mobileMoreOpen ? "open" : "closing"} inert={!mobileMoreOpen} className="glass-reactive ios-popover mobile-more fixed inset-x-3 z-40 p-2 xl:hidden" aria-label="More navigation">
+            <GlassLight />
             <div className="grid gap-1">
               {mobileMoreNavItems.map((item) => (
                 <button
@@ -360,9 +396,10 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           type="button"
           onClick={() => { setMobileMoreOpen(false); setQuickAddOpen(true); }}
           aria-label={t.quickAdd}
-          className={`liquid-fab group fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 transition duration-200 hover:scale-105 hover:shadow-lift active:scale-95 xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
+          className={`glass-reactive liquid-fab fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 hover:scale-[1.02] xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
         >
-          <Plus size={30} strokeWidth={2.6} className="transition duration-300 group-hover:rotate-90" />
+          <GlassLight />
+          <Plus size={30} strokeWidth={2.6} />
         </button>
 
         <QuickAddSheet />
@@ -428,34 +465,32 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           </div>
         ) : null}
 
-        {signUpPromptOpen ? (
-          <Modal open={signUpPromptOpen} onClose={() => setSignUpPromptOpen(false)} labelledBy="signup-prompt-title" centered>
-            <div className="liquid-sheet liquid-scroll w-full max-w-sm overflow-y-auto rounded-2xl border p-6 shadow-lift">
-              <div className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
-                <WalletCards size={22} />
-              </div>
-              <h2 id="signup-prompt-title" className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
-              <p className="mt-2 text-sm text-ink/60">
-                You&apos;re exploring with sample data. Sign up to start tracking your own spending — it takes a few seconds,
-                and you&apos;ll begin with a clean set of categories.
-              </p>
-              <button
-                type="button"
-                onClick={() => onRequestAuth?.("signUp")}
-                className="mt-5 w-full rounded-xl bg-gradient-to-r from-river to-indigo-500 px-4 py-2.5 text-sm font-semibold text-bright shadow-glow"
-              >
-                Create free account
-              </button>
-              <button
-                type="button"
-                onClick={() => setSignUpPromptOpen(false)}
-                className="mt-2 w-full rounded-xl px-4 py-2.5 text-sm font-medium text-ink/55 transition hover:bg-ink/5"
-              >
-                Keep looking around
-              </button>
+        <Modal open={signUpPromptOpen} onClose={() => setSignUpPromptOpen(false)} labelledBy="signup-prompt-title" centered>
+          <div className="liquid-sheet liquid-scroll w-full max-w-sm overflow-y-auto rounded-2xl border p-6 shadow-lift">
+            <div className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
+              <WalletCards size={22} />
             </div>
-          </Modal>
-        ) : null}
+            <h2 id="signup-prompt-title" className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
+            <p className="mt-2 text-sm text-ink/60">
+              You&apos;re exploring with sample data. Sign up to start tracking your own spending — it takes a few seconds,
+              and you&apos;ll begin with a clean set of categories.
+            </p>
+            <button
+              type="button"
+              onClick={() => onRequestAuth?.("signUp")}
+              className="mt-5 w-full rounded-xl bg-gradient-to-r from-river to-indigo-500 px-4 py-2.5 text-sm font-semibold text-bright shadow-glow"
+            >
+              Create free account
+            </button>
+            <button
+              type="button"
+              onClick={() => setSignUpPromptOpen(false)}
+              className="mt-2 w-full rounded-xl px-4 py-2.5 text-sm font-medium text-ink/55 transition hover:bg-ink/5"
+            >
+              Keep looking around
+            </button>
+          </div>
+        </Modal>
       </main>
     </AppProvider>
   );

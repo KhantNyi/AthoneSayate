@@ -12,8 +12,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   try {
     await page.goto(process.env.UI_URL || 'http://localhost:3100', { waitUntil: 'networkidle' });
     await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-    // Capture the native opening itself, before automation can wait for an
-    // animation to finish or accidentally fix the problem with a second tap.
+    // Native focus must see safe resting bounds before visual playback starts.
     await page.evaluate(() => {
       window.popupOpenings = [];
       const showModal = HTMLDialogElement.prototype.showModal;
@@ -37,6 +36,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       assert(title.y >= top && title.bottom <= top + height, `${name} title must be visible without tapping again`);
       assert(!['INPUT', 'SELECT', 'TEXTAREA'].includes(opening.focusTag), `${name} must not summon a keyboard or picker on opening`);
       assert(await dialog.evaluate(node => document.activeElement === document.getElementById(node.getAttribute('aria-labelledby'))), `${name} must start with focus on its title`);
+      await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
       return dialog;
     };
     const keyboardCheck = async (dialog, controls) => {
@@ -81,10 +81,12 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await dialog.getByLabel('Export period', { exact: true }).selectOption('dates');
         await keyboardCheck(dialog, [dialog.getByRole('button', { name: 'Close data export' }), dialog.getByLabel('To date', { exact: true }), dialog.getByRole('button', { name: 'Download JSON' })]);
         await dialog.getByRole('button', { name: 'Close data export' }).click();
+        await page.waitForFunction(() => !document.querySelector('dialog[open]'));
         assert.equal(await page.evaluate(() => window.scrollY), scrollY, 'Export must restore the background position');
         await launcher.click();
         await checkOpening('Export data');
         await page.keyboard.press('Escape');
+        await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       }
       if (width < 768) {
         await selectTab('Reports');
@@ -92,6 +94,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const dialog = await checkOpening('Report filters');
         await keyboardCheck(dialog, [dialog.getByRole('button', { name: 'Close report filters' }), dialog.getByRole('button', { name: 'Apply', exact: true })]);
         await page.keyboard.press('Escape');
+        await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       }
       await selectTab('Dashboard');
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -103,14 +106,16 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const signup = await checkOpening('Create an account to save this');
       await keyboardCheck(signup, [signup.getByRole('button', { name: 'Create free account' }), signup.getByRole('button', { name: 'Keep looking around' })]);
       await signup.getByRole('button', { name: 'Keep looking around' }).click();
+      await page.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 1);
       assert.equal(await page.locator('dialog[open]').count(), 1);
       assert.equal(await page.evaluate(() => document.body.style.position), 'fixed', 'A nested popup must keep the background locked');
       await quickAdd.getByRole('button', { name: 'Close quick add' }).click();
+      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       assert.equal(await page.evaluate(() => window.scrollY), scrollY);
       assert.notEqual(await page.evaluate(() => document.body.style.position), 'fixed');
     }
     assert.deepEqual(errors, []);
-    console.log(`PASS (${engine}): All mobile dialogs fit on their first frame, focus static titles, support keyboard panning, reopen cleanly and restore nested scroll locks.`);
+    console.log(`PASS (${engine}): Native modal opening uses safe resting bounds and title focus; animated sheets support keyboard panning, reopening and nested scroll locks.`);
   } catch (error) {
     await page.screenshot({ path: `artifacts/ui/mobile-popups-failure-${engine}.png` });
     throw error;

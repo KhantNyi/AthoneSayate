@@ -1,9 +1,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  const engine = process.env.BROWSER_ENGINE || 'chromium';
+  const browser = await playwright[engine].launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference', acceptDownloads: true });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -13,9 +14,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
     await page.locator('nav:visible').getByRole('button', { name: 'Reports', exact: true }).click();
     const launch = page.getByRole('button', { name: 'Export data', exact: true });
-    await launch.click();
+    // WebKit touch taps do not focus buttons. Establish a keyboard focus
+    // origin so restoration is checked consistently in both browser engines.
+    await launch.focus();
+    await launch.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Export data', exact: true });
     await dialog.waitFor();
+    await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
     const downloadFile = async (format) => {
       const waiting = page.waitForEvent('download');
       await dialog.getByRole('button', { name: `Download ${format}` }).click();
@@ -72,13 +77,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: 'artifacts/ui/data-export-mobile.png' });
     await dialog.getByRole('button', { name: 'Close data export' }).click();
+    await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert(await launch.evaluate(node => node === document.activeElement), 'Export focus must restore to its launcher');
     await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.locator('#mobile-more-navigation').getByRole('button', { name: 'Category', exact: true }).click();
     await page.getByRole('button', { name: 'Export data', exact: true }).click();
     assert(await dialog.isVisible(), 'Export must be available in Settings');
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert.deepEqual(errors, []);
-    console.log('PASS: Mobile JSON/CSV downloads, all/month/date selections, range validation, empty exports, categorization, Settings access and focus restoration.');
+    console.log(`PASS (${engine}): Mobile JSON/CSV downloads, all/month/date selections, range validation, empty exports, categorization, Settings access and focus restoration.`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

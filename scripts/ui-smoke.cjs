@@ -2,11 +2,13 @@
    when using an existing Playwright installation and system browser. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const browser = await playwright[process.env.BROWSER_ENGINE || 'chromium'].launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  // Use touch emulation for the responsive/mobile flow. Fine-pointer desktop
+  // behavior has its own desktop-menu and glass interaction checks.
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const output = process.env.UI_SCREENSHOTS || 'artifacts/ui';
@@ -18,6 +20,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
     await page.getByRole('button', { name: 'More', exact: true }).waitFor();
     const selectTab = async (name, mobile) => {
+      mobile = await page.locator('.ios-tabbar').isVisible();
       if (mobile && ['Budgets', 'Recurring', 'Goals', 'Category'].includes(name)) {
         await page.getByRole('button', { name: 'More', exact: true }).click();
         const item = page.locator('#mobile-more-navigation').getByRole('button', { name, exact: true });
@@ -73,7 +76,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('h1').click();
     assert.equal(await more.getAttribute('aria-expanded'), 'false');
     const quickAdd = page.getByRole('button', { name: 'Quick add', exact: true });
-    await quickAdd.click();
+    await quickAdd.focus();
+    await quickAdd.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Quick add', exact: true });
     await dialog.waitFor();
     assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
@@ -83,6 +87,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     }
     await page.screenshot({ path: `${output}/quick-add-light.png` });
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert.equal(await page.locator('dialog[open]').count(), 0);
     assert(await quickAdd.evaluate(node => node === document.activeElement));
     assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden');
@@ -101,6 +106,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(await filters.evaluate(node => node.matches(':modal')), 'Filters are not in top layer');
     await page.screenshot({ path: `${output}/report-filters-dark.png` });
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert.equal(await page.locator('dialog[open]').count(), 0);
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
@@ -119,9 +125,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const signup = page.getByRole('dialog', { name: 'Create an account to save this' });
     await signup.waitFor();
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 1);
     assert.equal(await page.locator('dialog[open]').count(), 1);
     assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden');
     await more.click();
     await page.locator('#mobile-more-navigation').getByRole('button', { name: 'မြန်မာ', exact: true }).click();
@@ -150,7 +158,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.deepEqual(errors, [], 'Browser errors');
     console.log('PASS: seven tabs at six widths, form bounds, tab scroll reset, install prompt, landscape sheet, menu dismissal, modal focus/restore, short viewport, report overlay; screenshots saved.');
   } catch (error) {
-    await page.screenshot({ path: `${output}/failure.png`, fullPage: true });
+    await page.screenshot({ path: `${output}/failure.png`, fullPage: true }).catch(() => {});
     console.error('Browser errors:', errors);
     throw error;
   } finally { await browser.close(); }
