@@ -62,6 +62,14 @@ const fixture = {
           return route.fulfill({ json: fixture[table] || [] });
         });
         await page.goto(base, { waitUntil: 'networkidle' });
+        await page.evaluate(() => {
+          window.reportTransactionScrolls = 0;
+          const scrollIntoView = Element.prototype.scrollIntoView;
+          Element.prototype.scrollIntoView = function (...args) {
+            if (this.id === 'report-transactions-title') window.reportTransactionScrolls += 1;
+            return scrollIntoView.apply(this, args);
+          };
+        });
         await page.locator('nav:visible').getByRole('button', { name: 'Reports', exact: true }).click();
         const heading = page.locator('#report-transactions-title');
         const details = page.getByRole('region', { name: /transactions$/ });
@@ -85,9 +93,33 @@ const fixture = {
           const rect = await heading.boundingBox();
           assert(rect.y >= 0 && rect.y < 900, 'Transaction heading must scroll into view');
         };
+        const assertMonthHighlight = async monthKey => {
+          assert.equal(await month.inputValue(), monthKey.slice(0, 7), 'Chart selection must synchronize the top month selector');
+          const selected = page.locator(`[data-report-month="${monthKey}"]`);
+          assert.equal(await selected.count(), 2);
+          assert.deepEqual(await selected.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-pressed'))), ['true', 'true']);
+          assert.equal(await page.locator('[data-report-month][aria-pressed="true"]').count(), 2, 'Only one month is selected');
+          assert(await selected.filter({ has: page.locator('rect.fill-river') }).count(), 'Selected month bar must have a distinct fill');
+        };
+        const activateMonth = async (monthKey, target, key) => {
+          const locator = page.locator(`[data-report-month="${monthKey}"][data-report-target="${target}"]`);
+          await locator.scrollIntoViewIfNeeded();
+          const before = await page.evaluate(() => ({ y: scrollY, scrolls: window.reportTransactionScrolls }));
+          const choices = await page.locator('[data-report-target="label"]').evaluateAll(nodes => nodes.map(node => node.dataset.reportMonth));
+          await activate(locator, key);
+          await page.waitForFunction(monthKey => document.querySelector(`[data-report-month="${monthKey}"]`)?.getAttribute('aria-pressed') === 'true', monthKey);
+          await assertMonthHighlight(monthKey);
+          assert.deepEqual(await page.locator('[data-report-target="label"]').evaluateAll(nodes => nodes.map(node => node.dataset.reportMonth)), choices,
+            'Changing months within the graph must preserve the six choices so users can switch back');
+          const after = await page.evaluate(() => ({ y: scrollY, scrolls: window.reportTransactionScrolls, focus: document.activeElement?.id }));
+          assert.equal(after.scrolls, before.scrolls, 'Month selection must not request a transaction-list scroll');
+          assert.notEqual(after.focus, 'report-transactions-title', 'Month selection must not move focus to transactions');
+          assert(Math.abs(after.y - before.y) < 2, 'Month selection must stay at the graph');
+        };
         const clear = () => details.getByRole('button', { name: 'Clear filters', exact: true }).click();
         await month.fill('2026-01');
         await assertSelection('January 2026 transactions', 70, 744);
+        await assertMonthHighlight('2026-01-01');
         await page.screenshot({ path: `artifacts/ui/report-overview-${width}.png` });
         assert.equal(await rows().count(), 50);
         await details.getByRole('button', { name: 'Show more', exact: true }).click();
@@ -126,16 +158,17 @@ const fixture = {
         await details.getByRole('button', { name: 'Back to charts', exact: true }).click();
         assert(await page.getByRole('heading', { name: 'Expense breakdowns' }).evaluate(node => node === document.activeElement));
 
-        // Trend labels carry the year and reset a day-only restriction.
-        await activate(page.locator('[data-report-month="2025-12-01"][data-report-target="label"]'), 'Enter');
+        // Graph months behave like the top selector, retain position, and allow switching back.
+        await activateMonth('2025-12-01', 'label', 'Enter');
         await assertSelection('December 2025 transactions', 4, 37.5);
-        await assertFocus();
+        await activateMonth('2026-01-01', 'bar', ' ');
+        await assertSelection('January 2026 transactions', 70, 744);
         await month.fill('2026-02');
         await assertSelection('February 2026 transactions', 0, 0);
-        await activate(page.locator('[data-report-month="2026-01-01"][data-report-target="bar"]'));
+        await assertMonthHighlight('2026-02-01');
+        await activateMonth('2026-01-01', 'bar');
         await assertSelection('January 2026 transactions', 70, 744);
-        await assertFocus();
-        await activate(page.locator('[data-report-month="2025-11-01"][data-report-target="label"]'));
+        await activateMonth('2025-11-01', 'label');
         await assertSelection('November 2025 transactions', 0, 0);
 
         // Compare rows, bars, total cards, absent subcategories, and zero values.
@@ -181,7 +214,7 @@ const fixture = {
         const decemberBar = page.locator('[data-report-month="2025-12-01"][data-report-target="bar"]');
         const decemberAmount = new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(12);
         assert.equal(await decemberBar.locator('desc').textContent(), `${decemberAmount} expenses`, 'Trend must honor both subcategory and search, excluding recurring coffee and dinner');
-        await activate(page.locator('[data-report-month="2025-12-01"][data-report-target="bar"]'));
+        await activateMonth('2025-12-01', 'bar');
         await assertSelection('December 2025 transactions', 1, 12);
         await compare();
         await page.locator('input[type="month"]:visible').last().fill('2026-01');
@@ -202,6 +235,11 @@ const fixture = {
         await assertSelection('January 2026 transactions', 70, 744);
         assert.equal(await rows().count(), 50);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await activateMonth('2025-12-01', 'label');
+        await assertSelection('December 2025 transactions', 4, 37.5);
+        await activateMonth('2026-01-01', 'bar');
+        await assertSelection('January 2026 transactions', 70, 744);
+        await page.screenshot({ path: `artifacts/ui/report-month-selection-${width}.png` });
         await activate(page.getByRole('button', { name: 'View Meal expenses', exact: true }));
         assert(await heading.evaluate(node => node === document.activeElement), 'Normal-motion drill-down must focus details');
         await page.waitForFunction(() => {
@@ -211,7 +249,7 @@ const fixture = {
         await page.screenshot({ path: `artifacts/ui/report-drilldown-${width}.png` });
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Report must fit the viewport');
         assert.deepEqual(errors, [], 'Browser runtime errors');
-        console.log(`PASS (${engine}, ${width}px): Report drill-down amounts, year boundaries, empty months/days, all filter dimensions, comparison values/bars/totals, 50+ entries, keyboard/touch, focus, and reduced/normal motion.`);
+        console.log(`PASS (${engine}, ${width}px): Month selection stays at the graph, highlights and synchronizes the selected month, retains choices for switching back, and preserves report drill-downs, filters, pagination, keyboard/touch, and motion behavior.`);
       } catch (error) {
         await page.screenshot({ path: `artifacts/ui/report-drilldown-failure-${width}.png`, fullPage: true }).catch(() => {});
         throw error;

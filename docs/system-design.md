@@ -657,7 +657,7 @@ The reporting surface provides:
 - side-by-side month comparison with absolute and percentage deltas;
 - responsive card and table presentations.
 
-Overview, comparison, and trend aggregates share the same expense-filter predicate, including subcategory and search. Trend bars and labels select their full month and year; category, subcategory, and account rows apply their classification while preserving other active filters. Comparison amounts, spend bars, and month totals open Overview for the selected month. Missing subcategories have an explicit "No subcategory" filter.
+Overview, comparison, and trend aggregates share the same expense-filter predicate, including subcategory and search. Trend bars and labels use the same month-change handler as the top selector, updating the whole report in place and highlighting the selected month without scrolling or focusing the transaction list. Selecting within the visible six-month range preserves those choices so another month can be selected again; selecting outside the range moves the window to include that month. Category, subcategory, and account rows apply their classification while preserving other active filters. Comparison amounts, spend bars, and month totals open Overview for the selected month. Missing subcategories have an explicit "No subcategory" filter.
 
 Daily chart selections narrow only the transaction detail list; totals and charts remain monthly. Drill-downs focus and scroll to that list, respecting reduced motion. Removable filter chips and a "Back to charts" shortcut are available alongside the detail count and precise total. Transactions are initially shown in batches of 50 with "Show more" making every match reachable; changing the selection resets the batch.
 

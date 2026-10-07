@@ -69,5 +69,7 @@ the local production server with the browser variables above. It uses a fake loc
 session and intercepts every backend request, with no writes or real account data.
 The fixture covers trend month bars and labels, daily points, category/subcategory/
 account rows, both comparison months and totals, empty results, combined filters,
-70-entry pagination, focus and scroll, keyboard/touch activation, and reduced/normal
+70-entry pagination, month highlighting and top-selector synchronization, month
+changes without transaction-list scrolling, switching back within the same trend,
+detail focus and scroll, keyboard/touch activation, and reduced/normal
 motion at mobile and desktop widths. Screenshots are saved in `artifacts/ui`.

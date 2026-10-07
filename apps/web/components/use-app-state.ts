@@ -174,6 +174,7 @@ export function useAppState() {
   const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState(startOfMonth(new Date()));
   const [dashboardConcentrationMonth, setDashboardConcentrationMonth] = useState(startOfMonth(new Date()));
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(startOfMonth(new Date()));
+  const [monthlyReportTrendEndMonth, setMonthlyReportTrendEndMonth] = useState(startOfMonth(new Date()));
   const [monthlyReportMode, setMonthlyReportMode] = useState<"overview" | "compare">("overview");
   const [monthlyCompareMonth, setMonthlyCompareMonth] = useState(startOfMonth(subMonths(new Date(), 1)));
   const [monthlyReportCategoryId, setMonthlyReportCategoryId] = useState("all");
@@ -524,7 +525,7 @@ export function useAppState() {
       count: accountTransactions.length
     };
   }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [accounts, monthlyReportFilteredTx]);
-  const monthlyReportTrendMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(monthlyReportMonth, 5 - index))), [monthlyReportMonth]);
+  const monthlyReportTrendMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(monthlyReportTrendEndMonth, 5 - index))), [monthlyReportTrendEndMonth]);
   const monthlyReportTrendSeries = useMemo(() => monthlyReportTrendMonths.map((month) => {
     const monthExpenseTransactions = monthTransactions(reportExpenseTx, month);
 
@@ -795,6 +796,10 @@ export function useAppState() {
     const normalized = startOfMonth(month);
     setMonthlyReportMonth(normalized);
     setMonthlyReportSelectedDate("");
+    // Keep the visible choices available when selecting another month in this range.
+    setMonthlyReportTrendEndMonth((current) => (
+      normalized >= startOfMonth(subMonths(current, 5)) && normalized <= current ? current : normalized
+    ));
     setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(normalized, 1) : current));
   }
 
@@ -840,8 +845,7 @@ export function useAppState() {
   }
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
-    setMonthlyReportMonth(month);
-    setMonthlyReportSelectedDate("");
+    changeMonthlyReportMonth(month);
     setMonthlyCompareMonth(subMonths(month, 1));
     setMonthlyReportMode("compare");
     setMonthlyReportCategoryId(categoryId);

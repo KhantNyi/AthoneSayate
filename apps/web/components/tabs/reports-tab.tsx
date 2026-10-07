@@ -49,46 +49,53 @@ function ReportDayDot({ cx, cy, payload, color, onSelect }: {
   );
 }
 
-function ReportTrendBar({ x, y, width, height, payload, color, onSelect }: {
+function ReportTrendBar({ x, y, width, height, payload, color, selectedMonthKey, onSelect }: {
   x?: number | string;
   y?: number | string;
   width?: number | string;
   height?: number | string;
   payload?: { monthKey: string; expenses: number };
   color: string;
+  selectedMonthKey: string;
   onSelect: (monthKey: string) => void;
 }) {
   if (!payload) return <g />;
   const select = () => onSelect(payload.monthKey);
+  const selected = payload.monthKey === selectedMonthKey;
   const barHeight = Math.max(Number(height) || 0, 0);
   return (
-    <g role="button" tabIndex={0} aria-label={`View expenses for ${format(parseISO(payload.monthKey), "MMMM yyyy")}`}
+    <g role="button" tabIndex={0} aria-label={`Select ${format(parseISO(payload.monthKey), "MMMM yyyy")}`} aria-pressed={selected}
       aria-describedby={`report-month-${payload.monthKey}-amount`}
       data-report-month={payload.monthKey} data-report-target="bar" className="group cursor-pointer outline-none"
       onClick={(event) => { event.stopPropagation(); select(); }} onKeyDown={(event) => activateChartTarget(event, select)}>
       <desc id={`report-month-${payload.monthKey}-amount`}>{preciseCurrency.format(payload.expenses)} expenses</desc>
       <rect x={Number(x)} y={Number(y) - (barHeight === 0 ? 12 : 0)} width={Number(width)} height={Math.max(barHeight, 12)} rx={6}
         fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
-      <rect x={Number(x)} y={Number(y)} width={Number(width)} height={barHeight} rx={6} fill={color} className="group-hover:opacity-75" />
+      <rect x={Number(x)} y={Number(y)} width={Number(width)} height={barHeight} rx={6} fill={color}
+        className={`group-hover:opacity-75 ${selected ? "fill-river" : ""}`} />
     </g>
   );
 }
 
-function ReportMonthTick({ x, y, payload, onSelect }: {
+function ReportMonthTick({ x, y, payload, selectedMonthKey, onSelect }: {
   x?: number;
   y?: number;
   payload?: { value: string };
+  selectedMonthKey: string;
   onSelect: (monthKey: string) => void;
 }) {
   if (!payload) return <g />;
   const select = () => onSelect(payload.value);
+  const selected = payload.value === selectedMonthKey;
   return (
     <g transform={`translate(${x},${y})`} role="button" tabIndex={0}
-      aria-label={`View expenses for ${format(parseISO(payload.value), "MMMM yyyy")}`}
+      aria-label={`Select ${format(parseISO(payload.value), "MMMM yyyy")}`} aria-pressed={selected}
       data-report-month={payload.value} data-report-target="label" className="group cursor-pointer outline-none"
       onClick={(event) => { event.stopPropagation(); select(); }} onKeyDown={(event) => activateChartTarget(event, select)}>
-      <rect x={-22} y={0} width={44} height={24} rx={4} fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
-      <text x={0} y={16} textAnchor="middle" fill="currentColor" className="text-xs text-ink/55 group-hover:fill-river">{format(parseISO(payload.value), "MMM")}</text>
+      <rect x={-22} y={0} width={44} height={24} rx={4} fill="transparent"
+        className={`group-focus-visible:stroke-river group-focus-visible:stroke-2 ${selected ? "fill-river/10" : ""}`} />
+      <text x={0} y={16} textAnchor="middle" fill="currentColor"
+        className={`text-xs group-hover:fill-river ${selected ? "font-semibold text-river" : "text-ink/55"}`}>{format(parseISO(payload.value), "MMM")}</text>
     </g>
   );
 }
@@ -155,7 +162,8 @@ export default function ReportsTab() {
   const [pagination, setPagination] = useState({ selectionKey, count: 50 });
   const visibleCount = pagination.selectionKey === selectionKey ? pagination.count : 50;
   const visibleTransactions = monthlyReportDetailTx.slice(0, visibleCount);
-  const selectTrendMonth = (monthKey: string) => drillDownMonthlyReport({ month: parseISO(monthKey) });
+  const selectedMonthKey = format(monthlyReportMonth, "yyyy-MM-dd");
+  const selectTrendMonth = (monthKey: string) => changeMonthlyReportMonth(parseISO(monthKey));
   const openComparisonRow = (row: { categoryId: string; subcategoryId?: string }, month: Date) => (
     drillDownMonthlyReport({ month, categoryId: row.categoryId, subcategoryId: row.subcategoryId })
   );
@@ -383,7 +391,7 @@ export default function ReportsTab() {
       </Modal>
 
       <h3 ref={chartsHeading} tabIndex={-1} className="mb-2 scroll-mt-4 rounded text-sm font-semibold text-ink/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-river">Expense breakdowns</h3>
-      <p className="mb-3 text-xs text-ink/45">Select a month, day, or breakdown to view its expenses.</p>
+      <p className="mb-3 text-xs text-ink/45">Select a month to update the report. Select a day or breakdown to view its transactions.</p>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex h-10 w-full items-center rounded-lg border border-ink/10 bg-white p-1 sm:w-auto">
           {(["overview", "compare"] as const).map((mode) => (
@@ -454,12 +462,12 @@ export default function ReportsTab() {
               <BarChart data={monthlyReportTrendSeries} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                 <XAxis dataKey="monthKey" tickLine={false} axisLine={false} interval={0}
-                  tick={<ReportMonthTick onSelect={selectTrendMonth} />} />
+                  tick={<ReportMonthTick selectedMonthKey={selectedMonthKey} onSelect={selectTrendMonth} />} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
                 <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} labelFormatter={(label) => format(parseISO(String(label)), "MMMM yyyy")}
                   cursor={{ fill: chart.grid }} {...chart.tooltip} />
                 <Bar dataKey="expenses" fill={chart.expense} isAnimationActive={false}
-                  shape={<ReportTrendBar color={chart.expense} onSelect={selectTrendMonth} />} />
+                  shape={<ReportTrendBar color={chart.expense} selectedMonthKey={selectedMonthKey} onSelect={selectTrendMonth} />} />
               </BarChart>
             </ResponsiveContainer>
           </div>
