@@ -80,6 +80,7 @@ import {
   type ValidationResult
 } from "@/lib/validation";
 import { navItems, type TabKey } from "./nav";
+import { applyReportDrilldown, createReportExpenseMatcher, NO_SUBCATEGORY, type ReportDrilldownTarget, type ReportFilterKey, type ReportFilters } from "@/lib/report-utils";
 
 type LastRecurringPayment = {
   transaction: Transaction;
@@ -181,6 +182,8 @@ export function useAppState() {
   const [monthlyReportRecurringFilter, setMonthlyReportRecurringFilter] = useState<"all" | "recurring" | "manual">("all");
   const [monthlyReportQuery, setMonthlyReportQuery] = useState("");
   const [monthlyReportFiltersOpen, setMonthlyReportFiltersOpen] = useState(false);
+  const [monthlyReportSelectedDate, setMonthlyReportSelectedDate] = useState("");
+  const [monthlyReportDrilldownRequest, setMonthlyReportDrilldownRequest] = useState(0);
   const [selectedTransactionDate, setSelectedTransactionDate] = useState("");
   const [selectedRecurringDate, setSelectedRecurringDate] = useState("");
   const [selectedDashboardDate, setSelectedDashboardDate] = useState("");
@@ -471,22 +474,23 @@ export function useAppState() {
   const monthlyReportSubcategories = useMemo(() => subcategories.filter((subcategory) => (
     monthlyReportCategoryId === "all" || subcategory.categoryId === monthlyReportCategoryId
   )), [monthlyReportCategoryId, subcategories]);
-  const monthlyReportTx = useMemo(() => monthTransactions(transactions, monthlyReportMonth).filter((tx) => tx.type === "expense"), [transactions, monthlyReportMonth]);
-  const monthlyReportFilteredTx = useMemo(() => monthlyReportTx.filter((tx) => {
-    const category = displayCategories.find((item) => item.id === tx.categoryId);
-    const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
-    const account = accounts.find((item) => item.id === tx.accountId);
-    const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
-    const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
-    const matchesSubcategory = monthlyReportSubcategoryId === "all" || tx.subcategoryId === monthlyReportSubcategoryId;
-    const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
-    const matchesRecurring =
-      monthlyReportRecurringFilter === "all" ||
-      (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
-    const matchesQuery = haystack.includes(monthlyReportQuery.trim().toLowerCase());
-
-    return matchesCategory && matchesSubcategory && matchesAccount && matchesRecurring && matchesQuery;
-  }).sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)), [accounts, displayCategories, monthlyReportAccountId, monthlyReportCategoryId, monthlyReportQuery, monthlyReportRecurringFilter, monthlyReportSubcategoryId, monthlyReportTx, subcategories]);
+  const monthlyReportFilters: ReportFilters = useMemo(() => ({
+    categoryId: monthlyReportCategoryId,
+    subcategoryId: monthlyReportSubcategoryId,
+    accountId: monthlyReportAccountId,
+    recurring: monthlyReportRecurringFilter,
+    query: monthlyReportQuery
+  }), [monthlyReportCategoryId, monthlyReportSubcategoryId, monthlyReportAccountId, monthlyReportRecurringFilter, monthlyReportQuery]);
+  const reportExpenseTx = useMemo(() => transactions.filter(createReportExpenseMatcher(monthlyReportFilters, {
+    accounts, categories: displayCategories, subcategories
+  })), [transactions, monthlyReportFilters, accounts, displayCategories, subcategories]);
+  const monthlyReportFilteredTx = useMemo(() => monthTransactions(reportExpenseTx, monthlyReportMonth)
+    .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)), [reportExpenseTx, monthlyReportMonth]);
+  // A selected day narrows only the detail list; report metrics remain monthly.
+  const monthlyReportDetailTx = useMemo(() => monthlyReportSelectedDate
+    ? monthlyReportFilteredTx.filter((tx) => tx.occurredOn === monthlyReportSelectedDate)
+    : monthlyReportFilteredTx, [monthlyReportFilteredTx, monthlyReportSelectedDate]);
+  const monthlyReportDetailTotal = useMemo(() => monthlyReportDetailTx.reduce((sum, tx) => sum + tx.amount, 0), [monthlyReportDetailTx]);
   const monthlyReportTotal = useMemo(() => monthlyReportFilteredTx.reduce((sum, tx) => sum + tx.amount, 0), [monthlyReportFilteredTx]);
   const monthlyReportDays = useMemo(() => eachDayOfInterval({ start: startOfMonth(monthlyReportMonth), end: endOfMonth(monthlyReportMonth) }).length, [monthlyReportMonth]);
   const monthlyReportActiveDays = useMemo(() => new Set(monthlyReportFilteredTx.map((tx) => tx.occurredOn)).size, [monthlyReportFilteredTx]);
@@ -502,6 +506,7 @@ export function useAppState() {
 
     return {
       id: subcategory.id,
+      categoryId: subcategory.categoryId,
       name: subcategory.name,
       categoryName: category?.name ?? "",
       color: category?.color ?? "#64748b",
@@ -521,36 +526,15 @@ export function useAppState() {
   }).filter((row) => row.spent > 0).sort((a, b) => b.spent - a.spent), [accounts, monthlyReportFilteredTx]);
   const monthlyReportTrendMonths = useMemo(() => Array.from({ length: 6 }, (_, index) => startOfMonth(subMonths(monthlyReportMonth, 5 - index))), [monthlyReportMonth]);
   const monthlyReportTrendSeries = useMemo(() => monthlyReportTrendMonths.map((month) => {
-    const monthExpenseTransactions = monthTransactions(transactions, month).filter((tx) => {
-      const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
-      const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
-      const matchesRecurring =
-        monthlyReportRecurringFilter === "all" ||
-        (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
-
-      return tx.type === "expense" && matchesCategory && matchesAccount && matchesRecurring;
-    });
+    const monthExpenseTransactions = monthTransactions(reportExpenseTx, month);
 
     return {
       month: format(month, "MMM"),
+      monthKey: format(month, "yyyy-MM-dd"),
       expenses: monthExpenseTransactions.reduce((sum, tx) => sum + tx.amount, 0)
     };
-  }), [monthlyReportAccountId, monthlyReportCategoryId, monthlyReportRecurringFilter, monthlyReportTrendMonths, transactions]);
-  const monthlyCompareFilteredTx = useMemo(() => monthTransactions(transactions, monthlyCompareMonth).filter((tx) => {
-    const category = displayCategories.find((item) => item.id === tx.categoryId);
-    const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
-    const account = accounts.find((item) => item.id === tx.accountId);
-    const haystack = `${tx.merchant ?? ""} ${tx.notes ?? ""} ${category?.name ?? ""} ${subcategory?.name ?? ""} ${account?.name ?? ""}`.toLowerCase();
-    const matchesCategory = monthlyReportCategoryId === "all" || tx.categoryId === monthlyReportCategoryId;
-    const matchesSubcategory = monthlyReportSubcategoryId === "all" || tx.subcategoryId === monthlyReportSubcategoryId;
-    const matchesAccount = monthlyReportAccountId === "all" || tx.accountId === monthlyReportAccountId;
-    const matchesRecurring =
-      monthlyReportRecurringFilter === "all" ||
-      (monthlyReportRecurringFilter === "recurring" ? Boolean(tx.isRecurring) : !tx.isRecurring);
-    const matchesQuery = haystack.includes(monthlyReportQuery.trim().toLowerCase());
-
-    return tx.type === "expense" && matchesCategory && matchesSubcategory && matchesAccount && matchesRecurring && matchesQuery;
-  }), [accounts, displayCategories, monthlyCompareMonth, monthlyReportAccountId, monthlyReportCategoryId, monthlyReportQuery, monthlyReportRecurringFilter, monthlyReportSubcategoryId, subcategories, transactions]);
+  }), [reportExpenseTx, monthlyReportTrendMonths]);
+  const monthlyCompareFilteredTx = useMemo(() => monthTransactions(reportExpenseTx, monthlyCompareMonth), [reportExpenseTx, monthlyCompareMonth]);
   const monthlyReportComparisonRows = useMemo(() => {
     if (monthlyReportCategoryId === "all") {
       return monthlyReportCategories
@@ -565,6 +549,8 @@ export function useAppState() {
 
           return {
             id: category.id,
+            categoryId: category.id,
+            subcategoryId: undefined,
             name: category.name,
             color: category.color,
             currentSpent,
@@ -592,6 +578,8 @@ export function useAppState() {
 
       return {
         id: subcategory.id,
+        categoryId: subcategory.categoryId,
+        subcategoryId: subcategory.id,
         name: subcategory.name,
         color: selectedCategoryForReport?.color ?? "#64748b",
         currentSpent,
@@ -600,7 +588,7 @@ export function useAppState() {
         deltaPercent: percentDelta(currentSpent, compareSpent)
       };
     });
-    const hasUncategorizedSpend = monthlyReportSubcategoryId === "all" && [...monthlyReportFilteredTx, ...monthlyCompareFilteredTx].some((tx) => (
+    const hasUncategorizedSpend = (monthlyReportSubcategoryId === "all" || monthlyReportSubcategoryId === NO_SUBCATEGORY) && [...monthlyReportFilteredTx, ...monthlyCompareFilteredTx].some((tx) => (
       tx.categoryId === monthlyReportCategoryId && !tx.subcategoryId
     ));
 
@@ -614,6 +602,8 @@ export function useAppState() {
 
       rows.push({
         id: `${monthlyReportCategoryId}-uncategorized`,
+        categoryId: monthlyReportCategoryId,
+        subcategoryId: NO_SUBCATEGORY,
         name: "No subcategory",
         color: selectedCategoryForReport?.color ?? "#64748b",
         currentSpent,
@@ -627,8 +617,8 @@ export function useAppState() {
       .filter((row) => row.currentSpent > 0 || row.compareSpent > 0)
       .sort((a, b) => Math.max(b.currentSpent, b.compareSpent) - Math.max(a.currentSpent, a.compareSpent));
   }, [monthlyCompareFilteredTx, monthlyReportCategories, monthlyReportCategoryId, monthlyReportFilteredTx, monthlyReportSubcategoryId, subcategories]);
-  const monthlyComparisonCurrentTotal = useMemo(() => monthlyReportComparisonRows.reduce((sum, row) => sum + row.currentSpent, 0), [monthlyReportComparisonRows]);
-  const monthlyComparisonCompareTotal = useMemo(() => monthlyReportComparisonRows.reduce((sum, row) => sum + row.compareSpent, 0), [monthlyReportComparisonRows]);
+  const monthlyComparisonCurrentTotal = monthlyReportTotal;
+  const monthlyComparisonCompareTotal = useMemo(() => monthlyCompareFilteredTx.reduce((sum, tx) => sum + tx.amount, 0), [monthlyCompareFilteredTx]);
   const monthlyComparisonDelta = monthlyComparisonCurrentTotal - monthlyComparisonCompareTotal;
   const monthlyComparisonDeltaPercent = percentDelta(monthlyComparisonCurrentTotal, monthlyComparisonCompareTotal);
   const monthlyComparisonMaxSpend = Math.max(...monthlyReportComparisonRows.map((row) => Math.max(row.currentSpent, row.compareSpent)), 1);
@@ -707,20 +697,15 @@ export function useAppState() {
   const monthlyReportSelectedCategory = displayCategories.find((category) => category.id === monthlyReportCategoryId);
   const monthlyReportSelectedSubcategory = subcategories.find((subcategory) => subcategory.id === monthlyReportSubcategoryId);
   const monthlyReportSelectedAccount = accounts.find((account) => account.id === monthlyReportAccountId);
-  const monthlyReportFilterCount = [
-    monthlyReportCategoryId !== "all",
-    monthlyReportSubcategoryId !== "all",
-    monthlyReportAccountId !== "all",
-    monthlyReportRecurringFilter !== "all",
-    monthlyReportQuery.trim().length > 0
-  ].filter(Boolean).length;
-  const monthlyReportFilterChips = [
-    monthlyReportCategoryId !== "all" ? categoryLabel(monthlyReportSelectedCategory?.name) ?? "Category" : "",
-    monthlyReportSubcategoryId !== "all" ? monthlyReportSelectedSubcategory?.name ?? "Subcategory" : "",
-    monthlyReportAccountId !== "all" ? monthlyReportSelectedAccount?.name ?? "Account" : "",
-    monthlyReportRecurringFilter !== "all" ? (monthlyReportRecurringFilter === "recurring" ? "Recurring" : "Manual") : "",
-    monthlyReportQuery.trim() ? `"${monthlyReportQuery.trim()}"` : ""
-  ].filter(Boolean);
+  const monthlyReportFilterChips: { key: ReportFilterKey; label: string }[] = [
+    { key: "categoryId" as const, label: monthlyReportCategoryId !== "all" ? categoryLabel(monthlyReportSelectedCategory?.name) ?? "Category" : "" },
+    { key: "subcategoryId" as const, label: monthlyReportSubcategoryId === NO_SUBCATEGORY ? "No subcategory" : monthlyReportSubcategoryId !== "all" ? monthlyReportSelectedSubcategory?.name ?? "Subcategory" : "" },
+    { key: "accountId" as const, label: monthlyReportAccountId !== "all" ? monthlyReportSelectedAccount?.name ?? "Account" : "" },
+    { key: "recurring" as const, label: monthlyReportRecurringFilter !== "all" ? (monthlyReportRecurringFilter === "recurring" ? "Recurring" : "Manual") : "" },
+    { key: "query" as const, label: monthlyReportQuery.trim() ? `"${monthlyReportQuery.trim()}"` : "" },
+    { key: "date" as const, label: monthlyReportSelectedDate ? format(parseISO(monthlyReportSelectedDate), "MMM d, yyyy") : "" }
+  ].filter((chip) => chip.label);
+  const monthlyReportFilterCount = monthlyReportFilterChips.length;
   const selectedCategory = displayCategories.find((category) => category.id === categoryId);
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === subcategoryId);
 
@@ -807,8 +792,35 @@ export function useAppState() {
 
   function changeMonthlyReportMonth(month: Date) {
     const previousDefault = subMonths(monthlyReportMonth, 1);
-    setMonthlyReportMonth(month);
-    setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(month, 1) : current));
+    const normalized = startOfMonth(month);
+    setMonthlyReportMonth(normalized);
+    setMonthlyReportSelectedDate("");
+    setMonthlyCompareMonth((current) => (isSameMonth(current, previousDefault) ? subMonths(normalized, 1) : current));
+  }
+
+  function drillDownMonthlyReport(target: ReportDrilldownTarget) {
+    const next = applyReportDrilldown(monthlyReportFilters, target, subcategories);
+    if (target.month) changeMonthlyReportMonth(target.month);
+    setMonthlyReportCategoryId(next.categoryId);
+    setMonthlyReportSubcategoryId(next.subcategoryId);
+    setMonthlyReportAccountId(next.accountId);
+    setMonthlyReportSelectedDate(target.date ?? "");
+    setMonthlyReportMode("overview");
+    setMonthlyReportDrilldownRequest((current) => current + 1);
+  }
+
+  function removeMonthlyReportFilter(key: ReportFilterKey) {
+    switch (key) {
+      case "categoryId":
+        setMonthlyReportCategoryId("all");
+        setMonthlyReportSubcategoryId("all");
+        break;
+      case "subcategoryId": setMonthlyReportSubcategoryId("all"); break;
+      case "accountId": setMonthlyReportAccountId("all"); break;
+      case "recurring": setMonthlyReportRecurringFilter("all"); break;
+      case "query": setMonthlyReportQuery(""); break;
+      case "date": setMonthlyReportSelectedDate(""); break;
+    }
   }
 
   function changeDashboardMonth(month: Date) {
@@ -829,6 +841,7 @@ export function useAppState() {
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
     setMonthlyReportMonth(month);
+    setMonthlyReportSelectedDate("");
     setMonthlyCompareMonth(subMonths(month, 1));
     setMonthlyReportMode("compare");
     setMonthlyReportCategoryId(categoryId);
@@ -846,6 +859,7 @@ export function useAppState() {
     setMonthlyReportAccountId("all");
     setMonthlyReportRecurringFilter("all");
     setMonthlyReportQuery("");
+    setMonthlyReportSelectedDate("");
   }
 
   const displayedRecurringRules = upcoming.filter((rule) => selectedRecurringDate ? rule.nextDueOn === selectedRecurringDate || visibleRecurringPayments[rule.id]?.occurredOn === selectedRecurringDate : true);
@@ -1717,6 +1731,12 @@ export function useAppState() {
     clearMonthlyReportFilters,
     monthlyReportSubcategories,
     monthlyReportFilteredTx,
+    monthlyReportSelectedDate,
+    monthlyReportDetailTx,
+    monthlyReportDetailTotal,
+    monthlyReportDrilldownRequest,
+    drillDownMonthlyReport,
+    removeMonthlyReportFilter,
     monthlyReportTotal,
     monthlyReportDays,
     monthlyReportActiveDays,

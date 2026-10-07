@@ -59,3 +59,15 @@ Exports identify demo data, cached snapshots and pending sync changes. Periods u
 recorded calendar dates, including both endpoints; current settings are not historical
 snapshots. Archived settings are excluded by the existing app data model, so retained
 transactions use explicit unknown/archived labels when their settings are unavailable.
+
+## Report drill-downs
+
+Run `node scripts/report-drilldown-test.cjs` without a server to verify combined
+report filters, compatible category/subcategory selections, missing subcategories,
+and year-boundary amounts. Run `node scripts/report-drilldown-smoke.cjs` against
+the local production server with the browser variables above. It uses a fake local
+session and intercepts every backend request, with no writes or real account data.
+The fixture covers trend month bars and labels, daily points, category/subcategory/
+account rows, both comparison months and totals, empty results, combined filters,
+70-entry pagination, focus and scroll, keyboard/touch activation, and reduced/normal
+motion at mobile and desktop widths. Screenshots are saved in `artifacts/ui`.

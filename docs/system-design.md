@@ -657,6 +657,10 @@ The reporting surface provides:
 - side-by-side month comparison with absolute and percentage deltas;
 - responsive card and table presentations.
 
+Overview, comparison, and trend aggregates share the same expense-filter predicate, including subcategory and search. Trend bars and labels select their full month and year; category, subcategory, and account rows apply their classification while preserving other active filters. Comparison amounts, spend bars, and month totals open Overview for the selected month. Missing subcategories have an explicit "No subcategory" filter.
+
+Daily chart selections narrow only the transaction detail list; totals and charts remain monthly. Drill-downs focus and scroll to that list, respecting reduced motion. Removable filter chips and a "Back to charts" shortcut are available alongside the detail count and precise total. Transactions are initially shown in batches of 50 with "Show more" making every match reachable; changing the selection resets the batch.
+
 Calendar helpers aggregate transactions and recurring events by YYYY-MM-DD. Activity views can combine income, expense, count, due amount, paid recurring amount, and recurring counts.
 
 ### 10.9 Account balances and safe-to-spend

@@ -2,14 +2,96 @@
 
 import { Modal } from "../modal";
 import { DataExportButton } from "../data-export-button";
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { format, parseISO } from "date-fns";
 import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
 import { compactCurrency } from "@/lib/helpers";
+import { NO_SUBCATEGORY } from "@/lib/report-utils";
 import { useApp } from "../app-context";
 import { ActivityStat, MonthField, Panel } from "../ui";
+
+const reportButtonClass = "rounded-lg text-left transition hover:bg-river/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-river";
+
+function activateChartTarget(event: KeyboardEvent<SVGGElement>, action: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.stopPropagation();
+    action();
+  }
+}
+
+function focusReportHeading(heading: HTMLElement | null) {
+  if (!heading) return;
+  heading.focus({ preventScroll: true });
+  heading.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+}
+
+function ReportDayDot({ cx, cy, payload, color, onSelect }: {
+  cx?: number;
+  cy?: number;
+  payload?: { date: string; spent: number };
+  color: string;
+  onSelect: (date: string) => void;
+}) {
+  if (cx === undefined || cy === undefined || !payload) return <g />;
+  const select = () => onSelect(payload.date);
+  return (
+    <g role="button" tabIndex={0} aria-label={`View expenses for ${format(parseISO(payload.date), "MMMM d, yyyy")}`}
+      aria-describedby={`report-day-${payload.date}-amount`}
+      data-report-day={payload.date} className="group cursor-pointer outline-none"
+      onClick={(event) => { event.stopPropagation(); select(); }} onKeyDown={(event) => activateChartTarget(event, select)}>
+      <desc id={`report-day-${payload.date}-amount`}>{preciseCurrency.format(payload.spent)} expenses</desc>
+      <circle cx={cx} cy={cy} r={12} fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
+      <circle cx={cx} cy={cy} r={3} fill={color} className="group-hover:stroke-river group-hover:stroke-2" />
+    </g>
+  );
+}
+
+function ReportTrendBar({ x, y, width, height, payload, color, onSelect }: {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  height?: number | string;
+  payload?: { monthKey: string; expenses: number };
+  color: string;
+  onSelect: (monthKey: string) => void;
+}) {
+  if (!payload) return <g />;
+  const select = () => onSelect(payload.monthKey);
+  const barHeight = Math.max(Number(height) || 0, 0);
+  return (
+    <g role="button" tabIndex={0} aria-label={`View expenses for ${format(parseISO(payload.monthKey), "MMMM yyyy")}`}
+      aria-describedby={`report-month-${payload.monthKey}-amount`}
+      data-report-month={payload.monthKey} data-report-target="bar" className="group cursor-pointer outline-none"
+      onClick={(event) => { event.stopPropagation(); select(); }} onKeyDown={(event) => activateChartTarget(event, select)}>
+      <desc id={`report-month-${payload.monthKey}-amount`}>{preciseCurrency.format(payload.expenses)} expenses</desc>
+      <rect x={Number(x)} y={Number(y) - (barHeight === 0 ? 12 : 0)} width={Number(width)} height={Math.max(barHeight, 12)} rx={6}
+        fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
+      <rect x={Number(x)} y={Number(y)} width={Number(width)} height={barHeight} rx={6} fill={color} className="group-hover:opacity-75" />
+    </g>
+  );
+}
+
+function ReportMonthTick({ x, y, payload, onSelect }: {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  onSelect: (monthKey: string) => void;
+}) {
+  if (!payload) return <g />;
+  const select = () => onSelect(payload.value);
+  return (
+    <g transform={`translate(${x},${y})`} role="button" tabIndex={0}
+      aria-label={`View expenses for ${format(parseISO(payload.value), "MMMM yyyy")}`}
+      data-report-month={payload.value} data-report-target="label" className="group cursor-pointer outline-none"
+      onClick={(event) => { event.stopPropagation(); select(); }} onKeyDown={(event) => activateChartTarget(event, select)}>
+      <rect x={-22} y={0} width={44} height={24} rx={4} fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
+      <text x={0} y={16} textAnchor="middle" fill="currentColor" className="text-xs text-ink/55 group-hover:fill-river">{format(parseISO(payload.value), "MMM")}</text>
+    </g>
+  );
+}
 
 export default function ReportsTab() {
   const {
@@ -42,6 +124,12 @@ export default function ReportsTab() {
     clearMonthlyReportFilters,
     monthlyReportSubcategories,
     monthlyReportFilteredTx,
+    monthlyReportSelectedDate,
+    monthlyReportDetailTx,
+    monthlyReportDetailTotal,
+    monthlyReportDrilldownRequest,
+    drillDownMonthlyReport,
+    removeMonthlyReportFilter,
     monthlyReportTotal,
     monthlyReportDays,
     monthlyReportActiveDays,
@@ -58,6 +146,27 @@ export default function ReportsTab() {
     monthlyComparisonDeltaPercent,
     monthlyComparisonMaxSpend
   } = useApp();
+
+  const transactionsHeading = useRef<HTMLHeadingElement>(null);
+  const chartsHeading = useRef<HTMLHeadingElement>(null);
+  const handledDrilldownRequest = useRef(monthlyReportDrilldownRequest);
+  const selectionKey = [format(monthlyReportMonth, "yyyy-MM"), monthlyReportCategoryId, monthlyReportSubcategoryId,
+    monthlyReportAccountId, monthlyReportRecurringFilter, monthlyReportQuery, monthlyReportSelectedDate].join("\u0000");
+  const [pagination, setPagination] = useState({ selectionKey, count: 50 });
+  const visibleCount = pagination.selectionKey === selectionKey ? pagination.count : 50;
+  const visibleTransactions = monthlyReportDetailTx.slice(0, visibleCount);
+  const selectTrendMonth = (monthKey: string) => drillDownMonthlyReport({ month: parseISO(monthKey) });
+  const openComparisonRow = (row: { categoryId: string; subcategoryId?: string }, month: Date) => (
+    drillDownMonthlyReport({ month, categoryId: row.categoryId, subcategoryId: row.subcategoryId })
+  );
+  const comparisonLabel = (name: string, month: Date) => `View ${categoryLabel(name)} expenses for ${format(month, "MMMM yyyy")}`;
+
+  useEffect(() => {
+    setPagination({ selectionKey, count: 50 });
+    if (handledDrilldownRequest.current === monthlyReportDrilldownRequest) return;
+    handledDrilldownRequest.current = monthlyReportDrilldownRequest;
+    focusReportHeading(transactionsHeading.current);
+  }, [monthlyReportDrilldownRequest, selectionKey]);
 
   return (
     <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
@@ -86,6 +195,7 @@ export default function ReportsTab() {
             aria-label="Report subcategory"
           >
             <option value="all">All subcategories</option>
+            <option value={NO_SUBCATEGORY}>No subcategory</option>
             {monthlyReportSubcategories.map((subcategory) => (
               <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
             ))}
@@ -139,7 +249,10 @@ export default function ReportsTab() {
         {monthlyReportFilterChips.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {monthlyReportFilterChips.map((chip) => (
-              <span key={chip} className="rounded-lg bg-river/10 px-2.5 py-1 text-xs font-semibold text-river">{chip}</span>
+              <button key={chip.key} type="button" onClick={() => removeMonthlyReportFilter(chip.key)} aria-label={`Remove ${chip.label} filter`}
+                className={`${reportButtonClass} inline-flex min-h-9 max-w-full items-center gap-1.5 bg-river/10 px-2.5 py-1 text-xs font-semibold text-river`}>
+                <span className="truncate">{chip.label}</span><X size={12} className="shrink-0" aria-hidden="true" />
+              </button>
             ))}
             <button type="button" onClick={clearMonthlyReportFilters} className="rounded-lg px-2.5 py-1 text-xs font-semibold text-ink/55">
               Clear
@@ -209,6 +322,7 @@ export default function ReportsTab() {
                 className="h-11 w-full rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink"
               >
                 <option value="all">All subcategories</option>
+                <option value={NO_SUBCATEGORY}>No subcategory</option>
                 {monthlyReportSubcategories.map((subcategory) => (
                   <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
                 ))}
@@ -268,6 +382,8 @@ export default function ReportsTab() {
         </div>
       </Modal>
 
+      <h3 ref={chartsHeading} tabIndex={-1} className="mb-2 scroll-mt-4 rounded text-sm font-semibold text-ink/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-river">Expense breakdowns</h3>
+      <p className="mb-3 text-xs text-ink/45">Select a month, day, or breakdown to view its expenses.</p>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex h-10 w-full items-center rounded-lg border border-ink/10 bg-white p-1 sm:w-auto">
           {(["overview", "compare"] as const).map((mode) => (
@@ -305,7 +421,11 @@ export default function ReportsTab() {
           </div>
           <div className="h-56 min-w-0 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyReportDaily} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
+              <AreaChart data={monthlyReportDaily} margin={{ bottom: 4, left: -18, right: 12, top: 16 }}
+                onClick={(state) => {
+                  const date = state?.activePayload?.[0]?.payload?.date;
+                  if (typeof date === "string") drillDownMonthlyReport({ date });
+                }}>
                 <defs>
                   <linearGradient id="monthlyReportDailyGradient" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="5%" stopColor={chart.expense} stopOpacity={0.32} />
@@ -316,7 +436,9 @@ export default function ReportsTab() {
                 <XAxis dataKey="day" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
                 <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
-                <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#monthlyReportDailyGradient)" strokeWidth={3} />
+                <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#monthlyReportDailyGradient)" strokeWidth={3} isAnimationActive={false}
+                  dot={<ReportDayDot color={chart.expense} onSelect={(date) => drillDownMonthlyReport({ date })} />}
+                  activeDot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -331,10 +453,13 @@ export default function ReportsTab() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyReportTrendSeries} margin={{ bottom: 4, left: -18, right: 8, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                <XAxis dataKey="monthKey" tickLine={false} axisLine={false} interval={0}
+                  tick={<ReportMonthTick onSelect={selectTrendMonth} />} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={52} />
-                <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} cursor={{ fill: chart.grid }} {...chart.tooltip} />
-                <Bar dataKey="expenses" fill={chart.expense} radius={[6, 6, 0, 0]} />
+                <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} labelFormatter={(label) => format(parseISO(String(label)), "MMMM yyyy")}
+                  cursor={{ fill: chart.grid }} {...chart.tooltip} />
+                <Bar dataKey="expenses" fill={chart.expense} isAnimationActive={false}
+                  shape={<ReportTrendBar color={chart.expense} onSelect={selectTrendMonth} />} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -349,18 +474,19 @@ export default function ReportsTab() {
               const share = monthlyReportTotal > 0 ? (row.spent / monthlyReportTotal) * 100 : 0;
 
               return (
-                <div key={row.id}>
-                  <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                <button key={row.id} type="button" onClick={() => drillDownMonthlyReport({ categoryId: row.id })}
+                  aria-label={`View ${categoryLabel(row.name)} expenses`} className={`${reportButtonClass} block min-h-11 w-full p-1`}>
+                  <span className="mb-1 flex items-center justify-between gap-3 text-sm">
                     <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                       <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                       <span className="truncate font-medium">{categoryLabel(row.name)}</span>
                     </span>
                     <span className="shrink-0 text-right font-semibold">{currency.format(row.spent)}</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                    <div className="h-full rounded-full bg-coral" style={{ width: `${Math.min(share, 100)}%` }} />
-                  </div>
-                </div>
+                  </span>
+                  <span className="block h-2 overflow-hidden rounded-full bg-ink/10">
+                    <span className="block h-full rounded-full bg-coral" style={{ width: `${Math.min(share, 100)}%` }} />
+                  </span>
+                </button>
               );
             })}
             {monthlyReportCategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
@@ -371,7 +497,8 @@ export default function ReportsTab() {
           <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Top subcategories</h3>
           <div className="space-y-3">
             {monthlyReportSubcategoryRows.slice(0, 6).map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+              <button key={row.id} type="button" onClick={() => drillDownMonthlyReport({ categoryId: row.categoryId, subcategoryId: row.id })}
+                aria-label={`View ${row.name} expenses`} className={`${reportButtonClass} flex min-h-11 w-full items-center justify-between gap-3 p-1 text-sm`}>
                 <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                   <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                   <span className="min-w-0">
@@ -380,7 +507,7 @@ export default function ReportsTab() {
                   </span>
                 </span>
                 <strong className="shrink-0 text-right">{currency.format(row.spent)}</strong>
-              </div>
+              </button>
             ))}
             {monthlyReportSubcategoryRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
           </div>
@@ -390,7 +517,8 @@ export default function ReportsTab() {
           <h3 className="mb-3 text-sm font-semibold uppercase text-ink/55">Accounts used</h3>
           <div className="space-y-3">
             {monthlyReportAccountRows.slice(0, 6).map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+              <button key={row.id} type="button" onClick={() => drillDownMonthlyReport({ accountId: row.id })}
+                aria-label={`View ${row.name} account expenses`} className={`${reportButtonClass} flex min-h-11 w-full items-center justify-between gap-3 p-1 text-sm`}>
                 <span className="inline-flex min-w-0 flex-1 items-center gap-2">
                   <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
                   <span className="min-w-0">
@@ -399,20 +527,37 @@ export default function ReportsTab() {
                   </span>
                 </span>
                 <strong className="shrink-0 text-right">{currency.format(row.spent)}</strong>
-              </div>
+              </button>
             ))}
             {monthlyReportAccountRows.length === 0 ? <p className="text-sm text-ink/45">{ui.noSpendingRecorded}</p> : null}
           </div>
         </div>
       </div>
 
-      <div className="mt-4 min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white">
+      <div role="region" aria-labelledby="report-transactions-title" className="mt-4 min-w-0 overflow-hidden rounded-lg border border-ink/10 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-3 py-3">
-          <h3 className="text-sm font-semibold uppercase text-ink/55">Monthly transactions</h3>
-          <span className="text-xs font-semibold text-ink/45">{monthlyReportFilteredTx.length} entries</span>
+          <div className="min-w-0">
+            <h3 id="report-transactions-title" ref={transactionsHeading} tabIndex={-1}
+              className="scroll-mt-4 rounded text-sm font-semibold uppercase text-ink/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-river">
+              {monthlyReportSelectedDate ? `${format(parseISO(monthlyReportSelectedDate), "MMM d, yyyy")} transactions` : `${format(monthlyReportMonth, "MMMM yyyy")} transactions`}
+            </h3>
+            <p role="status" className="mt-1 text-xs font-semibold text-ink/45">{monthlyReportDetailTx.length} entries · {preciseCurrency.format(monthlyReportDetailTotal)} total expenses</p>
+          </div>
+          <button type="button" onClick={() => focusReportHeading(chartsHeading.current)} className={`${reportButtonClass} min-h-9 px-2 text-xs font-semibold text-river`}>Back to charts</button>
         </div>
+        {monthlyReportFilterChips.length > 0 ? (
+          <div className="flex flex-wrap gap-2 border-b border-ink/10 px-3 py-2" aria-label="Active report filters">
+            {monthlyReportFilterChips.map((chip) => (
+              <button key={chip.key} type="button" onClick={() => removeMonthlyReportFilter(chip.key)} aria-label={`Remove ${chip.label} filter`}
+                className={`${reportButtonClass} inline-flex min-h-9 max-w-full items-center gap-1.5 bg-river/10 px-2.5 py-1 text-xs font-semibold text-river`}>
+                <span className="truncate">{chip.label}</span><X size={12} className="shrink-0" aria-hidden="true" />
+              </button>
+            ))}
+            <button type="button" onClick={clearMonthlyReportFilters} className={`${reportButtonClass} min-h-9 px-2.5 text-xs font-semibold text-ink/55`}>Clear filters</button>
+          </div>
+        ) : null}
         <div className="divide-y divide-ink/10 md:hidden">
-          {monthlyReportFilteredTx.slice(0, 50).map((tx) => {
+          {visibleTransactions.map((tx) => {
             const category = displayCategories.find((item) => item.id === tx.categoryId);
             const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
             const account = accounts.find((item) => item.id === tx.accountId);
@@ -443,7 +588,7 @@ export default function ReportsTab() {
               </tr>
             </thead>
             <tbody>
-              {monthlyReportFilteredTx.slice(0, 50).map((tx) => {
+              {visibleTransactions.map((tx) => {
                 const category = displayCategories.find((item) => item.id === tx.categoryId);
                 const subcategory = subcategories.find((item) => item.id === tx.subcategoryId);
                 const account = accounts.find((item) => item.id === tx.accountId);
@@ -466,14 +611,29 @@ export default function ReportsTab() {
             </tbody>
           </table>
         </div>
-        {monthlyReportFilteredTx.length === 0 ? <p className="px-3 py-4 text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
+        {monthlyReportDetailTx.length === 0 ? <p className="px-3 py-4 text-sm text-ink/45">{ui.noExpenseTransactions}</p> : null}
+        {monthlyReportDetailTx.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/10 px-3 py-3">
+            <span className="text-xs text-ink/45">Showing {visibleTransactions.length} of {monthlyReportDetailTx.length} entries</span>
+            {visibleCount < monthlyReportDetailTx.length ? (
+              <button type="button" onClick={() => setPagination({ selectionKey, count: visibleCount + 50 })}
+                className={`${reportButtonClass} min-h-11 border border-river/20 px-4 text-sm font-semibold text-river`}>Show more</button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
         </Fragment>
       ) : (
         <Fragment>
           <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ActivityStat label={format(monthlyReportMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCurrentTotal)} sub="Current month" tone="coral" />
-            <ActivityStat label={format(monthlyCompareMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCompareTotal)} sub="Comparison month" tone="ink" />
+            <button type="button" onClick={() => drillDownMonthlyReport({ month: monthlyReportMonth })}
+              aria-label={`View all filtered expenses for ${format(monthlyReportMonth, "MMMM yyyy")}`} className={`${reportButtonClass} min-w-0`}>
+              <ActivityStat label={format(monthlyReportMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCurrentTotal)} sub="Current month" tone="coral" />
+            </button>
+            <button type="button" onClick={() => drillDownMonthlyReport({ month: monthlyCompareMonth })}
+              aria-label={`View all filtered expenses for ${format(monthlyCompareMonth, "MMMM yyyy")}`} className={`${reportButtonClass} min-w-0`}>
+              <ActivityStat label={format(monthlyCompareMonth, "MMM yyyy")} value={currency.format(monthlyComparisonCompareTotal)} sub="Comparison month" tone="ink" />
+            </button>
             <ActivityStat
               label="Difference"
               value={`${monthlyComparisonDelta >= 0 ? "+" : ""}${currency.format(monthlyComparisonDelta)}`}
@@ -520,24 +680,26 @@ export default function ReportsTab() {
                       </span>
                     </div>
                     <div className="grid gap-2">
-                      <div>
-                        <div className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
+                      <button type="button" onClick={() => openComparisonRow(row, monthlyReportMonth)} aria-label={comparisonLabel(row.name, monthlyReportMonth)}
+                        className={`${reportButtonClass} min-h-11 w-full p-1`}>
+                        <span className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
                           <span>{format(monthlyReportMonth, "MMM")}</span>
                           <span>{currency.format(row.currentSpent)}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                          <div className="h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
+                        </span>
+                        <span className="block h-2 overflow-hidden rounded-full bg-ink/10">
+                          <span className="block h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} />
+                        </span>
+                      </button>
+                      <button type="button" onClick={() => openComparisonRow(row, monthlyCompareMonth)} aria-label={comparisonLabel(row.name, monthlyCompareMonth)}
+                        className={`${reportButtonClass} min-h-11 w-full p-1`}>
+                        <span className="mb-1 flex justify-between gap-2 text-xs text-ink/45">
                           <span>{format(monthlyCompareMonth, "MMM")}</span>
                           <span>{currency.format(row.compareSpent)}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                          <div className="h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} />
-                        </div>
-                      </div>
+                        </span>
+                        <span className="block h-2 overflow-hidden rounded-full bg-ink/10">
+                          <span className="block h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} />
+                        </span>
+                      </button>
                     </div>
                     <p className={`text-xs font-semibold ${deltaTone}`}>{deltaLabel}</p>
                   </article>
@@ -572,20 +734,28 @@ export default function ReportsTab() {
                             <span className="truncate font-medium">{categoryLabel(row.name)}</span>
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold text-coral">{currency.format(row.currentSpent)}</td>
-                        <td className="px-3 py-2 text-right text-ink/65">{currency.format(row.compareSpent)}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-coral">
+                          <button type="button" onClick={() => openComparisonRow(row, monthlyReportMonth)} aria-label={comparisonLabel(row.name, monthlyReportMonth)}
+                            className={`${reportButtonClass} min-h-11 w-full px-2 text-right`}>{currency.format(row.currentSpent)}</button>
+                        </td>
+                        <td className="px-3 py-2 text-right text-ink/65">
+                          <button type="button" onClick={() => openComparisonRow(row, monthlyCompareMonth)} aria-label={comparisonLabel(row.name, monthlyCompareMonth)}
+                            className={`${reportButtonClass} min-h-11 w-full px-2 text-right`}>{currency.format(row.compareSpent)}</button>
+                        </td>
                         <td className={`px-3 py-2 text-right font-semibold ${deltaTone}`}>
                           {row.deltaAmount >= 0 ? "+" : ""}{currency.format(row.deltaAmount)}
                         </td>
                         <td className={`px-3 py-2 text-right font-semibold ${deltaTone}`}>{deltaLabel}</td>
                         <td className="px-3 py-2">
                           <div className="grid gap-1">
-                            <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                              <div className="h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} />
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-                              <div className="h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} />
-                            </div>
+                            <button type="button" onClick={() => openComparisonRow(row, monthlyReportMonth)} aria-label={comparisonLabel(row.name, monthlyReportMonth)}
+                              className={`${reportButtonClass} min-h-7 w-full px-1 py-2`}>
+                              <span className="block h-2 overflow-hidden rounded-full bg-ink/10"><span className="block h-full rounded-full bg-coral" style={{ width: `${currentWidth}%` }} /></span>
+                            </button>
+                            <button type="button" onClick={() => openComparisonRow(row, monthlyCompareMonth)} aria-label={comparisonLabel(row.name, monthlyCompareMonth)}
+                              className={`${reportButtonClass} min-h-7 w-full px-1 py-2`}>
+                              <span className="block h-2 overflow-hidden rounded-full bg-ink/10"><span className="block h-full rounded-full bg-river" style={{ width: `${compareWidth}%` }} /></span>
+                            </button>
                           </div>
                         </td>
                       </tr>
