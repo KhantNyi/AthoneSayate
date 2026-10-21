@@ -15,6 +15,7 @@ export default function DashboardTab() {
     ui,
     chart,
     balances,
+    transactions,
     upcoming,
     recurringPayments,
     budgetRows,
@@ -43,6 +44,19 @@ export default function DashboardTab() {
     displayCategories,
     subcategories
   } = useApp();
+
+  const selectedDaySpending = new Map<string, number>();
+  for (const transaction of transactions) {
+    if (transaction.type === "expense" && transaction.occurredOn === selectedDashboardDate) {
+      const categoryId = transaction.categoryId ?? "";
+      selectedDaySpending.set(categoryId, (selectedDaySpending.get(categoryId) ?? 0) + transaction.amount);
+    }
+  }
+  const selectedDayCategories = Array.from(selectedDaySpending, ([categoryId, amount]) => ({
+    categoryId,
+    amount,
+    category: displayCategories.find((category) => category.id === categoryId)
+  })).sort((a, b) => b.amount - a.amount);
 
   const accountTotal = balances.reduce((sum, account) => sum + account.balance, 0);
   const recurringDashboardItems = upcoming.filter((rule) => !recurringPayments[rule.id]);
@@ -192,6 +206,24 @@ export default function DashboardTab() {
               <ActivityStat label={t.income} value={currency.format(dashboardSelectedSummary?.income ?? 0)} tone="moss" compact />
               <ActivityStat label={ui.due} value={`${dashboardSelectedSummary?.recurringCount ?? 0}`} tone="amber" compact />
             </div>
+            {selectedDashboardDate ? (
+              <div className="mt-3 border-t border-ink/10 pt-3">
+                <p className="mb-2 text-xs font-semibold uppercase text-ink/45">Spending by category</p>
+                {selectedDayCategories.length > 0 ? (
+                  <ul className="grid gap-2">
+                    {selectedDayCategories.map(({ categoryId, category, amount }) => (
+                      <li key={categoryId} className="flex items-center justify-between gap-3">
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <span className="size-2.5 shrink-0 rounded-full bg-ink/30" style={{ background: category?.color }} />
+                          <span className="break-words">{categoryLabel(category?.name) ?? "Uncategorized"}</span>
+                        </span>
+                        <strong className="tnum shrink-0 text-coral">{preciseCurrency.format(amount)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-ink/50">{ui.noSpendingRecorded}</p>}
+              </div>
+            ) : null}
           </div>
         </div>
       </DashboardPanel>

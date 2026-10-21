@@ -60,7 +60,7 @@ export function Panel({
 }: {
   id?: string;
   title: string;
-  action: string;
+  action: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (

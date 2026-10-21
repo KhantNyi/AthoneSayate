@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { preciseCurrency } from "@athonesayate/shared/metrics";
@@ -89,27 +89,8 @@ export default function TransactionsTab() {
     txFilterCount,
     clearTransactionFilters,
     filteredTransactions,
-    type,
-    setType,
-    amount,
-    setAmount,
-    categoryId,
-    setCategoryId,
-    subcategoryId,
-    setSubcategoryId,
-    accountId,
-    setAccountId,
-    occurredOn,
-    setOccurredOn,
-    notes,
-    setNotes,
-    isSaving,
-    handleSubmit,
-    formIssues,
-    formAttempted,
-    chooseTab,
+    setQuickAddOpen,
     accounts,
-    categories,
     subcategories,
     displayCategories,
     categoryLabel,
@@ -123,15 +104,19 @@ export default function TransactionsTab() {
     transactionCalendarDays
   } = useApp();
 
-  const issues = formIssues.transaction;
-  const showIssues = formAttempted("transaction");
-
-  // Show a longer list while the user is actively narrowing things down.
-  const filtersActive = Boolean(query || txFilterCount > 0 || selectedTransactionDate);
-  const visibleTransactions = filteredTransactions.slice(0, filtersActive ? 50 : 14);
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [query, txFilterType, txFilterCategoryId, txFilterAccountId, selectedTransactionDate, visibleMonth]);
+  const visibleTransactions = filteredTransactions.slice(0, visibleCount);
 
   return (
-    <Panel id="transactions" title={t.transactions} action={`${filteredTransactions.length} ${t.entries}`}>
+    <Panel id="transactions" title={t.transactions} action={
+      <button type="button" onClick={() => setQuickAddOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85">
+        <Plus size={17} />
+        {t.quickAdd}
+      </button>
+    }>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
       <div className="mb-4 grid gap-3">
@@ -186,46 +171,7 @@ export default function TransactionsTab() {
             {ui.clear}
           </button>
         </div>
-        <form onSubmit={handleSubmit} noValidate className="rounded-lg border border-river/15 bg-river/5 p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase text-river">Record new transaction</h3>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${type === "income" ? "bg-moss/12 text-moss" : "bg-coral/12 text-coral"}`}>
-              {type === "income" ? t.income : t.expense}
-            </span>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <select value={type} onChange={(event) => setType(event.target.value as TransactionType)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-              <option value="expense">{t.expense}</option>
-              <option value="income">{t.income}</option>
-            </select>
-            <input value={amount} onChange={(event) => setAmount(event.target.value)} aria-invalid={isMissing(issues, "amount", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "amount", showIssues) ? INVALID_FIELD : "border-ink/10"}`} inputMode="decimal" placeholder={t.amount} />
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} aria-invalid={isMissing(issues, "categoryId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "categoryId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
-              {categories.some((category) => category.kind === type) ? null : <option value="">No {type} categories</option>}
-              {categories.filter((category) => category.kind === type).map((category) => (
-                <option key={category.id} value={category.id}>{categoryLabel(category.name)}</option>
-              ))}
-            </select>
-            <select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm">
-              <option value="">Subcategory</option>
-              {subcategories.filter((subcategory) => subcategory.categoryId === categoryId).map((subcategory) => (
-                <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
-              ))}
-            </select>
-            <select value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-invalid={isMissing(issues, "accountId", showIssues) || undefined} className={`h-11 rounded-lg border bg-white px-3 text-sm ${isMissing(issues, "accountId", showIssues) ? INVALID_FIELD : "border-ink/10"}`}>
-              {accounts.length > 0 ? null : <option value="">No accounts yet</option>}
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>{account.name}</option>
-              ))}
-            </select>
-            <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm" />
-            <button disabled={isSaving} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85 disabled:cursor-not-allowed disabled:opacity-45">
-              <Plus size={17} />
-              {isSaving ? "Saving" : t.add}
-            </button>
-            <input value={notes} onChange={(event) => setNotes(event.target.value)} className="h-11 rounded-lg border border-ink/10 bg-white px-3 text-sm sm:col-span-2 lg:col-span-full" placeholder={t.optionalNote} />
-            <FormAlert result={issues} show={showIssues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-full" />
-          </div>
-        </form>
+
       </div>
 
       <div className="grid gap-3 lg:hidden">
@@ -327,6 +273,14 @@ export default function TransactionsTab() {
             })}
           </tbody>
         </table>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <p className="text-ink/55" aria-live="polite">Showing {visibleTransactions.length} of {filteredTransactions.length} {t.entries}</p>
+        {visibleTransactions.length < filteredTransactions.length ? (
+          <button type="button" onClick={() => setVisibleCount((count) => count + 50)} className="h-10 rounded-lg border border-ink/10 bg-white px-4 font-semibold text-river transition hover:bg-river/5">
+            Show more
+          </button>
+        ) : null}
       </div>
         </div>
         <aside className="xl:sticky xl:top-4 xl:self-start">
