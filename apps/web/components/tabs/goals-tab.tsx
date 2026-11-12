@@ -4,12 +4,15 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { currency } from "@athonesayate/shared/metrics";
 import { goalToDraft } from "@/lib/drafts";
 import { isMissing, validateGoal } from "@/lib/validation";
+import { companionTranslations } from "@/lib/i18n";
+import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 export default function GoalsTab() {
   const {
     t,
+    language,
     goals,
     goalName,
     setGoalName,
@@ -51,6 +54,7 @@ export default function GoalsTab() {
           </button>
         </div>
       </form>
+      {goals.length === 0 ? <MascotEmpty {...companionTranslations[language].empty.goals} /> : null}
       <div className="space-y-4">
         {goals.map((goal) => {
           const draft = goalDrafts[goal.id] ?? goalToDraft(goal);

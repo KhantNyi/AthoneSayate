@@ -211,6 +211,18 @@ export const companionTranslations = {
     achievements: "Achievements",
     unlocked: "unlocked",
     howXp: "Each day you log earns 10 XP, plus 2 XP per entry for the first 5 entries.",
+    poke: "Poke Su Bu",
+    levelUp: "Level up!",
+    levelUpDetail: "Keep logging and I'll keep growing.",
+    achievementUnlocked: "Achievement unlocked",
+    empty: {
+      transactions: { title: "No entries yet", hint: "Log your first one and I'll start keeping count.", action: "Add entry" },
+      noMatches: { title: "Nothing matches", hint: "Try a different search, filter or day.", action: "Clear filters" },
+      budgets: { title: "No budgets this month", hint: "Pick a category above and set a monthly limit. I'll keep watch." },
+      goals: { title: "No savings goals yet", hint: "Name something worth saving for above and we'll fill it coin by coin." },
+      recurring: { title: "No recurring payments", hint: "Add rent, subscriptions or salary above and I'll flag them when they're due." },
+      recurringDay: { title: "Nothing due this day", hint: "Pick another day, or clear the date to see everything." }
+    },
     achievement: {
       firstLog: { title: "First coin", detail: "Log your first entry" },
       streak3: { title: "Warming up", detail: "Reach a 3-day streak" },
@@ -260,6 +272,18 @@ export const companionTranslations = {
     achievements: "အောင်မြင်မှုများ",
     unlocked: "ရရှိပြီး",
     howXp: "မှတ်သည့် ရက်တိုင်း 10 XP ရပြီး၊ ပထမ မှတ်တမ်း ၅ ခုအထိ တစ်ခုလျှင် 2 XP ထပ်ရသည်။",
+    poke: "စုဘူးကို တို့ကြည့်ရန်",
+    levelUp: "အဆင့် တက်ပြီ!",
+    levelUpDetail: "ဆက်မှတ်ပေးပါ၊ ကျွန်တော်လည်း ဆက်ကြီးထွားမယ်။",
+    achievementUnlocked: "အောင်မြင်မှု အသစ် ရပြီ",
+    empty: {
+      transactions: { title: "မှတ်တမ်း မရှိသေးပါ", hint: "ပထမဆုံး တစ်ခု မှတ်လိုက်ပါ၊ ကျွန်တော် စရေတွက်ပေးမယ်။", action: "မှတ်တမ်း ထည့်ရန်" },
+      noMatches: { title: "ကိုက်ညီတာ မတွေ့ပါ", hint: "ရှာဖွေမှု၊ စစ်ထုတ်မှု သို့မဟုတ် ရက်စွဲ ပြောင်းကြည့်ပါ။", action: "စစ်ထုတ်မှု ရှင်းရန်" },
+      budgets: { title: "ဒီလအတွက် ဘတ်ဂျက် မရှိသေးပါ", hint: "အပေါ်မှာ အမျိုးအစား ရွေးပြီး လစဉ် ကန့်သတ်ပမာဏ သတ်မှတ်ပါ။ ကျွန်တော် စောင့်ကြည့်ပေးမယ်။" },
+      goals: { title: "စုဆောင်းရန် ပန်းတိုင် မရှိသေးပါ", hint: "စုချင်တာ တစ်ခုကို အပေါ်မှာ ထည့်ပါ၊ ဒင်္ဂါး တစ်ပြားချင်း ဖြည့်ကြမယ်။" },
+      recurring: { title: "ပုံမှန် ပေးချေမှု မရှိသေးပါ", hint: "အိမ်လခ၊ လစဉ်ကြေး သို့မဟုတ် လစာကို အပေါ်မှာ ထည့်ပါ၊ ပေးရမည့်ရက် ရောက်ရင် သတိပေးမယ်။" },
+      recurringDay: { title: "ဒီနေ့ ပေးရန် မရှိပါ", hint: "တခြားရက် ရွေးပါ၊ သို့မဟုတ် ရက်စွဲ ရှင်းပြီး အားလုံး ကြည့်ပါ။" }
+    },
     achievement: {
       firstLog: { title: "ပထမဆုံး ဒင်္ဂါး", detail: "ပထမဆုံး မှတ်တမ်း မှတ်ပါ" },
       streak3: { title: "အရှိန်ရလာပြီ", detail: "၃ ရက် ဆက်တိုက် မှတ်ပါ" },

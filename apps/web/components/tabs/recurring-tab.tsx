@@ -6,6 +6,8 @@ import { currency } from "@athonesayate/shared/metrics";
 import type { RecurringRule, TransactionType } from "@athonesayate/shared/types";
 import { recurringRuleToDraft } from "@/lib/drafts";
 import { isMissing, validateRecurring } from "@/lib/validation";
+import { companionTranslations } from "@/lib/i18n";
+import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
 import { MonthCalendar } from "../month-calendar";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
@@ -120,6 +122,7 @@ export default function RecurringTab() {
   const {
     t,
     ui,
+    language,
     accounts,
     categories,
     subcategories,
@@ -222,6 +225,9 @@ export default function RecurringTab() {
         </div>
       </form>
       <div className="space-y-3">
+        {displayedRecurringRules.length === 0 ? (
+          <MascotEmpty {...companionTranslations[language].empty[selectedRecurringDate ? "recurringDay" : "recurring"]} mood={selectedRecurringDate ? "happy" : "sleepy"} />
+        ) : null}
         {displayedRecurringRules.map((rule) => {
           const isEditing = editingRecurringId === rule.id;
           const ruleCategory = displayCategories.find((category) => category.id === rule.categoryId);

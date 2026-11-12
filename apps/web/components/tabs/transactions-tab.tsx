@@ -7,6 +7,8 @@ import { preciseCurrency } from "@athonesayate/shared/metrics";
 import type { Transaction, TransactionType } from "@athonesayate/shared/types";
 import { transactionToDraft } from "@/lib/drafts";
 import { isMissing, validateTransaction } from "@/lib/validation";
+import { companionTranslations } from "@/lib/i18n";
+import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
 import { MonthCalendar } from "../month-calendar";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
@@ -78,6 +80,7 @@ export default function TransactionsTab() {
   const {
     t,
     ui,
+    language,
     query,
     setQuery,
     txFilterType,
@@ -109,6 +112,8 @@ export default function TransactionsTab() {
     setVisibleCount(50);
   }, [query, txFilterType, txFilterCategoryId, txFilterAccountId, selectedTransactionDate, visibleMonth]);
   const visibleTransactions = filteredTransactions.slice(0, visibleCount);
+  const empty = companionTranslations[language].empty;
+  const isFiltered = Boolean(query) || txFilterCount > 0 || Boolean(selectedTransactionDate);
 
   return (
     <Panel id="transactions" title={t.transactions} action={
@@ -174,6 +179,32 @@ export default function TransactionsTab() {
 
       </div>
 
+      {filteredTransactions.length === 0 ? (
+        isFiltered ? (
+          <MascotEmpty
+            mood="happy"
+            title={empty.noMatches.title}
+            hint={empty.noMatches.hint}
+            action={
+              <button type="button" onClick={() => { clearTransactionFilters(); setSelectedTransactionDate(""); }} className="h-10 rounded-lg border border-ink/10 bg-white px-4 text-sm font-semibold text-ink/70 transition hover:bg-ink/[0.04] hover:text-ink">
+                {empty.noMatches.action}
+              </button>
+            }
+          />
+        ) : (
+          <MascotEmpty
+            title={empty.transactions.title}
+            hint={empty.transactions.hint}
+            action={
+              <button type="button" onClick={() => setQuickAddOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-river px-4 text-sm font-semibold text-bright transition hover:bg-river/85">
+                <Plus size={17} />
+                {empty.transactions.action}
+              </button>
+            }
+          />
+        )
+      ) : null}
+
       <div className="grid gap-3 lg:hidden">
         {visibleTransactions.map((tx) => {
           const category = displayCategories.find((item) => item.id === tx.categoryId);
@@ -216,7 +247,7 @@ export default function TransactionsTab() {
         })}
       </div>
 
-      <div className="hidden overflow-x-auto lg:block">
+      <div className={`hidden overflow-x-auto ${filteredTransactions.length === 0 ? "" : "lg:block"}`}>
         <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="text-left text-xs uppercase text-ink/50">
@@ -274,7 +305,7 @@ export default function TransactionsTab() {
           </tbody>
         </table>
       </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div className={`mt-4 flex-wrap items-center justify-between gap-3 text-sm ${filteredTransactions.length === 0 ? "hidden" : "flex"}`}>
         <p className="text-ink/55" aria-live="polite">Showing {visibleTransactions.length} of {filteredTransactions.length} {t.entries}</p>
         {visibleTransactions.length < filteredTransactions.length ? (
           <button type="button" onClick={() => setVisibleCount((count) => count + 50)} className="h-10 rounded-lg border border-ink/10 bg-white px-4 font-semibold text-river transition hover:bg-river/5">

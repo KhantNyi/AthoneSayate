@@ -2,7 +2,7 @@
 
 import { Award, BookOpen, CalendarCheck, CalendarDays, Check, ChevronRight, Coins, Crown, Flame, Lock, Plus, Receipt, Star, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { parseISO } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import { companionTranslations } from "@/lib/i18n";
 import { ACTIVITY_WEEKS, buildCompanionState, type AchievementId, type CompanionMood, type CompanionState, type Quest } from "@/lib/quests";
@@ -13,12 +13,32 @@ const POT = "#E8744F";
 const POT_DARK = "#C9573A";
 const POT_DEEP = "#7A2E1C";
 
+/** One-shot movements layered over the idle loop. */
+export type MascotReaction = "coin" | "hop" | "cheer" | "shift";
+
+const SPARKLE = "M0 -6L1.6 -1.6L6 0L1.6 1.6L0 6L-1.6 1.6L-6 0L-1.6 -1.6Z";
+
 /**
  * Su Bu, a clay savings pot. Drawn inline so it themes, scales and animates
  * without an image request.
+ *
+ * `reaction` plays once on mount and again whenever `reactionKey` changes.
  */
-export function Mascot({ mood, size = 88, className = "" }: { mood: CompanionMood; size?: number; className?: string }) {
+export function Mascot({
+  mood,
+  size = 88,
+  className = "",
+  reaction,
+  reactionKey = 0
+}: {
+  mood: CompanionMood;
+  size?: number;
+  className?: string;
+  reaction?: MascotReaction;
+  reactionKey?: number;
+}) {
   const lively = mood === "happy" || mood === "proud";
+  const dropping = reaction === "coin";
 
   return (
     <svg
@@ -30,56 +50,119 @@ export function Mascot({ mood, size = 88, className = "" }: { mood: CompanionMoo
       data-mood={mood}
     >
       <ellipse cx="60" cy="111" rx="30" ry="5" fill="rgb(var(--ink) / 0.12)" />
-      <g className="mascot-body">
-        <ellipse cx="45" cy="104" rx="9" ry="5" fill={POT_DARK} />
-        <ellipse cx="75" cy="104" rx="9" ry="5" fill={POT_DARK} />
-        <g className={lively ? "mascot-coin" : undefined}>
-          <circle cx="60" cy={lively ? 15 : 22} r="9" fill="#FFC400" stroke="#D69600" strokeWidth="2.5" />
-        </g>
-        <rect x="40" y="20" width="40" height="15" rx="7.5" fill={POT_DARK} />
-        <rect x="50" y="25" width="20" height="4" rx="2" fill={POT_DEEP} />
-        <path d="M60 31C92 31 104 52 104 72C104 94 86 106 60 106C34 106 16 94 16 72C16 52 28 31 60 31Z" fill={POT} />
-        <path d="M23 91Q60 104 97 91" fill="none" stroke={POT_DARK} strokeWidth="3" strokeLinecap="round" opacity="0.6" />
-        <ellipse cx="40" cy="54" rx="8" ry="13" fill="#fff" opacity="0.2" transform="rotate(24 40 54)" />
-        <circle cx="35" cy="79" r="5.5" fill="#FF9E80" opacity="0.75" />
-        <circle cx="85" cy="79" r="5.5" fill="#FF9E80" opacity="0.75" />
+      <g key={reactionKey} className={reaction ? `mascot-react mascot-react-${reaction}` : undefined}>
+        <g className="mascot-body">
+          <ellipse cx="45" cy="104" rx="9" ry="5" fill={POT_DARK} />
+          <ellipse cx="75" cy="104" rx="9" ry="5" fill={POT_DARK} />
+          {dropping ? (
+            <g className="mascot-drop">
+              <circle cx="60" cy="22" r="9" fill="#FFC400" stroke="#D69600" strokeWidth="2.5" />
+            </g>
+          ) : (
+            <g className={lively ? "mascot-coin" : undefined}>
+              <circle cx="60" cy={lively ? 15 : 22} r="9" fill="#FFC400" stroke="#D69600" strokeWidth="2.5" />
+            </g>
+          )}
+          <rect x="40" y="20" width="40" height="15" rx="7.5" fill={POT_DARK} />
+          <rect x="50" y="25" width="20" height="4" rx="2" fill={POT_DEEP} />
+          <path d="M60 31C92 31 104 52 104 72C104 94 86 106 60 106C34 106 16 94 16 72C16 52 28 31 60 31Z" fill={POT} />
+          <path d="M23 91Q60 104 97 91" fill="none" stroke={POT_DARK} strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+          <ellipse cx="40" cy="54" rx="8" ry="13" fill="#fff" opacity="0.2" transform="rotate(24 40 54)" />
+          <circle cx="35" cy="79" r="5.5" fill="#FF9E80" opacity="0.75" />
+          <circle cx="85" cy="79" r="5.5" fill="#FF9E80" opacity="0.75" />
 
-        {mood === "sleepy" ? (
-          <g fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round">
-            <path d="M39 67Q46 72 53 67" />
-            <path d="M67 67Q74 72 81 67" />
-          </g>
-        ) : mood === "proud" ? (
-          <g fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round">
-            <path d="M39 69Q46 60 53 69" />
-            <path d="M67 69Q74 60 81 69" />
-          </g>
-        ) : (
-          <g className="mascot-eyes">
-            <circle cx="46" cy="66" r="8" fill="#fff" />
-            <circle cx="74" cy="66" r="8" fill="#fff" />
-            <circle cx={mood === "worried" ? 46 : 47} cy={mood === "worried" ? 68 : 66} r="4" fill={POT_DEEP} />
-            <circle cx={mood === "worried" ? 74 : 75} cy={mood === "worried" ? 68 : 66} r="4" fill={POT_DEEP} />
-            {mood === "worried" ? (
-              <g fill="none" stroke={POT_DEEP} strokeWidth="3" strokeLinecap="round">
-                <path d="M38 58L52 54" />
-                <path d="M82 58L68 54" />
+          {mood === "sleepy" ? (
+            <g fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round">
+              <path d="M39 67Q46 72 53 67" />
+              <path d="M67 67Q74 72 81 67" />
+            </g>
+          ) : mood === "proud" ? (
+            <g fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round">
+              <path d="M39 69Q46 60 53 69" />
+              <path d="M67 69Q74 60 81 69" />
+            </g>
+          ) : (
+            <g className="mascot-eyes">
+              <circle cx="46" cy="66" r="8" fill="#fff" />
+              <circle cx="74" cy="66" r="8" fill="#fff" />
+              <g className="mascot-pupils">
+                <circle cx={mood === "worried" ? 46 : 47} cy={mood === "worried" ? 68 : 66} r="4" fill={POT_DEEP} />
+                <circle cx={mood === "worried" ? 74 : 75} cy={mood === "worried" ? 68 : 66} r="4" fill={POT_DEEP} />
               </g>
-            ) : null}
-          </g>
-        )}
+              {mood === "worried" ? (
+                <g fill="none" stroke={POT_DEEP} strokeWidth="3" strokeLinecap="round">
+                  <path d="M38 58L52 54" />
+                  <path d="M82 58L68 54" />
+                </g>
+              ) : null}
+            </g>
+          )}
+
+          {mood === "sleepy" ? (
+            <circle cx="60" cy="84" r="3" fill={POT_DEEP} />
+          ) : mood === "proud" ? (
+            <path d="M50 80Q60 93 70 80Z" fill={POT_DEEP} stroke={POT_DEEP} strokeWidth="3" strokeLinejoin="round" />
+          ) : mood === "worried" ? (
+            <path d="M53 87Q60 81 67 87" fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round" />
+          ) : (
+            <path d="M52 81Q60 89 68 81" fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round" />
+          )}
+
+          {mood === "worried" ? (
+            <path className="mascot-sweat" d="M98 38Q104 47 98 51Q92 47 98 38Z" fill="#7CC4F5" />
+          ) : null}
+        </g>
 
         {mood === "sleepy" ? (
-          <circle cx="60" cy="84" r="3" fill={POT_DEEP} />
+          <g className="mascot-zzz" fill="rgb(var(--ink) / 0.5)" fontWeight="800" fontFamily="inherit">
+            <text x="88" y="42" fontSize="12">z</text>
+            <text x="97" y="29" fontSize="15">z</text>
+            <text x="107" y="14" fontSize="19">z</text>
+          </g>
         ) : mood === "proud" ? (
-          <path d="M50 80Q60 93 70 80Z" fill={POT_DEEP} stroke={POT_DEEP} strokeWidth="3" strokeLinejoin="round" />
-        ) : mood === "worried" ? (
-          <path d="M53 87Q60 81 67 87" fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round" />
-        ) : (
-          <path d="M52 81Q60 89 68 81" fill="none" stroke={POT_DEEP} strokeWidth="3.5" strokeLinecap="round" />
-        )}
+          <g className="mascot-sparkles" fill="#FFC400">
+            <g transform="translate(17 32)"><path d={SPARKLE} /></g>
+            <g transform="translate(104 44) scale(0.8)"><path d={SPARKLE} /></g>
+            <g transform="translate(94 12) scale(1.15)"><path d={SPARKLE} /></g>
+          </g>
+        ) : null}
       </g>
     </svg>
+  );
+}
+
+/** Lets a component trigger mascot reactions: spread the first value onto `<Mascot>` and call `play`. */
+export function useMascotReaction() {
+  const [state, setState] = useState<{ reaction?: MascotReaction; reactionKey: number }>({ reactionKey: 0 });
+  const play = useCallback((reaction: MascotReaction) => {
+    setState((current) => ({ reaction, reactionKey: current.reactionKey + 1 }));
+  }, []);
+  return [state, play] as const;
+}
+
+/** Su Bu standing in for a list with nothing in it yet. */
+export function MascotEmpty({
+  mood = "sleepy",
+  title,
+  hint,
+  action
+}: {
+  mood?: CompanionMood;
+  title: string;
+  hint: string;
+  action?: React.ReactNode;
+}) {
+  const [reaction, play] = useMascotReaction();
+
+  return (
+    <div className="mascot-empty grid justify-items-center gap-1.5 rounded-xl border border-dashed border-ink/15 px-4 py-8 text-center">
+      <span onPointerDown={() => play("hop")} className="mb-1 block">
+        <Mascot mood={mood} size={84} className="mascot-idle" {...reaction} />
+      </span>
+      <p className="text-base font-semibold text-ink">{title}</p>
+      <p className="max-w-xs text-sm leading-snug text-ink/55">{hint}</p>
+      {action ? <div className="mt-2.5">{action}</div> : null}
+    </div>
   );
 }
 
@@ -129,6 +212,14 @@ export function CompanionCard() {
   const c = companionTranslations[language];
   const state = useCompanion();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [reaction, play] = useMascotReaction();
+  // A change of mood gets a visible beat instead of the face just swapping.
+  const lastMood = useRef(state.mood);
+  useEffect(() => {
+    if (lastMood.current === state.mood) return;
+    lastMood.current = state.mood;
+    play("shift");
+  }, [state.mood, play]);
   const weekdayFormat = useMemo(() => new Intl.DateTimeFormat(language === "my" ? "my" : "en", { weekday: "narrow" }), [language]);
 
   const questLabel: Record<Quest["id"], string> = {
@@ -152,12 +243,13 @@ export function CompanionCard() {
         <div className="grid content-start gap-4">
           <button
             type="button"
+            onPointerDown={() => play("hop")}
             onClick={() => setProfileOpen(true)}
             aria-label={c.openProfile}
             aria-haspopup="dialog"
             className="companion-open group -m-2 flex items-center gap-3 rounded-2xl p-2 text-left"
           >
-            <Mascot mood={state.mood} size={92} className="mascot-idle" />
+            <Mascot mood={state.mood} size={92} className="mascot-idle" {...reaction} />
             <span className="block min-w-0 flex-1">
               <span className="speech-bubble block text-sm font-medium leading-snug text-ink">{c.mood[state.mood]}</span>
               <span className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -251,6 +343,7 @@ function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: ()
   const dayFormat = useMemo(() => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }), [locale]);
   const sinceFormat = useMemo(() => new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric" }), [locale]);
   const unlocked = state.achievements.filter((item) => item.done).length;
+  const [reaction, play] = useMascotReaction();
   // Earned first, then whichever locked one is closest.
   const achievements = [...state.achievements].sort(
     (a, b) => Number(b.done) - Number(a.done) || b.progress / b.target - a.progress / a.target
@@ -266,7 +359,9 @@ function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: ()
     <Modal open={open} onClose={onClose} labelledBy="companion-profile-title">
       <div className="liquid-sheet liquid-scroll companion-card companion-profile w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl">
         <div className="flex items-start gap-3">
-          <Mascot mood={state.mood} size={84} className="mascot-idle" />
+          <button type="button" onClick={() => play(state.mood === "proud" ? "cheer" : "hop")} aria-label={c.poke} className="mascot-poke shrink-0 rounded-2xl">
+            <Mascot mood={state.mood} size={84} className="mascot-idle" {...reaction} />
+          </button>
           <div className="min-w-0 flex-1 pt-1">
             <h2 id="companion-profile-title" className="font-display text-xl font-semibold leading-tight outline-none">{c.name}</h2>
             <p className="mt-1 text-sm leading-snug text-ink/60">{c.mood[state.mood]}</p>
@@ -397,43 +492,108 @@ const CONFETTI = Array.from({ length: 30 }, (_, index) => {
   };
 });
 
-/** Brief reward moment after a successful quick add. Decorative only: the toast carries the message. */
+function Confetti({ spread = 1 }: { spread?: number }) {
+  return (
+    <div className="celebration-burst">
+      {CONFETTI.map((piece, index) => (
+        <span
+          key={index}
+          className="confetti"
+          style={{
+            "--dx": `${piece.dx * spread}px`,
+            "--dy": `${piece.dy * spread}px`,
+            "--rot": `${piece.rotate}deg`,
+            animationDelay: `${piece.delay}ms`,
+            background: piece.color,
+            borderRadius: piece.round ? "999px" : "2px"
+          } as React.CSSProperties}
+        />
+      ))}
+    </div>
+  );
+}
+
+type Milestone = { key: number } & ({ kind: "level"; level: number } | { kind: "achievement"; id: AchievementId });
+
+const BANNER_MS = 2400;
+const MILESTONE_MS = 3800;
+
+/**
+ * Reward moments. Every quick add gets a small banner; levelling up or
+ * unlocking an achievement gets a bigger one in its place.
+ */
 export function Celebration() {
-  const { celebration, language } = useApp();
+  const { celebration, language, isLoading } = useApp();
   const c = companionTranslations[language];
   const state = useCompanion();
   const [visibleFor, setVisibleFor] = useState(0);
+  const [milestone, setMilestone] = useState<Milestone | null>(null);
 
   useEffect(() => {
     if (celebration === 0) return;
     setVisibleFor(celebration);
-    const timeout = window.setTimeout(() => setVisibleFor(0), 2400);
+    const timeout = window.setTimeout(() => setVisibleFor(0), BANNER_MS);
     return () => window.clearTimeout(timeout);
   }, [celebration]);
+
+  // Milestones are derived, so spot them by comparing against the last settled
+  // state. Only a single new entry counts: loading data or switching accounts
+  // moves these numbers too, and that is not an achievement.
+  const { level, totalEntries, achievements } = state;
+  const settled = useRef<{ level: number; entries: number; done: AchievementId[] } | null>(null);
+  useEffect(() => {
+    if (isLoading) {
+      settled.current = null;
+      return;
+    }
+    const done = achievements.filter((item) => item.done).map((item) => item.id);
+    const previous = settled.current;
+    settled.current = { level, entries: totalEntries, done };
+    if (!previous || totalEntries - previous.entries !== 1) return;
+
+    const fresh = done.filter((id) => !previous.done.includes(id));
+    if (level > previous.level) setMilestone({ key: Date.now(), kind: "level", level });
+    else if (fresh.length > 0) setMilestone({ key: Date.now(), kind: "achievement", id: fresh[fresh.length - 1] });
+  }, [isLoading, level, totalEntries, achievements]);
+
+  useEffect(() => {
+    if (!milestone) return;
+    const timeout = window.setTimeout(() => setMilestone(null), MILESTONE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [milestone]);
+
+  if (milestone) {
+    const Icon = milestone.kind === "level" ? Star : ACHIEVEMENT_ICON[milestone.id];
+    return (
+      <div key={milestone.key} className="milestone pointer-events-none fixed inset-0 z-[80] grid place-items-center px-6" role="status">
+        <div className="relative">
+          <Confetti spread={1.8} />
+          <div className="milestone-card grid justify-items-center px-8 pb-6 pt-5 text-center">
+            <Mascot mood="proud" size={128} reaction="cheer" />
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-sun/25 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink">
+              <Icon size={14} strokeWidth={2.8} />
+              {milestone.kind === "level" ? c.levelUp : c.achievementUnlocked}
+            </p>
+            <p className="mt-2.5 font-display text-2xl font-semibold leading-tight text-ink">
+              {milestone.kind === "level" ? <>{c.level} <span className="tnum">{milestone.level}</span></> : c.achievement[milestone.id].title}
+            </p>
+            <p className="mt-1 max-w-[16rem] text-sm leading-snug text-ink/60">
+              {milestone.kind === "level" ? c.levelUpDetail : c.achievement[milestone.id].detail}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (visibleFor === 0) return null;
 
   return (
     <div key={visibleFor} className="celebration pointer-events-none fixed inset-x-0 z-[80] flex justify-center px-3" aria-hidden>
       <div className="relative">
-        <div className="celebration-burst">
-          {CONFETTI.map((piece, index) => (
-            <span
-              key={index}
-              className="confetti"
-              style={{
-                "--dx": `${piece.dx}px`,
-                "--dy": `${piece.dy}px`,
-                "--rot": `${piece.rotate}deg`,
-                animationDelay: `${piece.delay}ms`,
-                background: piece.color,
-                borderRadius: piece.round ? "999px" : "2px"
-              } as React.CSSProperties}
-            />
-          ))}
-        </div>
+        <Confetti />
         <div className="celebration-banner flex items-center gap-3 py-2 pl-2 pr-5">
-          <Mascot mood="proud" size={52} />
+          <Mascot mood="proud" size={52} reaction="coin" />
           <div>
             <p className="text-base font-semibold leading-tight text-ink">{c.celebrate}</p>
             <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-amber">

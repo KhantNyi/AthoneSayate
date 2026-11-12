@@ -4,12 +4,15 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { parseISO } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import { isMissing, validateBudget } from "@/lib/validation";
+import { companionTranslations } from "@/lib/i18n";
+import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 export default function BudgetsTab() {
   const {
     t,
+    language,
     categories,
     categoryLabel,
     budgetMonth,
@@ -77,6 +80,7 @@ export default function BudgetsTab() {
           <FormAlert result={issues} show={showIssues} onFix={chooseTab} className="sm:col-span-2 lg:col-span-full" />
         </div>
       </form>
+      {budgetTabRows.length === 0 ? <MascotEmpty {...companionTranslations[language].empty.budgets} /> : null}
       <div className="grid gap-3 xl:grid-cols-2">
         {budgetTabRows.map((row) => {
           const isEditing = editingBudgetId === row.id;
