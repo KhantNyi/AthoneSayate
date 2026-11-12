@@ -14,6 +14,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const output = process.env.UI_SCREENSHOTS || 'artifacts/ui';
   fs.mkdirSync(output, { recursive: true });
   try {
+    // The app opens dark unless a theme is stored; this flow starts light and switches.
+    await page.addInitScript(() => { if (!localStorage.getItem('athonesayate-theme')) localStorage.setItem('athonesayate-theme', 'light'); });
     await page.goto(process.env.UI_URL || 'http://localhost:3100', { waitUntil: 'networkidle' });
     // The development-only Next badge overlaps the first dock button at 360px.
     // Runtime errors are still collected above; production has no such badge.

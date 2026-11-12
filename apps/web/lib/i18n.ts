@@ -178,6 +178,51 @@ export const uiTranslations = {
   }
 } as const;
 
+export const companionTranslations = {
+  en: {
+    name: "Su Bu",
+    streakDays: "day streak",
+    level: "Level",
+    toNextLevel: "to next level",
+    thisWeek: "This week",
+    todayQuests: "Today's quests",
+    questLog: "Log today's spending",
+    questUnder: "Stay under today's safe-to-spend",
+    questUnderNoIncome: "Record this month's income to set a daily amount",
+    questWeek: "Log on 5 days this week",
+    questBills: "No overdue bills",
+    cta: "Log now",
+    celebrate: "Logged!",
+    mood: {
+      sleepy: "Nothing logged yet today. Got a receipt for me?",
+      happy: "Logged and on pace. Nice work!",
+      proud: "A full week without missing a day!",
+      worried: "Today went over the safe amount. Let's go easy tomorrow."
+    }
+  },
+  my: {
+    name: "စုဘူး",
+    streakDays: "ရက်ဆက်တိုက်",
+    level: "အဆင့်",
+    toNextLevel: "လိုသေးသည်",
+    thisWeek: "ဒီအပတ်",
+    todayQuests: "ယနေ့ လုပ်ဆောင်ရန်",
+    questLog: "ယနေ့ အသုံးစရိတ် မှတ်ပါ",
+    questUnder: "ယနေ့ သုံးနိုင်သည့် ပမာဏအောက် ထိန်းပါ",
+    questUnderNoIncome: "နေ့စဉ်ပမာဏ သတ်မှတ်ရန် ဒီလ ဝင်ငွေ မှတ်ပါ",
+    questWeek: "ဒီအပတ် ၅ ရက် မှတ်ပါ",
+    questBills: "ရက်လွန် ပေးရန် မရှိစေနှင့်",
+    cta: "အခု မှတ်မယ်",
+    celebrate: "မှတ်ပြီးပြီ!",
+    mood: {
+      sleepy: "ဒီနေ့ ဘာမှ မမှတ်ရသေးဘူး။ တစ်ခုလောက် မှတ်ကြမလား။",
+      happy: "မှတ်ပြီးပြီ၊ အရှိန်လည်း ကောင်းတယ်။ တော်တယ်!",
+      proud: "တစ်ပတ်လုံး တစ်ရက်မှ မလွတ်ဘူး!",
+      worried: "ဒီနေ့ သတ်မှတ်ပမာဏ ကျော်သွားပြီ။ မနက်ဖြန် နည်းနည်း လျှော့ကြမယ်။"
+    }
+  }
+} as const;
+
 export const categoryTranslations: Record<string, string> = {
   Salary: "လစာ",
   Housing: "နေအိမ်",

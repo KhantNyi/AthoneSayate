@@ -233,25 +233,23 @@ export function MetricCard({
   format?: (value: number) => string;
 }) {
   const tones = {
-    moss: { chip: "bg-moss/12 text-moss", wash: "from-moss/[0.08]" },
-    river: { chip: "bg-river/12 text-river", wash: "from-river/[0.08]" },
-    coral: { chip: "bg-coral/12 text-coral", wash: "from-coral/[0.08]" }
+    moss: { icon: "text-moss", wash: "from-moss/[0.08]" },
+    river: { icon: "text-river", wash: "from-river/[0.08]" },
+    coral: { icon: "text-coral", wash: "from-coral/[0.08]" }
   };
 
   return (
     <article className="liquid-card relative overflow-hidden rounded-xl border border-ink/10 bg-white p-3 shadow-soft transition duration-300 hover:-translate-y-0.5 hover:shadow-lift sm:p-4">
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tones[tone].wash} to-transparent`} />
       <div className="relative">
-        <div className="mb-3 flex flex-wrap items-center gap-2 sm:justify-between">
-          <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tones[tone].chip}`}>
-            <Icon size={20} />
-          </span>
-          <span className="text-xs font-medium uppercase tracking-normal text-ink/45">{label}</span>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm text-ink/70">{label}</span>
+          <Icon size={16} className={`shrink-0 ${tones[tone].icon}`} />
         </div>
-        <p className="break-words font-display text-lg font-semibold sm:text-2xl">
+        <p className="break-words font-display text-2xl font-semibold sm:text-3xl">
           <AnimatedNumber value={value} format={formatValue} />
         </p>
-        <p className="mt-1 text-sm text-ink/55">{sub}</p>
+        <p className="mt-1.5 font-mono text-xs text-ink/55">{sub}</p>
       </div>
     </article>
   );

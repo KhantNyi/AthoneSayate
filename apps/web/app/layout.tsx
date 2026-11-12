@@ -1,16 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_Myanmar, Space_Grotesk } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_Myanmar } from "next/font/google";
 import "./globals.css";
+import "./skin.css";
 
-const inter = Inter({
+// One sans for body and headings (skin.css aliases --font-display to it),
+// plus a mono for labels, deltas and chart axes.
+const geist = Geist({
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap"
 });
 
-const spaceGrotesk = Space_Grotesk({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-display",
+  variable: "--font-mono",
   display: "swap"
 });
 
@@ -37,8 +40,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f8fc" },
-    { media: "(prefers-color-scheme: dark)", color: "#090d1a" }
+    { media: "(prefers-color-scheme: light)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" }
   ]
 };
 
@@ -46,7 +49,7 @@ const themeInitScript = `
 (function () {
   try {
     var stored = localStorage.getItem("athonesayate-theme");
-    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var dark = stored !== "light";
     if (dark) document.documentElement.classList.add("dark");
   } catch (e) {}
 })();
@@ -61,7 +64,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${notoSansMyanmar.variable}`}
+      className={`${geist.variable} ${geistMono.variable} ${notoSansMyanmar.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

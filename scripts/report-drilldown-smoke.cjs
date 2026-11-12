@@ -104,17 +104,21 @@ const fixture = {
         const activateMonth = async (monthKey, target, key) => {
           const locator = page.locator(`[data-report-month="${monthKey}"][data-report-target="${target}"]`);
           await locator.scrollIntoViewIfNeeded();
-          const before = await page.evaluate(() => ({ y: scrollY, scrolls: window.reportTransactionScrolls }));
+          const before = await page.evaluate(() => ({ scrolls: window.reportTransactionScrolls }));
+          // Measure where the graph sits on screen: a cleared filter chip above it changes
+          // the scroll offset, and the browser compensates to keep the graph in place.
+          const graphTop = () => page.locator('[data-report-target="label"]').first().evaluate(node => node.getBoundingClientRect().top);
+          const topBefore = await graphTop();
           const choices = await page.locator('[data-report-target="label"]').evaluateAll(nodes => nodes.map(node => node.dataset.reportMonth));
           await activate(locator, key);
           await page.waitForFunction(monthKey => document.querySelector(`[data-report-month="${monthKey}"]`)?.getAttribute('aria-pressed') === 'true', monthKey);
           await assertMonthHighlight(monthKey);
           assert.deepEqual(await page.locator('[data-report-target="label"]').evaluateAll(nodes => nodes.map(node => node.dataset.reportMonth)), choices,
             'Changing months within the graph must preserve the six choices so users can switch back');
-          const after = await page.evaluate(() => ({ y: scrollY, scrolls: window.reportTransactionScrolls, focus: document.activeElement?.id }));
+          const after = await page.evaluate(() => ({ scrolls: window.reportTransactionScrolls, focus: document.activeElement?.id }));
           assert.equal(after.scrolls, before.scrolls, 'Month selection must not request a transaction-list scroll');
           assert.notEqual(after.focus, 'report-transactions-title', 'Month selection must not move focus to transactions');
-          assert(Math.abs(after.y - before.y) < 2, 'Month selection must stay at the graph');
+          assert(Math.abs(await graphTop() - topBefore) < 2, 'Month selection must stay at the graph');
         };
         const clear = () => details.getByRole('button', { name: 'Clear filters', exact: true }).click();
         await month.fill('2026-01');

@@ -227,6 +227,8 @@ export function useAppState() {
   const [transactionDrafts, setTransactionDrafts] = useState<Record<string, TransactionDraft>>({});
   const [lastRecurringPayment, setLastRecurringPayment] = useState<LastRecurringPayment | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Bumped on every successful quick add; the companion plays a reward for it.
+  const [celebration, setCelebration] = useState(0);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [syncState, setSyncState] = useState<SyncState>({ online: true, pending: 0, syncing: false });
   const [usingCachedData, setUsingCachedData] = useState(false);
@@ -661,20 +663,20 @@ export function useAppState() {
   const ui = uiTranslations[language];
   const isDark = theme === "dark";
   const chart = useMemo(() => ({
-    expense: isDark ? "#ff6e54" : "#ea4c2e",
-    income: isDark ? "#3ec874" : "#16a34a",
-    grid: isDark ? "rgba(226,233,246,0.08)" : "rgba(23,32,51,0.08)",
+    expense: isDark ? "#f5c04a" : "#b47406",
+    income: isDark ? "#5bd89a" : "#159452",
+    grid: isDark ? "rgba(255,255,255,0.07)" : "rgba(17,17,17,0.07)",
     tooltip: {
       contentStyle: {
-        background: isDark ? "#1b2542" : "#ffffff",
-        border: isDark ? "1px solid rgba(226,233,246,0.14)" : "1px solid rgba(23,32,51,0.08)",
+        background: isDark ? "#1a1a1a" : "#ffffff",
+        border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(17,17,17,0.1)",
         borderRadius: 12,
         boxShadow: isDark ? "0 16px 40px rgba(0,0,0,0.5)" : "0 16px 40px rgba(15,23,42,0.14)",
-        color: isDark ? "#e2e9f6" : "#172033",
+        color: isDark ? "#ededed" : "#111111",
         fontSize: 13
       },
-      labelStyle: { color: isDark ? "#e2e9f6" : "#172033", fontWeight: 600 },
-      itemStyle: { color: isDark ? "#e2e9f6" : "#172033" }
+      labelStyle: { color: isDark ? "#ededed" : "#111111", fontWeight: 600 },
+      itemStyle: { color: isDark ? "#ededed" : "#111111" }
     }
   }), [isDark]);
 
@@ -925,6 +927,7 @@ export function useAppState() {
 
     if (saved) {
       setQuickAddOpen(false);
+      setCelebration((count) => count + 1);
       setDataNotice(savedType === "income" ? "Income recorded." : "Expense recorded.");
     }
   }
@@ -1787,6 +1790,7 @@ export function useAppState() {
     handleQuickAdd,
     quickAddOpen,
     setQuickAddOpen,
+    celebration,
     editingTransactionId,
     startEditingTransaction,
     cancelEditingTransaction,

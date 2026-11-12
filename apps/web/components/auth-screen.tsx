@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { ArrowLeft, CircleAlert, Loader2, WalletCards } from "lucide-react";
+import { ArrowLeft, CircleAlert, Loader2 } from "lucide-react";
+import { Mascot } from "./companion";
 import { sendPasswordReset, signInWithPassword, signUpWithPassword } from "@athonesayate/shared/supabase";
 
 type Mode = "signIn" | "signUp" | "reset";
@@ -76,7 +77,7 @@ export function AuthScreen({ onBack, initialMode = "signIn" }: { onBack?: () => 
   };
 
   return (
-    <main className="liquid-ui grid min-h-screen place-items-center px-5 py-12 text-ink">
+    <main className="liquid-ui app-shell auth-shell grid min-h-screen place-items-center px-5 py-12 text-ink">
       <div className="w-full max-w-sm">
         {onBack ? (
           <button
@@ -89,10 +90,8 @@ export function AuthScreen({ onBack, initialMode = "signIn" }: { onBack?: () => 
           </button>
         ) : null}
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
-            <WalletCards size={26} />
-          </div>
-          <p className="mt-4 bg-gradient-to-r from-river to-indigo-500 bg-clip-text font-display text-2xl font-bold tracking-tight text-transparent">
+          <Mascot mood="happy" size={72} />
+          <p className="mt-3 font-display text-2xl font-semibold tracking-tight text-ink">
             athonesayate
           </p>
           <h1 className="mt-5 font-display text-xl font-semibold">{titles[mode]}</h1>

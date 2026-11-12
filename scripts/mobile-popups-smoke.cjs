@@ -36,7 +36,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       assert(title.y >= top && title.bottom <= top + height, `${name} title must be visible without tapping again`);
       assert(!['INPUT', 'SELECT', 'TEXTAREA'].includes(opening.focusTag), `${name} must not summon a keyboard or picker on opening`);
       assert(await dialog.evaluate(node => document.activeElement === document.getElementById(node.getAttribute('aria-labelledby'))), `${name} must start with focus on its title`);
-      await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
+      // Looping decoration (the mascot in the sign-up prompt) never finishes; wait for the opening motion only.
+      await dialog.evaluate(node => Promise.all(node.getAnimations({ subtree: true }).filter(animation => animation.effect.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
       return dialog;
     };
     const keyboardCheck = async (dialog, controls) => {

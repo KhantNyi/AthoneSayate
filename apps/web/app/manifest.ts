@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "any",
-    background_color: "#f6f8fc",
-    theme_color: "#f6f8fc",
+    background_color: "#0a0a0a",
+    theme_color: "#0a0a0a",
     shortcuts: [
       {
         name: "Add expense",

@@ -1,0 +1,377 @@
+/* App skin: near-black canvas, hairline cards, quiet sans with mono
+   accents, and thin luminous data lines.
+
+   Loaded after globals.css, so at equal specificity these rules win. It
+   restyles the existing liquid-* / ios-* hooks instead of renaming them.
+   The landing site does not import this file.
+
+   Motion uses transform and opacity only. */
+
+:root {
+  --font-display: var(--font-body);
+  --paper: 250 250 250;
+  --surface: 255 255 255;
+  --ink: 17 17 17;
+  --river: 37 99 235;
+  --moss: 21 148 82;
+  --amber: 180 116 6;
+  --coral: 214 62 52;
+  --sun: 217 150 10;
+  --violet: 124 92 220;
+  --pink: 214 72 140;
+  --hairline: rgb(17 17 17 / 0.09);
+  --hairline-strong: rgb(17 17 17 / 0.16);
+  --fill-quiet: rgb(17 17 17 / 0.035);
+  --fill-active: rgb(17 17 17 / 0.06);
+  --chrome: 252 252 252;
+  --line-glow: transparent;
+}
+.dark {
+  --paper: 10 10 10;
+  --surface: 18 18 18;
+  --ink: 237 237 237;
+  --river: 108 160 246;
+  --moss: 91 216 154;
+  --amber: 245 192 74;
+  --coral: 244 114 110;
+  --sun: 245 192 74;
+  --violet: 165 134 240;
+  --pink: 236 111 168;
+  --hairline: rgb(255 255 255 / 0.08);
+  --hairline-strong: rgb(255 255 255 / 0.16);
+  --fill-quiet: rgb(255 255 255 / 0.03);
+  --fill-active: rgb(255 255 255 / 0.07);
+  --chrome: 13 13 13;
+  --line-glow: rgb(245 192 74 / 0.55);
+}
+
+/* ---------- Canvas and surfaces ---------- */
+
+.app-shell.liquid-ui::before { background: none; }
+
+.app-shell :is(.liquid-panel, .liquid-card) {
+  border: 1px solid var(--hairline);
+  border-radius: 1rem;
+  background: rgb(var(--surface));
+  box-shadow: none;
+}
+.app-shell :is(.liquid-panel, .liquid-card)::before,
+.app-shell :is(.liquid-panel, .liquid-card)::after { content: none; }
+/* Metric cards carried a colour wash; the number is the colour now. */
+.app-shell .liquid-card > .pointer-events-none.absolute.inset-0 { display: none; }
+.app-shell a.liquid-card:hover, .app-shell button.liquid-card:hover, .app-shell article.liquid-card:hover {
+  border-color: var(--hairline-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Anything boxed inside a panel sits one quiet step up from it. */
+.app-shell .liquid-panel .liquid-card,
+.app-shell .liquid-panel :is(.rounded-xl, .rounded-lg).border:not(button):not(input):not(select):not(label) {
+  border-color: var(--hairline);
+  border-radius: 0.75rem;
+  background: var(--fill-quiet);
+}
+
+.app-shell .liquid-chrome {
+  background: rgb(var(--chrome));
+  border-right: 1px solid var(--hairline);
+  box-shadow: none;
+}
+.app-shell .liquid-chrome::before { content: none; }
+
+.app-shell .liquid-control {
+  border-width: 1px;
+  border-color: var(--hairline);
+  border-radius: 0.625rem;
+  background-image: none;
+  box-shadow: none;
+}
+.app-shell .liquid-control::before { content: none; }
+.app-shell .liquid-control.bg-white { background-color: var(--fill-quiet); }
+
+.app-shell :is(.ios-tabbar, .ios-popover, .liquid-sheet, .liquid-menu, .liquid-toast, .liquid-topbar) {
+  border: 1px solid var(--hairline-strong);
+  background: rgb(var(--surface));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+}
+.app-shell :is(.ios-tabbar, .ios-popover, .liquid-sheet, .liquid-menu, .liquid-toast)::before { content: none; }
+.app-shell :is(.liquid-sheet, .ios-popover) { border-radius: 1.25rem; }
+.app-shell .liquid-toast { border-radius: 0.75rem; }
+@media (max-width: 639px) {
+  .app-shell .glass-dialog:not(.glass-dialog-centered) > .liquid-sheet {
+    border-bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+.app-shell .glass-dialog::backdrop { background: rgb(0 0 0 / 0.62); }
+
+/* Tinted callouts (demo banner, alerts) become quiet hairline strips. */
+.app-shell :is(.bg-river\/5, .bg-river\/10):not(button):not(span) { background-color: var(--fill-quiet); }
+.app-shell .border-river\/25, .app-shell .border-river\/15 { border-color: var(--hairline); }
+
+/* ---------- Type ---------- */
+
+.app-shell :is(h1, h2, h3) { font-weight: 500; letter-spacing: -0.01em; }
+.app-shell h1 { letter-spacing: -0.025em; }
+.app-shell h2 { color: rgb(var(--ink) / 0.82); }
+.app-shell .font-display { letter-spacing: -0.02em; }
+
+.app-shell .font-mono,
+.app-shell .uppercase,
+.app-shell .recharts-text {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+.app-shell .uppercase {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+.app-shell .recharts-text { font-size: 11px; fill: rgb(var(--ink) / 0.45); }
+[lang="my"].app-shell .uppercase { font-family: inherit; letter-spacing: 0; font-size: 0.75rem; }
+
+.side-label {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  color: rgb(var(--ink) / 0.5);
+}
+
+/* ---------- Buttons ---------- */
+
+.app-shell :is(button, a)[class~="from-river"],
+.app-shell .btn-primary {
+  border: 0;
+  border-radius: 0.625rem;
+  background: rgb(var(--ink));
+  color: rgb(var(--paper));
+  font-weight: 600;
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .app-shell :is(button, a)[class~="from-river"]:hover,
+  .app-shell .btn-primary:hover { filter: none; opacity: 0.88; }
+}
+.app-shell button:not(:disabled):not([aria-disabled="true"]):active { scale: 0.97; }
+
+/* Solid accent buttons elsewhere (e.g. "Quick add" on Transactions). */
+.app-shell button.bg-river:not([aria-pressed]) { background: rgb(var(--ink)); color: rgb(var(--paper)); }
+
+.app-shell button.rounded-full[aria-pressed] { border-width: 1px; font-weight: 500; box-shadow: none; }
+.app-shell button.rounded-full[aria-pressed="false"] { border-color: var(--hairline-strong); }
+
+.app-shell .liquid-fab {
+  border: 0;
+  background: rgb(var(--ink));
+  color: rgb(var(--paper));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+.app-shell .liquid-fab::before { content: none; }
+.app-shell .liquid-fab .glass-light-clip { display: none; }
+.app-shell .liquid-fab svg { transition: transform 320ms var(--ease-spring); }
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .liquid-fab:hover svg { transform: rotate(90deg); }
+}
+
+/* ---------- Fields ---------- */
+
+.app-shell :is(input, select, textarea):not([class~="bg-transparent"]):not([type="checkbox"]):not([type="radio"]) {
+  border-color: var(--hairline-strong);
+  border-radius: 0.625rem;
+  background-color: var(--fill-quiet);
+  box-shadow: none;
+  transition: border-color 140ms ease-out;
+}
+.app-shell :is(input, select, textarea):not([class~="bg-transparent"]):focus { border-color: rgb(var(--ink) / 0.5); }
+.app-shell :is(button, a, input, select, textarea, [tabindex]):focus-visible { outline-color: rgb(var(--ink) / 0.7); }
+.app-shell input[class~="bg-transparent"]:focus-visible { outline: none; }
+.dark .app-shell :is(select, input[type="date"], input[type="month"]) { color-scheme: dark; }
+
+/* ---------- Navigation ---------- */
+
+.app-shell .glass-nav-indicator,
+.app-shell .glass-sidebar-track > .glass-nav-indicator {
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  background: var(--fill-active);
+  box-shadow: none;
+}
+.app-shell .glass-sidebar-item { border-radius: 0.625rem; font-weight: 500; color: rgb(var(--ink) / 0.72); }
+.app-shell .glass-sidebar-item svg { color: rgb(var(--ink) / 0.5); }
+.app-shell .glass-sidebar-item[aria-current="page"],
+.app-shell .glass-sidebar-item:hover { color: rgb(var(--ink)); }
+.app-shell .glass-sidebar-item[aria-current="page"] svg { color: rgb(var(--ink)); }
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .glass-sidebar-item:hover:not([aria-current="page"]) { background-color: var(--fill-quiet); }
+}
+
+.app-shell .ios-tabbar { border-radius: 1.25rem; }
+.app-shell .ios-tabbar .glass-nav-indicator { border-radius: 0.875rem; }
+.app-shell .ios-tab-item { border-radius: 0.875rem; color: rgb(var(--ink) / 0.5); font-weight: 500; }
+/* Geist runs wider than the old face: keep "Transactions" whole at 360px. */
+.app-shell .ios-tab-item { padding-inline: 0.125rem; font-size: 0.625rem; letter-spacing: -0.02em; }
+[lang="my"].app-shell .ios-tab-item { letter-spacing: 0; }
+.app-shell .ios-tab-active { color: rgb(var(--ink)); }
+.app-shell .ios-tab-active svg { animation: skin-pop 380ms var(--ease-spring); }
+.app-shell .glass-light { display: none; }
+.app-shell .ios-popover .bg-river\/10 { background-color: var(--fill-active); color: rgb(var(--ink)); }
+
+/* ---------- Data ---------- */
+
+.app-shell :is(.h-2, .h-2\.5, .h-3).overflow-hidden.rounded-full { height: 0.375rem; background-color: rgb(var(--ink) / 0.08); }
+.app-shell :is(.h-2, .h-2\.5, .h-3).overflow-hidden.rounded-full > div,
+.app-shell .quest-bar > div { transition: width 700ms var(--ease-glide); }
+.app-shell .quest-bar { height: 0.25rem; background-color: rgb(var(--ink) / 0.08); }
+
+/* Hairline horizontal rules only; the curve carries the chart. */
+.app-shell .recharts-cartesian-grid-vertical { display: none; }
+.app-shell .recharts-cartesian-grid-horizontal line { stroke: rgb(var(--ink) / 0.07); stroke-dasharray: none; }
+.app-shell .recharts-area-curve,
+.app-shell .recharts-line-curve {
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 6px var(--line-glow));
+}
+.app-shell .recharts-area-area { opacity: 0.35; }
+
+/* ---------- Screen changes ---------- */
+
+.app-shell .animate-tab-in { animation: skin-screen-in 280ms var(--ease-glide) both; }
+.app-shell .pop-stagger > * { animation: skin-rise 420ms var(--ease-glide) both; }
+.app-shell .pop-stagger > :nth-child(2) { animation-delay: 45ms; }
+.app-shell .pop-stagger > :nth-child(3) { animation-delay: 90ms; }
+.app-shell .pop-stagger > :nth-child(4) { animation-delay: 135ms; }
+.app-shell .pop-stagger > :nth-child(n + 5) { animation-delay: 180ms; }
+
+@keyframes skin-screen-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes skin-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes skin-pop {
+  0% { transform: scale(0.82); }
+  55% { transform: translateY(-2px) scale(1.12); }
+  100% { transform: translateY(-1px) scale(1.04); }
+}
+
+/* ---------- Companion ---------- */
+
+.bg-sun { background-color: rgb(var(--sun)); }
+.bg-sun\/25 { background-color: rgb(var(--sun) / 0.14); }
+/* Amber darkened toward the ink so chip text stays readable on the light skin. */
+.app-shell .companion-card .bg-sun\/25 { color: color-mix(in srgb, rgb(var(--amber)) 78%, rgb(var(--ink))); }
+
+.speech-bubble {
+  position: relative;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: rgb(var(--surface));
+}
+.speech-bubble::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline-strong);
+  background: rgb(var(--surface));
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.app-shell .week-dot { border-width: 1px; border-color: var(--hairline-strong); }
+.app-shell .week-dot[data-logged] {
+  border-color: rgb(var(--sun) / 0.7);
+  background: rgb(var(--sun) / 0.12);
+  color: rgb(var(--sun));
+  box-shadow: 0 0 14px rgb(var(--sun) / 0.22);
+}
+.app-shell .week-dot.border-dashed { border-color: rgb(var(--ink) / 0.5); color: rgb(var(--ink) / 0.7); }
+.app-shell .quest-row > span:first-child { border-width: 1px; }
+
+.mascot-idle .mascot-body { transform-origin: 60px 106px; animation: mascot-breathe 3.2s ease-in-out infinite; }
+.mascot[data-mood="sleepy"].mascot-idle .mascot-body { animation-duration: 5s; }
+.mascot .mascot-coin { transform-origin: 60px 20px; animation: mascot-coin 1.6s var(--ease-spring) infinite; }
+.mascot .mascot-eyes { transform-origin: 60px 66px; animation: mascot-blink 4.6s infinite; }
+.streak-flame { transform-origin: 50% 90%; animation: flame-flicker 1.4s ease-in-out infinite; }
+.quest-check { animation: skin-pop 480ms var(--ease-spring) both; }
+
+@keyframes mascot-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.025, 0.975); }
+}
+@keyframes mascot-coin {
+  0%, 60%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-7px) rotate(12deg); }
+}
+@keyframes mascot-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  97% { transform: scaleY(0.1); }
+}
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) rotate(-3deg); }
+  50% { transform: scale(1.12) rotate(3deg); }
+}
+
+/* ---------- Celebration ---------- */
+
+.celebration { top: max(1rem, env(safe-area-inset-top)); }
+.celebration-banner {
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: rgb(var(--surface));
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.4);
+  animation: celebration-drop 2400ms var(--ease-spring) both;
+}
+.celebration-burst { position: absolute; left: 50%; top: 50%; }
+.confetti {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  animation: confetti-fly 1100ms cubic-bezier(0.16, 0.8, 0.3, 1) both;
+}
+@keyframes celebration-drop {
+  0% { opacity: 0; transform: translateY(-28px) scale(0.8); }
+  14% { opacity: 1; transform: translateY(0) scale(1); }
+  86% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.94); }
+}
+@keyframes confetti-fly {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(0.6); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 70px)) rotate(var(--rot)) scale(1); }
+}
+
+/* ---------- Auth screen ---------- */
+
+/* Shares the skin, but has no dock to clear. */
+.app-shell.auth-shell { padding-bottom: 3rem; }
+
+/* ---------- Scrollbars and preferences ---------- */
+
+::-webkit-scrollbar-thumb { background: rgb(var(--ink) / 0.16); }
+::selection { background: rgb(var(--ink) / 0.18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --hairline: rgb(17 17 17 / 0.4); --hairline-strong: rgb(17 17 17 / 0.6); }
+  .dark { --hairline: rgb(255 255 255 / 0.4); --hairline-strong: rgb(255 255 255 / 0.6); }
+}
+
+/* ---------- Small fixes ---------- */
+
+/* Segmented toggles (language) use the neutral fill, not the accent. */
+.app-shell .liquid-control button[aria-pressed="true"].bg-river { background: rgb(var(--ink)); color: rgb(var(--paper)); }
+/* A smaller add button covers less of the list on phones. */
+@media (max-width: 1279px) { .app-shell .liquid-fab { width: 3.5rem; height: 3.5rem; } }

@@ -6,6 +6,7 @@ import { format, isSameMonth, parseISO } from "date-fns";
 import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
 import { compactCurrency } from "@/lib/helpers";
 import { useApp } from "../app-context";
+import { CompanionCard } from "../companion";
 import { MonthCalendar } from "../month-calendar";
 import { ActivityStat, DashboardPanel, MetricCard } from "../ui";
 
@@ -77,7 +78,8 @@ export default function DashboardTab() {
     : `${Math.abs(expenseForecast.trendPercent).toFixed(0)}% ${expenseForecast.trendPercent >= 0 ? "above" : "below"} the recent weighted average.`;
 
   return (
-    <div className="grid gap-4">
+    <div className="pop-stagger grid gap-4">
+      <CompanionCard />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={monthTotals.income} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
         <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={monthTotals.expenses} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />

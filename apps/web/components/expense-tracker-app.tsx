@@ -5,10 +5,12 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { Modal } from "./modal";
 import { createPopupMotion, GlassLight, GlassNav, useAnimatedPresence } from "./glass-motion";
 import { PwaExperience } from "./pwa-experience";
-import { CheckCircle2, ChevronRight, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, WalletCards, X } from "lucide-react";
+import { CheckCircle2, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, X } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import { AppProvider } from "./app-context";
+import { Celebration, Mascot } from "./companion";
+import { compactCurrency } from "@/lib/helpers";
 import { navItems } from "./nav";
 import { QuickAddSheet } from "./quick-add-sheet";
 import { ActivityStat, DashboardMonthControl, DashboardSkeleton, LanguageToggle, StatusPill, TabSkeleton, ThemeToggle } from "./ui";
@@ -23,6 +25,8 @@ const BudgetsTab = dynamic(() => import("./tabs/budgets-tab"), { loading: () => 
 const RecurringTab = dynamic(() => import("./tabs/recurring-tab"), { loading: () => <TabSkeleton /> });
 const GoalsTab = dynamic(() => import("./tabs/goals-tab"), { loading: () => <TabSkeleton /> });
 const SettingsTab = dynamic(() => import("./tabs/settings-tab"), { loading: () => <TabSkeleton /> });
+
+const ACCOUNT_DOTS = ["rgb(var(--amber))", "rgb(var(--moss))", "rgb(var(--river))", "rgb(var(--pink))", "rgb(var(--violet))"];
 
 type ExpenseTrackerAppProps = {
   session: Session;
@@ -124,6 +128,8 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     };
   }, [mobileMoreOpen, setMobileMoreOpen]);
 
+  const headerMonth = activeTab === "dashboard" ? dashboardStatsMonth : new Date();
+
   const syncPill = !syncState.online || usingCachedData
     ? { tone: "amber" as const, label: syncState.pending > 0 ? `Offline - ${syncState.pending} queued` : "Offline" }
     : syncState.pending > 0
@@ -135,13 +141,8 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
       <main className="liquid-ui app-shell min-h-screen text-ink xl:grid xl:grid-cols-[16rem_minmax(0,1fr)]" lang={language === "my" ? "my" : "en"}>
         <aside className="liquid-chrome sticky top-0 z-20 hidden h-dvh min-h-0 min-w-0 w-64 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(8rem,1fr)_auto] overflow-x-hidden overflow-y-auto border-r border-ink/10 bg-white px-4 py-5 xl:grid">
           <div className="mb-7 flex min-w-0 items-center gap-3 px-2">
-            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
-              <WalletCards size={22} />
-            </div>
-            <div className="min-w-0">
-              <p className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text font-display text-lg font-bold tracking-tight text-transparent">athonesayate</p>
-              <p className="text-xs text-ink/55">{t.personalFinanceCockpit}</p>
-            </div>
+            <Mascot mood="happy" size={34} />
+            <p className="min-w-0 truncate font-display text-lg font-semibold tracking-tight text-ink">athonesayate</p>
           </div>
           <nav className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1" aria-label="Primary navigation">
             <GlassNav activeKey={activeTab} className="glass-sidebar-track grid gap-1 rounded-xl">
@@ -195,18 +196,21 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                 </button>
               </div>
             )}
-            <div className="liquid-card min-w-0 rounded-xl border border-ink/10 bg-white p-4 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-ink/55">{t.accountBalance}</span>
-                <ChevronRight className="shrink-0 text-ink/40" size={16} />
-              </div>
-              <p className="tnum mt-2 font-display text-xl font-semibold">
-                {currency.format(balances.reduce((sum, account) => sum + account.balance, 0))}
-              </p>
-              <div className="mt-7 flex items-center gap-2 text-xs text-ink/50">
-                <span className="size-2 rounded-full bg-moss" />
-                2m ago
-              </div>
+            <div className="min-w-0 border-t border-ink/10 pt-4">
+              <p className="side-label mb-2 px-2">{t.accounts}</p>
+              <ul className="grid gap-0.5">
+                {balances.map((account, index) => (
+                  <li key={account.id} className="flex items-center gap-3 px-2 py-1.5 text-sm">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: ACCOUNT_DOTS[index % ACCOUNT_DOTS.length] }} />
+                    <span className="min-w-0 flex-1 truncate text-ink/80">{account.name}</span>
+                    <span className="tnum shrink-0 font-mono text-xs text-ink/55">{compactCurrency(account.balance)}</span>
+                  </li>
+                ))}
+                <li className="mt-1 flex items-center justify-between gap-3 border-t border-ink/10 px-2 pt-2.5 text-sm">
+                  <span className="text-ink/55">{t.accountBalance}</span>
+                  <span className="tnum font-semibold">{currency.format(balances.reduce((sum, account) => sum + account.balance, 0))}</span>
+                </li>
+              </ul>
             </div>
           </div>
         </aside>
@@ -307,11 +311,12 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
           <PwaExperience />
           <header className="mb-5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_minmax(240px,1fr)_auto]">
             <div className="min-w-0">
-              <p className="hidden text-sm font-medium text-river sm:block">{format(new Date(), "MMMM yyyy")}</p>
-              <p className="text-xs font-semibold uppercase text-river sm:hidden">{t[activeNavItem.label]}</p>
-              <h1 className="font-display text-xl font-semibold text-ink sm:text-3xl xl:text-4xl">
-                <span className="bg-gradient-to-r from-river to-indigo-500 bg-clip-text text-transparent sm:hidden">athonesayate</span>
-                <span className="hidden sm:inline">{t.expenseTracker}</span>
+              <p className="mb-2 flex items-center gap-2 text-sm font-medium text-ink/80">
+                <activeNavItem.icon size={16} className="shrink-0 text-ink/50" />
+                {t[activeNavItem.label]}
+              </p>
+              <h1 className="font-display text-3xl text-ink sm:text-4xl">
+                {format(headerMonth, "MMMM")} <span className="text-ink/40">{format(headerMonth, "yyyy")}</span>
               </h1>
             </div>
             {activeTab === "dashboard" ? (
@@ -403,6 +408,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         </button>
 
         <QuickAddSheet />
+        <Celebration />
 
         {/* Why an action didn't go through. Floats so it reaches the user even
             when the form that failed is far up the page. */}
@@ -467,9 +473,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
         <Modal open={signUpPromptOpen} onClose={() => setSignUpPromptOpen(false)} labelledBy="signup-prompt-title" centered>
           <div className="liquid-sheet liquid-scroll w-full max-w-sm overflow-y-auto rounded-2xl border p-6 shadow-lift">
-            <div className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-river to-indigo-500 text-bright shadow-glow">
-              <WalletCards size={22} />
-            </div>
+            <Mascot mood="happy" size={56} />
             <h2 id="signup-prompt-title" className="mt-4 font-display text-lg font-semibold">Create an account to save this</h2>
             <p className="mt-2 text-sm text-ink/60">
               You&apos;re exploring with sample data. Sign up to start tracking your own spending — it takes a few seconds,
