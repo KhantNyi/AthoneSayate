@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, endOfMonth, format, startOfWeek, subDays } from "date-fns";
+import { addDays, differenceInCalendarDays, endOfMonth, format, parseISO, startOfWeek, subDays } from "date-fns";
 import type { Transaction } from "@athonesayate/shared/types";
 
 /**
@@ -22,8 +22,24 @@ export type Quest = {
 
 export type WeekDay = { date: string; logged: boolean; isToday: boolean; isFuture: boolean };
 
+export type AchievementId = "firstLog" | "streak3" | "streak7" | "streak30" | "days100" | "entries50" | "entries250" | "level5";
+
+export type Achievement = { id: AchievementId; progress: number; target: number; done: boolean };
+
+/** One cell of the activity map. `level` buckets the entry count: 0 none, 1 light, 2 steady, 3 busy. */
+export type ActivityDay = { date: string; entries: number; level: 0 | 1 | 2 | 3; isToday: boolean; isFuture: boolean };
+
 export type CompanionState = {
   streak: number;
+  /** Longest run of consecutive logged days, ever. */
+  bestStreak: number;
+  daysLogged: number;
+  totalEntries: number;
+  /** Earliest logged day (yyyy-MM-dd), if any. */
+  firstLoggedOn: string | null;
+  /** Whole weeks, Monday first, oldest first, ending with the current week. */
+  activity: ActivityDay[];
+  achievements: Achievement[];
   loggedToday: boolean;
   todaySpent: number;
   /** False when no income is recorded this month, so there is nothing to measure today against. */
@@ -43,6 +59,7 @@ const XP_PER_LOGGED_DAY = 10;
 const XP_PER_ENTRY = 2;
 const MAX_ENTRIES_COUNTED_PER_DAY = 5;
 export const WEEK_RHYTHM_TARGET = 5;
+export const ACTIVITY_WEEKS = 15;
 
 const dayKey = (date: Date) => format(date, "yyyy-MM-dd");
 
@@ -123,16 +140,60 @@ export function buildCompanionState({
         : "happy";
 
   const intoLevel = xp % XP_PER_LEVEL;
+  const level = Math.floor(xp / XP_PER_LEVEL) + 1;
+
+  const loggedDays = [...entriesByDay.keys()].sort();
+  let bestStreak = 0;
+  let run = 0;
+  let previous = "";
+  let totalEntries = 0;
+  for (const day of loggedDays) {
+    run = previous && dayKey(addDays(parseISO(previous), 1)) === day ? run + 1 : 1;
+    if (run > bestStreak) bestStreak = run;
+    previous = day;
+    totalEntries += entriesByDay.get(day) ?? 0;
+  }
+  const daysLogged = loggedDays.length;
+
+  const activityStart = subDays(weekStart, (ACTIVITY_WEEKS - 1) * 7);
+  const activity: ActivityDay[] = Array.from({ length: ACTIVITY_WEEKS * 7 }, (_, index) => {
+    const date = dayKey(addDays(activityStart, index));
+    const entries = entriesByDay.get(date) ?? 0;
+    return { date, entries, level: entries === 0 ? 0 : entries === 1 ? 1 : entries <= 3 ? 2 : 3, isToday: date === todayKey, isFuture: date > todayKey };
+  });
+
+  const achievement = (id: AchievementId, value: number, target: number): Achievement => ({
+    id,
+    progress: Math.min(value, target),
+    target,
+    done: value >= target
+  });
+  const achievements: Achievement[] = [
+    achievement("firstLog", daysLogged, 1),
+    achievement("streak3", bestStreak, 3),
+    achievement("streak7", bestStreak, 7),
+    achievement("streak30", bestStreak, 30),
+    achievement("entries50", totalEntries, 50),
+    achievement("entries250", totalEntries, 250),
+    achievement("days100", daysLogged, 100),
+    achievement("level5", level, 5)
+  ];
 
   return {
     streak,
+    bestStreak,
+    daysLogged,
+    totalEntries,
+    firstLoggedOn: loggedDays[0] ?? null,
+    activity,
+    achievements,
     loggedToday,
     todaySpent,
     allowanceKnown,
     week,
     quests,
     xp,
-    level: Math.floor(xp / XP_PER_LEVEL) + 1,
+    level,
     levelProgress: intoLevel / XP_PER_LEVEL,
     xpToNext: XP_PER_LEVEL - intoLevel,
     mood

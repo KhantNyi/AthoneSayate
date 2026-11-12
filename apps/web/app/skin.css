@@ -264,6 +264,7 @@
 
 .bg-sun { background-color: rgb(var(--sun)); }
 .bg-sun\/25 { background-color: rgb(var(--sun) / 0.14); }
+.text-sun { color: rgb(var(--sun)); }
 /* Amber darkened toward the ink so chip text stays readable on the light skin. */
 .app-shell .companion-card .bg-sun\/25 { color: color-mix(in srgb, rgb(var(--amber)) 78%, rgb(var(--ink))); }
 
@@ -296,6 +297,31 @@
 }
 .app-shell .week-dot.border-dashed { border-color: rgb(var(--ink) / 0.5); color: rgb(var(--ink) / 0.7); }
 .app-shell .quest-row > span:first-child { border-width: 1px; }
+
+/* The card header doubles as the way into the companion profile. */
+.companion-open { transition: background-color 160ms ease, transform 160ms var(--ease-spring); -webkit-tap-highlight-color: transparent; }
+.companion-open:active { transform: scale(0.985); }
+.companion-open:focus-visible { outline: 2px solid rgb(var(--river)); outline-offset: 2px; }
+.companion-open-chevron { transition: transform 200ms var(--ease-spring), color 160ms ease; }
+@media (hover: hover) {
+  .companion-open:hover { background-color: rgb(var(--ink) / 0.04); }
+  .companion-open:hover .companion-open-chevron { transform: translateX(3px); color: rgb(var(--ink) / 0.7); }
+}
+
+.activity-cell { display: block; border-radius: 3px; background: rgb(var(--ink) / 0.07); }
+.activity-cell[data-level="1"] { background: rgb(var(--sun) / 0.3); }
+.activity-cell[data-level="2"] { background: rgb(var(--sun) / 0.6); }
+.activity-cell[data-level="3"] { background: rgb(var(--sun)); }
+.activity-cell[data-today] { box-shadow: 0 0 0 1.5px rgb(var(--ink) / 0.55); }
+.activity-cell[data-future] { background: transparent; box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06); }
+
+.achievement-medal { background: rgb(var(--ink) / 0.05); color: rgb(var(--ink) / 0.35); }
+.achievement[data-done] { border-color: rgb(var(--sun) / 0.45); background: rgb(var(--sun) / 0.07); }
+.achievement[data-done] .achievement-medal {
+  background: rgb(var(--sun) / 0.2);
+  color: color-mix(in srgb, rgb(var(--amber)) 78%, rgb(var(--ink)));
+  box-shadow: 0 0 14px rgb(var(--sun) / 0.25);
+}
 
 .mascot-idle .mascot-body { transform-origin: 60px 106px; animation: mascot-breathe 3.2s ease-in-out infinite; }
 .mascot[data-mood="sleepy"].mascot-idle .mascot-body { animation-duration: 5s; }

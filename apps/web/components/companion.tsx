@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, Flame, Plus, Star, X } from "lucide-react";
+import { Award, BookOpen, CalendarCheck, CalendarDays, Check, ChevronRight, Coins, Crown, Flame, Lock, Plus, Receipt, Star, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { parseISO } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import { companionTranslations } from "@/lib/i18n";
-import { buildCompanionState, type CompanionMood, type Quest } from "@/lib/quests";
+import { ACTIVITY_WEEKS, buildCompanionState, type AchievementId, type CompanionMood, type CompanionState, type Quest } from "@/lib/quests";
 import { useApp } from "./app-context";
+import { Modal } from "./modal";
 
 const POT = "#E8744F";
 const POT_DARK = "#C9573A";
@@ -127,6 +128,7 @@ export function CompanionCard() {
   const { language, setQuickAddOpen } = useApp();
   const c = companionTranslations[language];
   const state = useCompanion();
+  const [profileOpen, setProfileOpen] = useState(false);
   const weekdayFormat = useMemo(() => new Intl.DateTimeFormat(language === "my" ? "my" : "en", { weekday: "narrow" }), [language]);
 
   const questLabel: Record<Quest["id"], string> = {
@@ -148,11 +150,17 @@ export function CompanionCard() {
     <section className="liquid-panel companion-card min-w-0 p-4 sm:p-5" aria-label={c.name}>
       <div className="grid gap-5 lg:grid-cols-2 lg:gap-8">
         <div className="grid content-start gap-4">
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            aria-label={c.openProfile}
+            aria-haspopup="dialog"
+            className="companion-open group -m-2 flex items-center gap-3 rounded-2xl p-2 text-left"
+          >
             <Mascot mood={state.mood} size={92} className="mascot-idle" />
-            <div className="min-w-0 flex-1">
-              <p className="speech-bubble text-sm font-medium leading-snug text-ink">{c.mood[state.mood]}</p>
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span className="block min-w-0 flex-1">
+              <span className="speech-bubble block text-sm font-medium leading-snug text-ink">{c.mood[state.mood]}</span>
+              <span className="mt-2.5 flex flex-wrap items-center gap-2">
                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-semibold ${state.streak > 0 ? "bg-amber/15 text-amber" : "bg-ink/5 text-ink/55"}`}>
                   <Flame size={16} strokeWidth={2.8} className={state.streak > 0 ? "streak-flame" : undefined} />
                   <span className="tnum">{state.streak}</span>
@@ -162,9 +170,10 @@ export function CompanionCard() {
                   <Star size={15} strokeWidth={2.8} />
                   {c.level} <span className="tnum">{state.level}</span>
                 </span>
-              </div>
-            </div>
-          </div>
+              </span>
+            </span>
+            <ChevronRight size={18} strokeWidth={2.6} className="companion-open-chevron shrink-0 text-ink/35" aria-hidden />
+          </button>
 
           <ol className="grid grid-cols-7 gap-1.5" aria-label={c.thisWeek}>
             {state.week.map((day) => (
@@ -218,7 +227,158 @@ export function CompanionCard() {
           ) : null}
         </div>
       </div>
+      <CompanionProfile open={profileOpen} onClose={() => setProfileOpen(false)} state={state} />
     </section>
+  );
+}
+
+const ACHIEVEMENT_ICON: Record<AchievementId, LucideIcon> = {
+  firstLog: Coins,
+  streak3: Flame,
+  streak7: CalendarCheck,
+  streak30: Trophy,
+  entries50: BookOpen,
+  entries250: Award,
+  days100: CalendarDays,
+  level5: Crown
+};
+
+/** Expanded view of the companion: lifetime stats, recent activity and achievements. */
+function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: () => void; state: CompanionState }) {
+  const { language } = useApp();
+  const c = companionTranslations[language];
+  const locale = language === "my" ? "my" : "en";
+  const dayFormat = useMemo(() => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }), [locale]);
+  const sinceFormat = useMemo(() => new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric" }), [locale]);
+  const unlocked = state.achievements.filter((item) => item.done).length;
+  // Earned first, then whichever locked one is closest.
+  const achievements = [...state.achievements].sort(
+    (a, b) => Number(b.done) - Number(a.done) || b.progress / b.target - a.progress / a.target
+  );
+  const stats: { icon: LucideIcon; label: string; value: number; unit?: string; tone: string }[] = [
+    { icon: Flame, label: c.statStreak, value: state.streak, unit: c.days, tone: "text-amber" },
+    { icon: Trophy, label: c.statBest, value: state.bestStreak, unit: c.days, tone: "text-sun" },
+    { icon: CalendarCheck, label: c.statDays, value: state.daysLogged, tone: "text-moss" },
+    { icon: Receipt, label: c.statEntries, value: state.totalEntries, tone: "text-river" }
+  ];
+
+  return (
+    <Modal open={open} onClose={onClose} labelledBy="companion-profile-title">
+      <div className="liquid-sheet liquid-scroll companion-card companion-profile w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink/10 p-5 shadow-lift sm:rounded-2xl">
+        <div className="flex items-start gap-3">
+          <Mascot mood={state.mood} size={84} className="mascot-idle" />
+          <div className="min-w-0 flex-1 pt-1">
+            <h2 id="companion-profile-title" className="font-display text-xl font-semibold leading-tight outline-none">{c.name}</h2>
+            <p className="mt-1 text-sm leading-snug text-ink/60">{c.mood[state.mood]}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={c.close}
+            className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-lg text-ink/60 transition hover:bg-ink/5 hover:text-ink"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-ink/10 p-3.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="inline-flex items-center gap-1.5 text-base font-semibold">
+              <Star size={16} strokeWidth={2.8} className="text-sun" />
+              {c.level} <span className="tnum">{state.level}</span>
+            </span>
+            <span className="tnum font-mono text-xs text-ink/55">{state.xp.toLocaleString()} {c.totalXp}</span>
+          </div>
+          <div className="quest-bar mt-2.5 overflow-hidden rounded-full bg-ink/10">
+            <div className="h-full rounded-full bg-sun" style={{ width: `${Math.max(state.levelProgress, 0.04) * 100}%` }} />
+          </div>
+          <p className="tnum mt-2 font-mono text-xs text-ink/55">{state.xpToNext} XP {c.toNextLevel}</p>
+        </div>
+
+        <h3 className="mb-2 mt-5 text-sm font-semibold">{c.stats}</h3>
+        <dl className="grid grid-cols-2 gap-2">
+          {stats.map(({ icon: Icon, label, value, unit, tone }) => (
+            <div key={label} className="rounded-xl border border-ink/10 p-3">
+              <dt className="flex items-center gap-1.5 text-xs font-medium text-ink/55">
+                <Icon size={14} strokeWidth={2.6} className={tone} />
+                {label}
+              </dt>
+              <dd className="mt-1 text-2xl font-semibold leading-none">
+                <span className="tnum">{value.toLocaleString()}</span>
+                {unit ? <span className="ml-1 text-xs font-medium text-ink/50">{unit}</span> : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {state.firstLoggedOn ? (
+          <p className="mt-2 text-xs text-ink/50">{c.since} {sinceFormat.format(parseISO(state.firstLoggedOn))}</p>
+        ) : null}
+
+        <div className="mb-2 mt-5 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">{c.activity}</h3>
+          <span className="flex items-center gap-1 text-[11px] text-ink/50" aria-hidden>
+            {c.less}
+            {[0, 1, 2, 3].map((level) => <span key={level} className="activity-cell size-2.5" data-level={level} />)}
+            {c.more}
+          </span>
+        </div>
+        <ol
+          className="activity-map grid grid-flow-col grid-rows-7 gap-[3px]"
+          style={{ gridTemplateColumns: `repeat(${ACTIVITY_WEEKS}, minmax(0, 1fr))` }}
+        >
+          {state.activity.map((day) => {
+            const label = `${dayFormat.format(parseISO(day.date))}: ${day.entries > 0 ? `${day.entries} ${c.entries}` : c.noEntries}`;
+            return (
+              <li
+                key={day.date}
+                className="activity-cell aspect-square"
+                data-level={day.level}
+                data-today={day.isToday || undefined}
+                data-future={day.isFuture || undefined}
+                title={day.isFuture ? undefined : label}
+                aria-label={day.isFuture ? undefined : label}
+                aria-hidden={day.isFuture || undefined}
+              />
+            );
+          })}
+        </ol>
+
+        <div className="mb-2 mt-5 flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-semibold">{c.achievements}</h3>
+          <span className="tnum font-mono text-xs text-ink/55">{unlocked} / {state.achievements.length} {c.unlocked}</span>
+        </div>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {achievements.map((item) => {
+            const Icon = ACHIEVEMENT_ICON[item.id];
+            const copy = c.achievement[item.id];
+            return (
+              <li key={item.id} className="achievement flex items-center gap-3 rounded-xl border border-ink/10 p-3" data-done={item.done || undefined}>
+                <span className="achievement-medal grid size-10 shrink-0 place-items-center rounded-full">
+                  {item.done ? <Icon size={18} strokeWidth={2.6} /> : <Lock size={15} strokeWidth={2.6} />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold leading-snug ${item.done ? "text-ink" : "text-ink/70"}`}>{copy.title}</p>
+                  <p className="text-xs leading-snug text-ink/55">{copy.detail}</p>
+                  {item.done ? null : (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="quest-bar min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+                        <div className="h-full rounded-full bg-river" style={{ width: `${(item.progress / item.target) * 100}%` }} />
+                      </div>
+                      <span className="tnum shrink-0 font-mono text-[11px] text-ink/50">{item.progress}/{item.target}</span>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-ink/50">
+          <Zap size={14} strokeWidth={2.6} className="mt-0.5 shrink-0 text-sun" />
+          {c.howXp}
+        </p>
+      </div>
+    </Modal>
   );
 }
 
