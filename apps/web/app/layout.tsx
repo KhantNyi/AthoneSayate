@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Noto_Sans_Myanmar } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import "./skin.css";
 
@@ -17,9 +18,11 @@ const geistMono = Geist_Mono({
   display: "swap"
 });
 
-const notoSansMyanmar = Noto_Sans_Myanmar({
-  subsets: ["myanmar"],
-  weight: ["400", "500", "600", "700"],
+// Self-hosted (variable weight, SIL OFL): Google Fonts now serves this family
+// from extension-less "kit" URLs that next/font/google cannot parse.
+const notoSansMyanmar = localFont({
+  src: "./fonts/noto-sans-myanmar-wght.woff2",
+  weight: "100 900",
   variable: "--font-myanmar",
   display: "swap"
 });
