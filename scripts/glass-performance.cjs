@@ -11,7 +11,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   fs.mkdirSync(output, { recursive: true });
   try {
     await page.goto(process.env.UI_URL || 'http://localhost:3100', { waitUntil: 'networkidle' });
-    for (const name of ['Transactions', 'Reports', 'Dashboard']) {
+    for (const name of ['Activity', 'Insights', 'Home']) {
       await page.locator('nav:visible').getByRole('button', { name, exact: true }).click();
       await page.waitForTimeout(400);
     }
@@ -33,12 +33,12 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       requestAnimationFrame(sample);
     });
     for (let i = 0; i < 3; i++) {
-      for (const name of ['Transactions', 'Reports', 'Dashboard']) {
+      for (const name of ['Activity', 'Insights', 'Home']) {
         await page.locator('nav:visible').getByRole('button', { name, exact: true }).click();
         await page.waitForTimeout(320);
       }
-      await page.getByRole('button', { name: 'More', exact: true }).click();
-      await page.waitForFunction(() => document.querySelector('#mobile-more-navigation').getAnimations().every(animation => animation.playState !== 'running'));
+      await page.getByRole('button', { name: 'Menu', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('#app-menu').getAnimations().every(animation => animation.playState !== 'running'));
       await page.keyboard.press('Escape');
       await page.waitForTimeout(180);
       await page.getByRole('button', { name: 'Quick add', exact: true }).click();

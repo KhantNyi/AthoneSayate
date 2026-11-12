@@ -19,7 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
-    await page.getByRole('button', { name: 'More', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
 
     fs.writeFileSync(workerPath, `${original}\n// smoke update ${Date.now()}\n`);
     await page.evaluate(async () => (await navigator.serviceWorker.ready).update());
@@ -29,16 +29,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       page.waitForEvent('load'),
       page.getByRole('button', { name: 'Update now', exact: true }).click()
     ]);
-    await page.getByRole('button', { name: 'More', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Update now', exact: true }).count(), 0);
 
     await context.setOffline(true);
     await page.reload({ waitUntil: 'load' });
-    await page.getByRole('button', { name: 'More', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
     await page.goto(`${base}/not-cached-offline-test`, { waitUntil: 'load' });
     await page.getByRole('heading', { name: "You're offline" }).waitFor();
     await page.getByRole('link', { name: 'Return to app' }).click();
-    await page.getByRole('button', { name: 'More', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
     console.log('PASS: manifest, worker activation, user-controlled update/reload, offline app reload, offline fallback and return.');
   } finally {
     fs.writeFileSync(workerPath, original);

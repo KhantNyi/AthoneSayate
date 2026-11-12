@@ -20,20 +20,30 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     // The development-only Next badge overlaps the first dock button at 360px.
     // Runtime errors are still collected above; production has no such badge.
     await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-    await page.getByRole('button', { name: 'More', exact: true }).waitFor();
-    const selectTab = async (name, mobile) => {
-      mobile = await page.locator('.ios-tabbar').isVisible();
-      if (mobile && ['Budgets', 'Recurring', 'Goals', 'Category'].includes(name)) {
-        await page.getByRole('button', { name: 'More', exact: true }).click();
-        const item = page.locator('#mobile-more-navigation').getByRole('button', { name, exact: true });
-        if (await item.count()) { await item.click(); return; }
-        await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Menu', exact: true }).waitFor();
+    const primaryNav = page.locator('nav[aria-label="Primary navigation"]:visible');
+    const selectTab = async name => {
+      if (name === 'Settings') {
+        // Below desktop the gear opens a menu; on desktop it goes straight there.
+        const menu = page.getByRole('button', { name: 'Menu', exact: true });
+        if (await menu.isVisible()) {
+          await menu.click();
+          await page.locator('#app-menu').getByRole('button', { name, exact: true }).click();
+        } else {
+          await page.getByRole('button', { name, exact: true }).click();
+        }
+        return;
       }
-      await page.locator('nav:visible').getByRole('button', { name, exact: true }).click();
+      if (['Budgets', 'Recurring', 'Goals'].includes(name)) {
+        await primaryNav.getByRole('button', { name: 'Plan', exact: true }).click();
+        await page.getByRole('navigation', { name: 'Plan', exact: true }).getByRole('button', { name, exact: true }).click();
+        return;
+      }
+      await primaryNav.getByRole('button', { name, exact: true }).click();
     };
     for (const width of [320, 360, 390, 768, 1280, 1600]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const tab of ['Dashboard', 'Transactions', 'Reports', 'Budgets', 'Recurring', 'Goals', 'Category']) {
+      for (const tab of ['Home', 'Activity', 'Insights', 'Budgets', 'Recurring', 'Goals', 'Settings']) {
         await selectTab(tab, width < 1280);
         await page.waitForTimeout(250);
         const editor = page.getByRole('button', { name: /^Edit (transaction|budget|goal|recurring|account|category)/ }).first();
@@ -46,15 +56,15 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         }).map(node => node.outerHTML.slice(0, 150)));
         assert.deepEqual(overflow, [], `${tab} form overflow at ${width}`);
       }
-      await selectTab('Dashboard', width < 1280);
+      await selectTab('Home', width < 1280);
       await page.waitForTimeout(1600); // Recharts animates in JS, independently of CSS motion.
       await page.screenshot({ path: `${output}/dashboard-${width}.png`, fullPage: true });
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await selectTab('Transactions', true);
+    await selectTab('Activity', true);
     assert.equal(await page.evaluate(() => window.scrollY), 0, 'Tab change must return to the top');
-    await selectTab('Dashboard', true);
+    await selectTab('Home', true);
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt', { cancelable: true });
       event.prompt = async () => { window.installPromptCalled = true; };
@@ -69,7 +79,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(landscapeSheet.y >= 0 && landscapeSheet.y + landscapeSheet.height <= 391, 'Landscape sheet exceeds viewport');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 844 });
-    const more = page.getByRole('button', { name: 'More', exact: true });
+    const more = page.getByRole('button', { name: 'Menu', exact: true });
     await more.click();
     await page.keyboard.press('Escape');
     assert.equal(await more.getAttribute('aria-expanded'), 'false');
@@ -93,7 +103,9 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.locator('dialog[open]').count(), 0);
     assert(await quickAdd.evaluate(node => node === document.activeElement));
     assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden');
-    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    await more.click();
+    await page.locator('#app-menu').getByRole('button', { name: 'Switch to dark mode' }).click();
+    await page.keyboard.press('Escape');
     await quickAdd.click();
     await page.screenshot({ path: `${output}/quick-add-dark.png` });
     await page.setViewportSize({ width: 390, height: 420 });
@@ -101,7 +113,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(rect.y >= 0 && rect.y + rect.height <= 421, 'Sheet exceeds short viewport');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 844 });
-    await selectTab('Reports', true);
+    await selectTab('Insights', true);
     await page.getByRole('button', { name: /^Filters/ }).click();
     const filters = page.getByRole('dialog', { name: 'Report filters' });
     await filters.waitFor();
@@ -112,13 +124,13 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.locator('dialog[open]').count(), 0);
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const tab of ['Dashboard', 'Transactions', 'Reports', 'Budgets', 'Recurring', 'Goals', 'Category']) {
+      for (const tab of ['Home', 'Activity', 'Insights', 'Budgets', 'Recurring', 'Goals', 'Settings']) {
         await selectTab(tab, width < 1280);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Dark ${tab} overflow`);
       }
     }
     await page.setViewportSize({ width: 390, height: 844 });
-    await selectTab('Dashboard', true);
+    await selectTab('Home', true);
     // Clearing the native month control must not turn state into an Invalid Date.
     await page.locator('input[type="month"]:visible').first().fill('');
     await quickAdd.click();
@@ -134,12 +146,12 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden');
     await more.click();
-    await page.locator('#mobile-more-navigation').getByRole('button', { name: 'မြန်မာ', exact: true }).click();
+    await page.locator('#app-menu').getByRole('button', { name: 'မြန်မာ', exact: true }).click();
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('main').getAttribute('lang'), 'my');
     await page.waitForTimeout(1600);
     await page.screenshot({ path: `${output}/dashboard-myanmar-dark.png`, fullPage: true });
-    await page.locator('.liquid-fab').click();
+    await page.locator('.dock-add').click();
     assert(await page.getByRole('dialog').isVisible());
     await page.screenshot({ path: `${output}/quick-add-myanmar-dark.png` });
     await page.keyboard.press('Escape');

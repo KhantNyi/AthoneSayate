@@ -70,7 +70,7 @@ const fixture = {
             return scrollIntoView.apply(this, args);
           };
         });
-        await page.locator('nav:visible').getByRole('button', { name: 'Reports', exact: true }).click();
+        await page.locator('nav:visible').getByRole('button', { name: 'Insights', exact: true }).click();
         const heading = page.locator('#report-transactions-title');
         const details = page.getByRole('region', { name: /transactions$/ });
         const month = page.locator('input[type="month"]:visible').first();

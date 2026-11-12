@@ -24,7 +24,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       };
       const seen = new WeakSet();
       new MutationObserver(() => {
-        for (const popup of document.querySelectorAll('dialog[open], #mobile-more-navigation')) {
+        for (const popup of document.querySelectorAll('dialog[open], #app-menu')) {
           for (const animation of popup.getAnimations({ subtree: true })) {
             if (seen.has(animation)) continue;
             seen.add(animation);
@@ -44,7 +44,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       return { sheet: sheet.getBoundingClientRect().toJSON(), dialog: node.getBoundingClientRect().toJSON(), opacity: Number(getComputedStyle(sheet).opacity), backdrop: node instanceof HTMLDialogElement ? Number(getComputedStyle(node, '::backdrop').opacity) : null };
     });
     const at = (popup, time) => popup.evaluate((node, ms) => node.getAnimations({ subtree: true }).forEach(animation => { animation.currentTime = ms; }), time);
-    const finish = popup => popup.evaluate(node => node.getAnimations({ subtree: true }).forEach(animation => animation.finish()));
+    // Looping decoration (the mascot's idle) has no end to skip to.
+    const finish = popup => popup.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => Number.isFinite(animation.effect.getComputedTiming().endTime)).forEach(animation => animation.finish()));
     const closed = () => page.waitForFunction(() => !document.querySelector('dialog[open]'));
     const open = async () => {
       await launcher.evaluate(node => { node.focus(); node.click(); });
@@ -165,8 +166,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await finish(dialog);
     await closed();
 
-    const moreButton = page.getByRole('button', { name: 'More', exact: true });
-    const more = page.locator('#mobile-more-navigation');
+    const moreButton = page.getByRole('button', { name: 'Menu', exact: true });
+    const more = page.locator('#app-menu');
     await moreButton.evaluate(node => node.click());
     assert(await paused(more));
     const moreFirst = await pose(more);

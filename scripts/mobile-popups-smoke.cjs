@@ -63,16 +63,16 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       });
     };
     const selectTab = async name => {
-      if (name === 'Category') {
-        await page.getByRole('button', { name: 'More', exact: true }).click();
-        await page.locator('#mobile-more-navigation').getByRole('button', { name, exact: true }).click();
+      if (name === 'Settings') {
+        await page.getByRole('button', { name: 'Menu', exact: true }).click();
+        await page.locator('#app-menu').getByRole('button', { name, exact: true }).click();
       } else {
         await page.locator('nav:visible').getByRole('button', { name, exact: true }).click();
       }
     };
     for (const width of [320, 390, 430, 844]) {
       await page.setViewportSize({ width, height: width === 844 ? 390 : 844 });
-      for (const tab of ['Reports', 'Category']) {
+      for (const tab of ['Insights', 'Settings']) {
         await selectTab(tab);
         const launcher = page.getByRole('button', { name: 'Export data', exact: true });
         await launcher.scrollIntoViewIfNeeded();
@@ -90,14 +90,14 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       }
       if (width < 768) {
-        await selectTab('Reports');
+        await selectTab('Insights');
         await page.getByRole('button', { name: /^Filters/ }).click();
         const dialog = await checkOpening('Report filters');
         await keyboardCheck(dialog, [dialog.getByRole('button', { name: 'Close report filters' }), dialog.getByRole('button', { name: 'Apply', exact: true })]);
         await page.keyboard.press('Escape');
         await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       }
-      await selectTab('Dashboard');
+      await selectTab('Home');
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       const scrollY = await page.evaluate(() => window.scrollY);
       await page.getByRole('button', { name: 'Quick add', exact: true }).click();

@@ -79,7 +79,7 @@ import {
   type RequirementFix,
   type ValidationResult
 } from "@/lib/validation";
-import { navItems, type TabKey } from "./nav";
+import { navItems, planTabs, type NavKey, type TabKey } from "./nav";
 import { applyReportDrilldown, createReportExpenseMatcher, NO_SUBCATEGORY, type ReportDrilldownTarget, type ReportFilterKey, type ReportFilters } from "@/lib/report-utils";
 
 type LastRecurringPayment = {
@@ -103,8 +103,13 @@ export function useAppState() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  // Picking a destination starts a fresh trail; following a link inside a
+  // screen extends it, which is what offers a way back.
+  const [tabHistory, setTabHistory] = useState<TabKey[]>(["dashboard"]);
+  const activeTab = tabHistory[tabHistory.length - 1];
+  const backTab: TabKey | undefined = tabHistory[tabHistory.length - 2];
+  const [lastPlanTab, setLastPlanTab] = useState<(typeof planTabs)[number]>("budgets");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataErrorRaw] = useState("");
@@ -255,7 +260,7 @@ export function useAppState() {
       }
       if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
-        setMobileMoreOpen(false);
+        setMenuOpen(false);
         setQuickAddOpen(true);
       }
     }
@@ -396,8 +401,10 @@ export function useAppState() {
   }, [visibleMonth]);
 
   useEffect(() => {
-    setMobileMoreOpen(false);
+    setMenuOpen(false);
     setMonthlyReportFiltersOpen(false);
+    const planTab = planTabs.find((tab) => tab === activeTab);
+    if (planTab) setLastPlanTab(planTab);
   }, [activeTab]);
 
   const visibleMonthKey = format(visibleMonth, "yyyy-MM");
@@ -693,10 +700,8 @@ export function useAppState() {
 
   const categoryLabel = (name?: string) => (language === "my" && name ? categoryTranslations[name] ?? name : name);
   const frequencyLabel = (value: string) => (language === "my" ? frequencyTranslations[value] ?? value : value);
-  const activeNavItem = navItems.find((item) => item.key === activeTab) ?? navItems[0];
-  const mobilePrimaryNavItems = navItems.filter((item) => ["dashboard", "transactions", "reports", "recurring"].includes(item.key));
-  const mobileMoreNavItems = navItems.filter((item) => ["budgets", "goals", "settings"].includes(item.key));
-  const mobileMoreActive = mobileMoreNavItems.some((item) => item.key === activeTab);
+  /** Empty on screens outside the main navigation, such as settings. */
+  const activeNavKey: NavKey | "" = navItems.find((item) => (item.tabs as readonly TabKey[]).includes(activeTab))?.key ?? "";
   const monthlyReportSelectedCategory = displayCategories.find((category) => category.id === monthlyReportCategoryId);
   const monthlyReportSelectedSubcategory = subcategories.find((subcategory) => subcategory.id === monthlyReportSubcategoryId);
   const monthlyReportSelectedAccount = accounts.find((account) => account.id === monthlyReportAccountId);
@@ -840,9 +845,27 @@ export function useAppState() {
     setSelectedDashboardDate("");
   }
 
+  /** Follow a link from inside a screen. The current screen stays reachable through `goBack`. */
   function chooseTab(tab: TabKey) {
-    setActiveTab(tab);
-    setMobileMoreOpen(false);
+    setTabHistory((history) => history[history.length - 1] === tab ? history : [...history, tab]);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  /** Jump straight to a screen from the navigation. Nothing to go back to afterwards. */
+  function navigateTab(tab: TabKey) {
+    setTabHistory([tab]);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function openNav(key: NavKey) {
+    navigateTab(key === "plan" ? lastPlanTab : key);
+  }
+
+  function goBack() {
+    setTabHistory((history) => history.length > 1 ? history.slice(0, -1) : history);
+    setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -855,7 +878,7 @@ export function useAppState() {
     setMonthlyReportAccountId("all");
     setMonthlyReportRecurringFilter("all");
     setMonthlyReportQuery("");
-    setActiveTab("reports");
+    chooseTab("reports");
     window.requestAnimationFrame(() => document.getElementById("reports")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
@@ -1659,14 +1682,14 @@ export function useAppState() {
     quickAddSubcategories,
     // shell / nav
     activeTab,
-    setActiveTab,
+    activeNavKey,
+    backTab,
+    goBack,
     chooseTab,
-    activeNavItem,
-    mobilePrimaryNavItems,
-    mobileMoreNavItems,
-    mobileMoreActive,
-    mobileMoreOpen,
-    setMobileMoreOpen,
+    navigateTab,
+    openNav,
+    menuOpen,
+    setMenuOpen,
     language,
     setLanguage,
     theme,

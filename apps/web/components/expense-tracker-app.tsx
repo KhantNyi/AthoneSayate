@@ -5,15 +5,14 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { Modal } from "./modal";
 import { createPopupMotion, GlassLight, GlassNav, useAnimatedPresence } from "./glass-motion";
 import { PwaExperience } from "./pwa-experience";
-import { CheckCircle2, CircleAlert, CloudOff, LogIn, LogOut, MoreHorizontal, Plus, RefreshCw, X } from "lucide-react";
-import { endOfMonth, format } from "date-fns";
+import { ArrowLeft, CheckCircle2, CircleAlert, CloudOff, LogIn, LogOut, Plus, RefreshCw, Settings, X } from "lucide-react";
 import { currency } from "@athonesayate/shared/metrics";
 import { AppProvider } from "./app-context";
 import { Celebration, Mascot } from "./companion";
 import { compactCurrency } from "@/lib/helpers";
-import { navItems } from "./nav";
+import { navItems, planTabs, tabs } from "./nav";
 import { QuickAddSheet } from "./quick-add-sheet";
-import { ActivityStat, DashboardMonthControl, DashboardSkeleton, LanguageToggle, StatusPill, TabSkeleton, ThemeToggle } from "./ui";
+import { ActivityStat, DashboardMonthControl, DashboardSkeleton, LanguageToggle, TabSkeleton, ThemeToggle } from "./ui";
 import { useAppState } from "./use-app-state";
 import type { Session } from "./use-session";
 
@@ -43,13 +42,14 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
     theme,
     toggleTheme,
     activeTab,
+    activeNavKey,
     chooseTab,
-    activeNavItem,
-    mobilePrimaryNavItems,
-    mobileMoreNavItems,
-    mobileMoreActive,
-    mobileMoreOpen,
-    setMobileMoreOpen,
+    navigateTab,
+    openNav,
+    backTab,
+    goBack,
+    menuOpen,
+    setMenuOpen,
     balances,
     isLoading,
     dataError,
@@ -74,7 +74,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
   const moreButton = useRef<HTMLButtonElement>(null);
   const morePanel = useRef<HTMLDivElement>(null);
-  const { present: morePresent, finishExit: finishMoreExit } = useAnimatedPresence(mobileMoreOpen);
+  const { present: morePresent, finishExit: finishMoreExit } = useAnimatedPresence(menuOpen);
   const moreMotion = useRef<ReturnType<typeof createPopupMotion> | null>(null);
   const moreEntered = useRef(false);
   const restoreMoreFocus = useRef(false);
@@ -87,37 +87,37 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
   }, [morePresent]);
   useLayoutEffect(() => {
     if (!moreMotion.current || !morePanel.current) return;
-    if (mobileMoreOpen) restoreMoreFocus.current = false;
+    if (menuOpen) restoreMoreFocus.current = false;
     const closed = { transform: "translateY(12px) scale(0.98)", opacity: "0" };
     moreMotion.current.play({
-      open: mobileMoreOpen,
+      open: menuOpen,
       from: moreEntered.current ? undefined : closed,
-      to: mobileMoreOpen ? { transform: "none", opacity: "1" } : closed,
-      duration: mobileMoreOpen ? 220 : 180,
-      easing: mobileMoreOpen ? getComputedStyle(morePanel.current).getPropertyValue("--ease-glide").trim() || "ease-out" : "ease-in",
-      onFinish: mobileMoreOpen ? undefined : () => {
+      to: menuOpen ? { transform: "none", opacity: "1" } : closed,
+      duration: menuOpen ? 220 : 180,
+      easing: menuOpen ? getComputedStyle(morePanel.current).getPropertyValue("--ease-glide").trim() || "ease-out" : "ease-in",
+      onFinish: menuOpen ? undefined : () => {
         finishMoreExit();
         if (restoreMoreFocus.current) moreButton.current?.focus({ preventScroll: true });
         restoreMoreFocus.current = false;
       }
     });
     moreEntered.current = true;
-  }, [mobileMoreOpen, morePresent, finishMoreExit]);
+  }, [menuOpen, morePresent, finishMoreExit]);
   useEffect(() => {
-    if (!mobileMoreOpen) return;
+    if (!menuOpen) return;
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && !morePanel.current?.contains(event.target) && !moreButton.current?.contains(event.target)) {
-        setMobileMoreOpen(false);
+        setMenuOpen(false);
       }
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         restoreMoreFocus.current = true;
-        setMobileMoreOpen(false);
+        setMenuOpen(false);
       }
     };
     const desktop = window.matchMedia("(min-width: 1280px)");
-    const resize = () => { if (desktop.matches) setMobileMoreOpen(false); };
+    const resize = () => { if (desktop.matches) setMenuOpen(false); };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", keydown);
     desktop.addEventListener("change", resize);
@@ -126,14 +126,16 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
       document.removeEventListener("keydown", keydown);
       desktop.removeEventListener("change", resize);
     };
-  }, [mobileMoreOpen, setMobileMoreOpen]);
+  }, [menuOpen, setMenuOpen]);
 
-  const headerMonth = activeTab === "dashboard" ? dashboardStatsMonth : new Date();
+  const inPlan = activeNavKey === "plan";
+  const title = inPlan ? t.plan : t[tabs[activeTab].label];
 
+  // Only shown when there is something to say: quiet means everything is saved.
   const syncPill = !syncState.online || usingCachedData
-    ? { tone: "amber" as const, label: syncState.pending > 0 ? `Offline - ${syncState.pending} queued` : "Offline" }
+    ? { tone: "bg-amber/10 text-amber", label: syncState.pending > 0 ? `Offline - ${syncState.pending} queued` : "Offline" }
     : syncState.pending > 0
-      ? { tone: "river" as const, label: syncState.syncing ? "Syncing..." : `${syncState.pending} to sync` }
+      ? { tone: "bg-river/10 text-river", label: syncState.syncing ? "Syncing..." : `${syncState.pending} to sync` }
       : null;
 
   return (
@@ -145,17 +147,17 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
             <p className="min-w-0 truncate font-display text-lg font-semibold tracking-tight text-ink">athonesayate</p>
           </div>
           <nav className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto pr-1" aria-label="Primary navigation">
-            <GlassNav activeKey={activeTab} className="glass-sidebar-track grid gap-1 rounded-xl">
+            <GlassNav activeKey={activeNavKey} className="glass-sidebar-track grid gap-1 rounded-xl">
               {navItems.map((item) => (
                 <button
                   key={item.key}
                   data-glass-key={item.key}
                   type="button"
-                  onClick={() => chooseTab(item.key)}
-                  aria-current={activeTab === item.key ? "page" : undefined}
+                  onClick={() => openNav(item.key)}
+                  aria-current={activeNavKey === item.key ? "page" : undefined}
                   title={t[item.label]}
                   className={`glass-sidebar-item flex h-11 min-w-0 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium ${
-                    activeTab === item.key
+                    activeNavKey === item.key
                       ? "text-river"
                       : "text-ink/70 hover:text-river"
                   }`}
@@ -216,57 +218,55 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         </aside>
 
         <nav className="ios-tabbar fixed z-30 px-1.5 py-1.5 xl:hidden" aria-label="Primary navigation">
-          <GlassNav activeKey={mobileMoreOpen || mobileMoreActive ? "more" : activeTab} className="grid grid-cols-5 gap-1 rounded-full">
-            {mobilePrimaryNavItems.map((item) => (
-              <button
-                key={item.key}
-                data-glass-key={item.key}
-                type="button"
-                onClick={() => chooseTab(item.key)}
-                aria-current={activeTab === item.key ? "page" : undefined}
-                className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
-                  activeTab === item.key && !mobileMoreOpen ? "ios-tab-active" : ""
-                }`}
-              >
-                <item.icon size={20} strokeWidth={activeTab === item.key && !mobileMoreOpen ? 2.6 : 2.2} />
-                <span className="max-w-full truncate">{t[item.label]}</span>
-              </button>
-            ))}
-            <button
-              ref={moreButton}
-              data-glass-key="more"
-              type="button"
-              onClick={() => setMobileMoreOpen(!mobileMoreOpen)}
-              aria-expanded={mobileMoreOpen}
-              aria-controls="mobile-more-navigation"
-              className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${
-                mobileMoreOpen || mobileMoreActive ? "ios-tab-active" : ""
-              }`}
-            >
-              <MoreHorizontal size={20} strokeWidth={mobileMoreOpen || mobileMoreActive ? 2.6 : 2.2} />
-              <span className="max-w-full truncate">More</span>
-            </button>
+          <GlassNav activeKey={activeNavKey} className="grid grid-cols-5 gap-1 rounded-full">
+            {navItems.map((item, index) => {
+              const active = activeNavKey === item.key;
+              return [
+                // The add button sits in the middle of the dock, under the thumb.
+                index === 2 ? (
+                  <button
+                    key="add"
+                    type="button"
+                    onClick={() => { setMenuOpen(false); setQuickAddOpen(true); }}
+                    aria-label={t.quickAdd}
+                    className="dock-add grid min-w-0 place-items-center"
+                  >
+                    <span className="dock-add-disc grid size-12 place-items-center rounded-full">
+                      <Plus size={26} strokeWidth={2.8} />
+                    </span>
+                  </button>
+                ) : null,
+                <button
+                  key={item.key}
+                  data-glass-key={item.key}
+                  type="button"
+                  onClick={() => openNav(item.key)}
+                  aria-current={active ? "page" : undefined}
+                  className={`ios-tab-item flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold transition duration-300 ${active ? "ios-tab-active" : ""}`}
+                >
+                  <item.icon size={20} strokeWidth={active ? 2.6 : 2.2} />
+                  <span className="max-w-full truncate">{t[item.label]}</span>
+                </button>
+              ];
+            })}
           </GlassNav>
         </nav>
 
         {morePresent ? (
-          <div ref={morePanel} id="mobile-more-navigation" data-state={mobileMoreOpen ? "open" : "closing"} inert={!mobileMoreOpen} className="glass-reactive ios-popover mobile-more fixed inset-x-3 z-40 p-2 xl:hidden" aria-label="More navigation">
+          <div ref={morePanel} id="app-menu" data-state={menuOpen ? "open" : "closing"} inert={!menuOpen} className="glass-reactive ios-popover mobile-more fixed inset-x-3 z-40 p-2 xl:hidden" aria-label={t.menu}>
             <GlassLight />
             <div className="grid gap-1">
-              {mobileMoreNavItems.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => chooseTab(item.key)}
-                  aria-current={activeTab === item.key ? "page" : undefined}
-                  className={`flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${
-                    activeTab === item.key ? "bg-river/10 text-river" : "text-ink/70 hover:bg-ink/[0.04]"
-                  }`}
-                >
-                  <item.icon size={18} />
-                  {t[item.label]}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => navigateTab("settings")}
+                aria-current={activeTab === "settings" ? "page" : undefined}
+                className={`flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${
+                  activeTab === "settings" ? "bg-river/10 text-river" : "text-ink/70 hover:bg-ink/[0.04]"
+                }`}
+              >
+                <Settings size={18} />
+                {t.settings}
+              </button>
               <div className="mt-1 flex items-center gap-2 border-t border-ink/10 pt-2">
                 <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
@@ -296,55 +296,98 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
         <section className="app-content min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
           {demoMode ? (
-            <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-river/25 bg-river/5 px-4 py-2.5 text-sm">
-              <span className="font-semibold text-river">Demo</span>
-              <span className="min-w-0 text-ink/65">You&apos;re exploring sample data. Nothing here is saved.</span>
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-river/25 bg-river/5 py-1.5 pl-3 pr-1.5 text-xs">
+              <span className="shrink-0 font-semibold text-river">Demo</span>
+              <span className="min-w-0 flex-1 truncate text-ink/60">Sample data. Nothing here is saved.</span>
               <button
                 type="button"
                 onClick={() => onRequestAuth?.()}
-                className="ml-auto shrink-0 rounded-lg bg-gradient-to-r from-river to-indigo-500 px-3 py-1.5 text-xs font-semibold text-bright shadow-glow"
+                className="shrink-0 rounded-lg bg-gradient-to-r from-river to-indigo-500 px-2.5 py-1.5 font-semibold text-bright shadow-glow"
               >
                 Sign in or sign up
               </button>
             </div>
           ) : null}
           <PwaExperience />
-          <header className="mb-5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_minmax(240px,1fr)_auto]">
-            <div className="min-w-0">
-              <p className="mb-2 flex items-center gap-2 text-sm font-medium text-ink/80">
-                <activeNavItem.icon size={16} className="shrink-0 text-ink/50" />
-                {t[activeNavItem.label]}
-              </p>
-              <h1 className="font-display text-3xl text-ink sm:text-4xl">
-                {format(headerMonth, "MMMM")} <span className="text-ink/40">{format(headerMonth, "yyyy")}</span>
-              </h1>
+          <header className="mb-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="min-w-0 flex-1">
+              {backTab ? (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="-ml-1.5 mb-0.5 inline-flex min-h-8 items-center gap-1 rounded-lg px-1.5 text-sm font-medium text-ink/60 transition hover:bg-ink/5 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-river"
+                >
+                  <ArrowLeft size={15} aria-hidden="true" />
+                  {t[tabs[backTab].label]}
+                </button>
+              ) : null}
+              <h1 className="truncate font-display text-2xl text-ink sm:text-3xl">{title}</h1>
             </div>
             {activeTab === "dashboard" ? (
-              <div className="hidden justify-center xl:flex">
+              <div className="hidden w-72 sm:block lg:w-80">
                 <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
               </div>
             ) : null}
-            <div className="flex items-center gap-2 sm:hidden">
+            <div className="flex shrink-0 items-center gap-2">
               {syncPill ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber/10 px-2.5 py-1.5 text-xs font-semibold text-amber">
+                <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${syncPill.tone}`}>
                   {syncState.syncing ? <RefreshCw size={13} className="animate-spin" /> : <CloudOff size={13} />}
                   {syncPill.label}
                 </span>
               ) : null}
-              <ThemeToggle theme={theme} onToggle={toggleTheme} />
-            </div>
-            <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
-              <ThemeToggle theme={theme} onToggle={toggleTheme} />
-              <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
-              {syncPill ? <StatusPill tone={syncPill.tone} label={syncPill.label} /> : <StatusPill tone="moss" label="On track" />}
-              <StatusPill tone="river" label={`${Math.max(0, endOfMonth(new Date()).getDate() - new Date().getDate() + 1)} days left`} />
+              <div className="hidden items-center gap-2 xl:flex">
+                <LanguageToggle language={language} onChange={setLanguage} label={t.language} />
+                <ThemeToggle theme={theme} onToggle={toggleTheme} />
+                <button
+                  type="button"
+                  onClick={() => navigateTab("settings")}
+                  aria-label={t.settings}
+                  aria-current={activeTab === "settings" ? "page" : undefined}
+                  title={t.settings}
+                  className={`liquid-control grid size-11 shrink-0 place-items-center rounded-xl border border-ink/10 bg-white transition hover:border-river/30 hover:text-river ${activeTab === "settings" ? "text-river" : "text-ink/60"}`}
+                >
+                  <Settings size={17} />
+                </button>
+              </div>
+              {/* Below desktop there is no sidebar, so the gear opens a menu that also holds sign-out. */}
+              <button
+                ref={moreButton}
+                type="button"
+                onClick={() => setMenuOpen(!menuOpen)}
+                aria-label={t.menu}
+                aria-expanded={menuOpen}
+                aria-controls="app-menu"
+                className={`liquid-control grid size-11 shrink-0 place-items-center rounded-xl border border-ink/10 bg-white transition hover:border-river/30 hover:text-river xl:hidden ${menuOpen || activeTab === "settings" ? "text-river" : "text-ink/60"}`}
+              >
+                <Settings size={17} />
+              </button>
             </div>
           </header>
 
+          {inPlan ? (
+            <nav className="plan-segments liquid-control mb-4 grid grid-cols-3 gap-1 rounded-xl border border-ink/10 bg-white p-1 sm:inline-grid" aria-label={t.plan}>
+              {planTabs.map((key) => {
+                const Icon = tabs[key].icon;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => navigateTab(key)}
+                    aria-current={activeTab === key ? "page" : undefined}
+                    className="flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink/60 transition hover:text-ink sm:px-5"
+                  >
+                    <Icon size={16} className="shrink-0" />
+                    <span className="truncate">{t[tabs[key].label]}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          ) : null}
+
           {activeTab === "dashboard" ? (
-            <div className="mb-4 grid gap-3 xl:hidden">
+            <div className="mb-4 grid gap-3 sm:hidden">
               <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
-              <div className="grid grid-cols-2 gap-2 sm:hidden">
+              <div className="grid grid-cols-2 gap-2">
                 <ActivityStat label={t.safeToSpendDay} value={currency.format(dailyAllowance)} tone="river" />
                 <ActivityStat label={t.savingsRate} value={`${currentMonthTotals.savingsRate.toFixed(1)}%`} tone="moss" />
               </div>
@@ -365,32 +408,32 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
               </section>
             ) : null}
             {activeTab === "reports" ? (
-              <section id="reports" className="mt-4 grid min-w-0 gap-4">
+              <section id="reports" className="grid min-w-0 gap-4">
                 <ReportsTab />
               </section>
             ) : null}
             {activeTab === "transactions" ? (
-              <section className="mt-4 grid gap-4">
+              <section className="grid gap-4">
                 <TransactionsTab />
               </section>
             ) : null}
             {activeTab === "budgets" ? (
-              <section className="mt-4 grid gap-4">
+              <section className="grid gap-4">
                 <BudgetsTab />
               </section>
             ) : null}
             {activeTab === "recurring" ? (
-              <section className="mt-4 grid gap-4">
+              <section className="grid gap-4">
                 <RecurringTab />
               </section>
             ) : null}
             {activeTab === "goals" ? (
-              <section className="mt-4 grid gap-4">
+              <section className="grid gap-4">
                 <GoalsTab />
               </section>
             ) : null}
             {activeTab === "settings" ? (
-              <section className="mt-4 grid gap-4">
+              <section className="grid gap-4">
                 <SettingsTab />
               </section>
             ) : null}
@@ -399,9 +442,9 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
         <button
           type="button"
-          onClick={() => { setMobileMoreOpen(false); setQuickAddOpen(true); }}
+          onClick={() => setQuickAddOpen(true)}
           aria-label={t.quickAdd}
-          className={`glass-reactive liquid-fab fixed bottom-32 right-4 z-40 grid size-16 place-items-center rounded-full border border-white/40 hover:scale-[1.02] xl:bottom-8 xl:right-8 ${mobileMoreOpen ? "invisible xl:visible" : ""}`}
+          className="glass-reactive liquid-fab fixed bottom-8 right-8 z-40 hidden size-16 place-items-center rounded-full border border-white/40 hover:scale-[1.02] xl:grid"
         >
           <GlassLight />
           <Plus size={30} strokeWidth={2.6} />

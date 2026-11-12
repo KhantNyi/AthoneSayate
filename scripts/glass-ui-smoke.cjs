@@ -30,7 +30,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await lensAligned(dock);
     await dock.evaluate(node => { window.originalGlassLens = node.querySelector('.glass-nav-indicator'); });
     await page.evaluate(async () => {
-      for (const key of ['transactions', 'reports', 'dashboard', 'recurring', 'reports']) {
+      for (const key of ['transactions', 'reports', 'dashboard', 'plan', 'reports']) {
         document.querySelector(`.ios-tabbar [data-glass-key="${key}"]`).click();
         await new Promise(resolve => setTimeout(resolve, 35));
       }
@@ -38,16 +38,19 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await lensAligned(dock);
     assert.equal(await dock.getAttribute('data-selected'), 'reports');
     assert(await dock.evaluate(node => node.querySelector('.glass-nav-indicator') === window.originalGlassLens), 'Selection must glide with the same indicator');
-    const more = page.getByRole('button', { name: 'More', exact: true });
+    const more = page.locator('[aria-controls="app-menu"]');
     await more.click();
     await lensAligned(dock);
-    assert.equal(await dock.getAttribute('data-selected'), 'more', 'More must own selection while open');
-    await page.locator('#mobile-more-navigation').getByRole('button', { name: 'Budgets', exact: true }).click();
-    await lensAligned(dock);
+    assert.equal(await dock.getAttribute('data-selected'), 'reports', 'Opening the menu must not move the selection');
+    await page.locator('#app-menu').getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(320);
     assert.equal(await more.getAttribute('aria-expanded'), 'false');
-    assert.equal(await dock.getAttribute('data-selected'), 'more', 'Secondary pages keep More selected');
+    assert.equal(await dock.getAttribute('data-selected'), '', 'Settings is outside the dock, so nothing is selected');
+    assert.equal(await dock.locator('.glass-nav-indicator').getAttribute('data-ready'), 'false', 'The indicator hides when nothing is selected');
+    await page.locator('.ios-tabbar [data-glass-key="plan"]').click();
+    await lensAligned(dock);
     await page.evaluate(async () => {
-      const button = document.querySelector('.ios-tabbar [data-glass-key="more"]');
+      const button = document.querySelector('[aria-controls="app-menu"]');
       button.click();
       await new Promise(resolve => setTimeout(resolve, 25));
       button.click();
@@ -56,16 +59,16 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     await page.waitForTimeout(180);
     assert.equal(await more.getAttribute('aria-expanded'), 'true', 'Reopening cancels the pending menu exit');
-    assert.equal(await page.locator('#mobile-more-navigation').count(), 1);
+    assert.equal(await page.locator('#app-menu').count(), 1);
     await page.keyboard.press('Escape');
     await more.click();
     await page.keyboard.press('Escape');
-    await page.locator('#mobile-more-navigation').waitFor({ state: 'detached' });
+    await page.locator('#app-menu').waitFor({ state: 'detached' });
     assert(await more.evaluate(node => node === document.activeElement), 'Menu dismissal restores focus');
     await page.waitForTimeout(180);
     await more.click();
-    await page.locator('#mobile-more-navigation').getByRole('button', { name: 'Switch to dark mode' }).click();
-    await page.locator('#mobile-more-navigation button[aria-pressed="false"]').click();
+    await page.locator('#app-menu').getByRole('button', { name: /^Switch to (dark|light) mode$/ }).click();
+    await page.locator('#app-menu button[aria-pressed="false"]').click();
     await page.keyboard.press('Escape');
     for (const size of [{ width: 320, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 900 }, { width: 1280, height: 720 }, { width: 1600, height: 900 }]) {
       await page.setViewportSize(size);
@@ -75,7 +78,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: `artifacts/ui/glass-myanmar-dark-${engine}.png`, fullPage: true });
     await more.click();
-    await page.locator('#mobile-more-navigation button[aria-pressed="false"]').click();
+    await page.locator('#app-menu button[aria-pressed="false"]').click();
     await page.keyboard.press('Escape');
     const launcher = page.getByRole('button', { name: 'Quick add', exact: true });
     const dialog = page.locator('dialog[aria-labelledby="quick-add-title"]');
@@ -123,6 +126,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.notEqual(await page.evaluate(() => document.body.style.position), 'fixed', 'Unmounting nested dialogs must release every scroll lock');
     await page.goto(url, { waitUntil: 'networkidle' });
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    // The development-only Next badge sits over the first dock button.
+    await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
     await page.locator('.ios-tabbar [data-glass-key="dashboard"]').click();
     await launcher.click();
     await page.keyboard.press('Escape');

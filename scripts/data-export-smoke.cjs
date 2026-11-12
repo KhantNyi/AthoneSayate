@@ -12,7 +12,7 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   try {
     await page.goto(process.env.UI_URL || 'http://localhost:3100', { waitUntil: 'networkidle' });
     await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-    await page.locator('nav:visible').getByRole('button', { name: 'Reports', exact: true }).click();
+    await page.locator('nav:visible').getByRole('button', { name: 'Insights', exact: true }).click();
     const launch = page.getByRole('button', { name: 'Export data', exact: true });
     // WebKit touch taps do not focus buttons. Establish a keyboard focus
     // origin so restoration is checked consistently in both browser engines.
@@ -79,8 +79,8 @@ const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await dialog.getByRole('button', { name: 'Close data export' }).click();
     await page.waitForFunction(() => !document.querySelector('dialog[open]'));
     assert(await launch.evaluate(node => node === document.activeElement), 'Export focus must restore to its launcher');
-    await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.locator('#mobile-more-navigation').getByRole('button', { name: 'Category', exact: true }).click();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.locator('#app-menu').getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Export data', exact: true }).click();
     assert(await dialog.isVisible(), 'Export must be available in Settings');
     await page.keyboard.press('Escape');

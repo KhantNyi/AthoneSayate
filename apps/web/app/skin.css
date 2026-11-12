@@ -216,6 +216,11 @@
 .app-shell .ios-tab-item { padding-inline: 0.125rem; font-size: 0.625rem; letter-spacing: -0.02em; }
 [lang="my"].app-shell .ios-tab-item { letter-spacing: 0; }
 .app-shell .ios-tab-active { color: rgb(var(--ink)); }
+.app-shell .dock-add { -webkit-tap-highlight-color: transparent; }
+.app-shell .dock-add-disc { background: rgb(var(--ink)); color: rgb(var(--paper)); box-shadow: 0 6px 16px rgb(0 0 0 / 0.25); }
+.app-shell .dock-add:focus-visible { outline: none; }
+.app-shell .dock-add:focus-visible .dock-add-disc { outline: 2px solid rgb(var(--river)); outline-offset: 2px; }
+.app-shell .plan-segments button[aria-current="page"] { background: rgb(var(--ink)); color: rgb(var(--paper)); }
 .app-shell .ios-tab-active svg { animation: skin-pop 380ms var(--ease-spring); }
 .app-shell .glass-light { display: none; }
 .app-shell .ios-popover .bg-river\/10 { background-color: var(--fill-active); color: rgb(var(--ink)); }
