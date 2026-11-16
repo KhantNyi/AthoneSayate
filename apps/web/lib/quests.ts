@@ -81,6 +81,7 @@ export function buildCompanionState({
   let todaySpent = 0;
   let monthIncome = 0;
   let spentBeforeToday = 0;
+  let billsPaidToday = 0;
 
   for (const transaction of transactions) {
     // Future-dated entries shouldn't extend a streak or earn XP yet.
@@ -89,8 +90,11 @@ export function buildCompanionState({
     if (!transaction.occurredOn.startsWith(monthKey)) continue;
     if (transaction.type === "income") monthIncome += transaction.amount;
     else if (transaction.type === "expense") {
-      if (transaction.occurredOn === todayKey) todaySpent += transaction.amount;
-      else spentBeforeToday += transaction.amount;
+      if (transaction.occurredOn !== todayKey) spentBeforeToday += transaction.amount;
+      // A recurring bill was already set aside by `recurringDue`, so paying it
+      // is not discretionary spending: rent day must not read as overspending.
+      else if (transaction.isRecurring || transaction.recurringRuleId) billsPaidToday += transaction.amount;
+      else todaySpent += transaction.amount;
     }
   }
 
@@ -117,10 +121,11 @@ export function buildCompanionState({
   }
 
   // Today's amount as it stood this morning: today's own spending must not
-  // shrink the target it is measured against.
+  // shrink the target it is measured against. A bill paid today has just left
+  // `recurringDue`, so it is subtracted here to keep the amount where it was.
   const remainingDays = differenceInCalendarDays(endOfMonth(today), today) + 1;
   const allowanceKnown = monthIncome > 0;
-  const allowance = allowanceKnown ? Math.max((monthIncome - spentBeforeToday - recurringDue) / remainingDays, 0) : 0;
+  const allowance = allowanceKnown ? Math.max((monthIncome - spentBeforeToday - recurringDue - billsPaidToday) / remainingDays, 0) : 0;
   const overDaily = allowanceKnown && todaySpent > allowance;
 
   const quests: Quest[] = [
