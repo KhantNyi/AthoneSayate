@@ -10,6 +10,7 @@ import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
 import { compactCurrency } from "@/lib/helpers";
 import { NO_SUBCATEGORY } from "@/lib/report-utils";
 import { useApp } from "../app-context";
+import { CategoryIcon } from "../category-icon";
 import { ActivityStat, MonthField, Panel } from "../ui";
 
 const reportButtonClass = "rounded-lg text-left transition hover:bg-river/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-river";
@@ -486,7 +487,7 @@ export default function ReportsTab() {
                   aria-label={`View ${categoryLabel(row.name)} expenses`} className={`${reportButtonClass} block min-h-11 w-full p-1`}>
                   <span className="mb-1 flex items-center justify-between gap-3 text-sm">
                     <span className="inline-flex min-w-0 flex-1 items-center gap-2">
-                      <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                      <CategoryIcon name={row.name} icon={row.icon} color={row.color} />
                       <span className="truncate font-medium">{categoryLabel(row.name)}</span>
                     </span>
                     <span className="shrink-0 text-right font-semibold">{currency.format(row.spent)}</span>
@@ -508,7 +509,7 @@ export default function ReportsTab() {
               <button key={row.id} type="button" onClick={() => drillDownMonthlyReport({ categoryId: row.categoryId, subcategoryId: row.id })}
                 aria-label={`View ${row.name} expenses`} className={`${reportButtonClass} flex min-h-11 w-full items-center justify-between gap-3 p-1 text-sm`}>
                 <span className="inline-flex min-w-0 flex-1 items-center gap-2">
-                  <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                  <CategoryIcon name={row.categoryName} icon={row.icon} color={row.color} />
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{row.name}</span>
                     <span className="block truncate text-xs text-ink/45">{categoryLabel(row.categoryName)} - {row.count} entries</span>
@@ -606,7 +607,7 @@ export default function ReportsTab() {
                     <td className="px-3 py-2 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
                     <td className="px-3 py-2">
                       <span className="inline-flex min-w-0 items-center gap-2">
-                        <span className="size-2.5 shrink-0 rounded-full" style={{ background: category?.color ?? "#64748b" }} />
+                        <CategoryIcon name={category?.name} icon={category?.icon} color={category?.color} />
                         <span className="truncate">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</span>
                       </span>
                     </td>
@@ -680,7 +681,7 @@ export default function ReportsTab() {
                   <article key={row.id} className="grid gap-3 px-3 py-3 text-sm">
                     <div className="flex items-start justify-between gap-3">
                       <span className="inline-flex min-w-0 items-center gap-2">
-                        <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                        <CategoryIcon name={row.categoryName} icon={row.icon} color={row.color} />
                         <span className="truncate font-semibold">{categoryLabel(row.name)}</span>
                       </span>
                       <span className={`shrink-0 text-right font-semibold ${deltaTone}`}>
@@ -738,7 +739,7 @@ export default function ReportsTab() {
                       <tr key={row.id} className="border-t border-ink/10">
                         <td className="px-3 py-2">
                           <span className="inline-flex min-w-0 items-center gap-2">
-                            <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.color }} />
+                            <CategoryIcon name={row.categoryName} icon={row.icon} color={row.color} />
                             <span className="truncate font-medium">{categoryLabel(row.name)}</span>
                           </span>
                         </td>

@@ -10,6 +10,7 @@ import { isMissing, validateTransaction } from "@/lib/validation";
 import { companionTranslations } from "@/lib/i18n";
 import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
+import { CategoryIcon } from "../category-icon";
 import { MonthCalendar } from "../month-calendar";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
@@ -229,7 +230,7 @@ export default function TransactionsTab() {
               ) : (
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="inline-flex min-w-0 items-center gap-2 text-sm">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: category?.color }} />
+                  <CategoryIcon name={category?.name} icon={category?.icon} color={category?.color} />
                   <span className="truncate">{subcategory?.name ?? categoryLabel(category?.name)}</span>
                 </span>
                 <span className="inline-flex shrink-0 items-center gap-1">
@@ -271,7 +272,7 @@ export default function TransactionsTab() {
                     <td className="border-b border-ink/5 py-3 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
                     <td className="border-b border-ink/5 py-3">
                       <span className="inline-flex items-center gap-2">
-                        <span className="size-2.5 rounded-full" style={{ background: category?.color }} />
+                        <CategoryIcon name={category?.name} icon={category?.icon} color={category?.color} />
                         {categoryLabel(category?.name)}
                       </span>
                       {tx.notes ? <p className="mt-1 max-w-[240px] truncate text-xs text-ink/45">{tx.notes}</p> : null}

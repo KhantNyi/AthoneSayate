@@ -7,6 +7,7 @@ import { isMissing, validateBudget } from "@/lib/validation";
 import { companionTranslations } from "@/lib/i18n";
 import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
+import { CategoryIcon } from "../category-icon";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 export default function BudgetsTab() {
@@ -95,7 +96,10 @@ export default function BudgetsTab() {
           <article key={row.id} className={`rounded-lg border p-4 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
             <div className={`mb-4 grid min-w-0 gap-3 text-sm ${isEditing ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
               <div className="min-w-0">
-                <p className="font-medium">{categoryLabel(row.name)}</p>
+                <p className="flex min-w-0 items-center gap-2 font-medium">
+                  <CategoryIcon name={row.name} icon={row.icon} color={row.color} />
+                  <span className="truncate">{categoryLabel(row.name)}</span>
+                </p>
                 <p className={row.spent > (row.monthlyBudget ?? 0) ? "font-semibold text-coral" : "text-ink/60"}>
                   {currency.format(row.spent)} spent / {currency.format(row.monthlyBudget ?? 0)} budget for {budgetMonth}
                 </p>

@@ -223,6 +223,7 @@ export function MetricCard({
   value,
   sub,
   tone,
+  colorValue = false,
   format: formatValue = (amount) => currency.format(amount)
 }: {
   icon: typeof BadgeDollarSign;
@@ -230,6 +231,8 @@ export function MetricCard({
   value: number;
   sub: string;
   tone: "moss" | "river" | "coral";
+  /** Paint the figure itself in the tone, for values that read as good or bad. */
+  colorValue?: boolean;
   format?: (value: number) => string;
 }) {
   const tones = {
@@ -246,7 +249,7 @@ export function MetricCard({
           <span className="min-w-0 truncate text-sm text-ink/70">{label}</span>
           <Icon size={16} className={`shrink-0 ${tones[tone].icon}`} />
         </div>
-        <p className="break-words font-display text-2xl font-semibold sm:text-3xl">
+        <p className={`break-words font-display text-2xl font-semibold sm:text-3xl ${colorValue ? tones[tone].icon : ""}`}>
           <AnimatedNumber value={value} format={formatValue} />
         </p>
         <p className="mt-1.5 font-mono text-xs text-ink/55">{sub}</p>

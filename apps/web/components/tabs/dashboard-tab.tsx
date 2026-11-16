@@ -6,6 +6,7 @@ import { format, isSameMonth, parseISO } from "date-fns";
 import { currency, preciseCurrency } from "@athonesayate/shared/metrics";
 import { compactCurrency } from "@/lib/helpers";
 import { useApp } from "../app-context";
+import { CategoryIcon } from "../category-icon";
 import { CompanionCard } from "../companion";
 import { MonthCalendar } from "../month-calendar";
 import { ActivityStat, DashboardPanel, MetricCard } from "../ui";
@@ -81,9 +82,9 @@ export default function DashboardTab() {
     <div className="pop-stagger grid gap-4">
       <CompanionCard />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={monthTotals.income} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" />
-        <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={monthTotals.expenses} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" />
-        <MetricCard icon={PiggyBank} label={t.netCashFlow} value={monthTotals.net} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone="river" />
+        <MetricCard icon={ArrowDownCircle} label={t.monthIncome} value={monthTotals.income} sub={`${comparison.incomeDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="moss" colorValue />
+        <MetricCard icon={ArrowUpCircle} label={t.monthExpenses} value={monthTotals.expenses} sub={`${comparison.expenseDelta.toFixed(1)}% ${t.vsLastMonth}`} tone="coral" colorValue />
+        <MetricCard icon={PiggyBank} label={t.netCashFlow} value={monthTotals.net} sub={`${currency.format(allTotals.net)} ${t.allTimeNet}`} tone={monthTotals.net < 0 ? "coral" : "moss"} colorValue />
         <MetricCard icon={Banknote} label={t.accountBalance} value={accountTotal} sub={`${balances.length} ${t.activeAccounts}`} tone="river" />
       </div>
 
@@ -154,7 +155,7 @@ export default function DashboardTab() {
                   className="grid grid-cols-[minmax(0,1fr)_42px_82px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-river/10"
                 >
                   <span className="inline-flex min-w-0 items-center gap-2">
-                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.color }} />
+                    <CategoryIcon name={row.name} icon={row.icon} color={row.color} />
                     <span className="truncate">{categoryLabel(row.name)}</span>
                   </span>
                   <span className="text-right text-ink/55">{dashboardInsights.totalSpent > 0 ? `${((row.spent / dashboardInsights.totalSpent) * 100).toFixed(0)}%` : "0%"}</span>
@@ -216,7 +217,7 @@ export default function DashboardTab() {
                     {selectedDayCategories.map(({ categoryId, category, amount }) => (
                       <li key={categoryId} className="flex items-center justify-between gap-3">
                         <span className="inline-flex min-w-0 items-center gap-2">
-                          <span className="size-2.5 shrink-0 rounded-full bg-ink/30" style={{ background: category?.color }} />
+                          <CategoryIcon name={category?.name} icon={category?.icon} color={category?.color} />
                           <span className="break-words">{categoryLabel(category?.name) ?? "Uncategorized"}</span>
                         </span>
                         <strong className="tnum shrink-0 text-coral">{preciseCurrency.format(amount)}</strong>
@@ -242,7 +243,7 @@ export default function DashboardTab() {
               >
                 <div className="mb-2 flex items-center justify-between gap-3 text-sm">
                   <span className="inline-flex min-w-0 items-center gap-2 font-medium">
-                    <span className="size-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                    <CategoryIcon name={row.name} icon={row.icon} color={row.color} />
                     <span className="truncate">{categoryLabel(row.name)}</span>
                   </span>
                   <span className="shrink-0 text-right">

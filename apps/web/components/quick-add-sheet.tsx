@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { preciseCurrency } from "@athonesayate/shared/metrics";
 import { isMissing } from "@/lib/validation";
 import { useApp } from "./app-context";
+import { CategoryIcon } from "./category-icon";
 import { FormAlert, INVALID_FIELD } from "./ui";
 import { Modal } from "./modal";
 
@@ -127,7 +128,9 @@ export function QuickAddSheet() {
                   }`}
                   style={active ? { background: category.color } : undefined}
                 >
-                  <span className="size-2 rounded-full" style={{ background: active ? "rgba(255,255,255,0.85)" : category.color }} />
+                  <span className="inline-flex" style={active ? undefined : { color: category.color }}>
+                    <CategoryIcon name={category.name} icon={category.icon} bare />
+                  </span>
                   {categoryLabel(category.name)}
                 </button>
               );

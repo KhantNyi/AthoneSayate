@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import type { Category, Subcategory, TransactionType } from "@athonesayate/shared/types";
 import { isMissing, type ValidationResult } from "@/lib/validation";
+import { CategoryIcon } from "./category-icon";
 import { FormAlert, INVALID_FIELD } from "./ui";
 
 export function CategoryManager({
@@ -175,7 +176,7 @@ export function CategoryManager({
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="size-3 shrink-0 rounded-full" style={{ background: category.color }} />
+                    <CategoryIcon name={category.name} icon={category.icon} color={category.color} size="md" />
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">{category.name}</span>
                       <span className="block text-xs text-ink/45">{category.kind} - {childCount} sub</span>
@@ -200,7 +201,7 @@ export function CategoryManager({
             <div key={category.id} className={`rounded-lg border p-3 ${isEditingCategory ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
               <div className={`mb-3 grid min-w-0 gap-2 md:items-center ${isEditingCategory ? "" : "md:grid-cols-[minmax(0,1fr)_auto]"}`}>
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="size-3 shrink-0 rounded-full" style={{ background: category.color }} />
+                  <CategoryIcon name={category.name} icon={category.icon} color={category.color} size="md" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{category.name}</p>
                     <p className="mt-1 text-xs text-ink/55">
