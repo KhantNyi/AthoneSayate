@@ -12,6 +12,7 @@ import { NO_SUBCATEGORY } from "@/lib/report-utils";
 import { useApp } from "../app-context";
 import { CategoryIcon } from "../category-icon";
 import { ActivityStat, MonthField, Panel } from "../ui";
+import { slideMonth } from "../motion";
 
 const reportButtonClass = "rounded-lg text-left transition hover:bg-river/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-river";
 
@@ -168,7 +169,10 @@ export default function ReportsTab() {
   const visibleCount = pagination.selectionKey === selectionKey ? pagination.count : 50;
   const visibleTransactions = monthlyReportDetailTx.slice(0, visibleCount);
   const selectedMonthKey = format(monthlyReportMonth, "yyyy-MM-dd");
-  const selectTrendMonth = (monthKey: string) => changeMonthlyReportMonth(parseISO(monthKey));
+  // The month's headline figures slide toward the chosen month; the daily chart redraws itself.
+  const reportStats = useRef<HTMLDivElement>(null);
+  const changeMonth = (month: Date) => slideMonth(monthlyReportMonth, month, () => changeMonthlyReportMonth(month), reportStats.current);
+  const selectTrendMonth = (monthKey: string) => changeMonth(parseISO(monthKey));
   const openComparisonRow = (row: { categoryId: string; subcategoryId?: string }, month: Date) => (
     drillDownMonthlyReport({ month, categoryId: row.categoryId, subcategoryId: row.subcategoryId })
   );
@@ -185,7 +189,7 @@ export default function ReportsTab() {
     <Panel title="Monthly expense report" action={format(monthlyReportMonth, "MMMM yyyy")}>
       <div className="mb-4 flex justify-end"><DataExportButton /></div>
       <div className="mb-4 hidden min-w-0 gap-3 md:grid lg:grid-cols-[220px_minmax(0,1fr)]">
-        <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
+        <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonth} />
         <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <select
             value={monthlyReportCategoryId}
@@ -239,7 +243,7 @@ export default function ReportsTab() {
 
       <div className="mb-4 grid gap-3 md:hidden">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-          <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonthlyReportMonth} />
+          <MonthField label={ui.month} month={monthlyReportMonth} onChange={changeMonth} />
           <button
             type="button"
             onClick={() => setMonthlyReportFiltersOpen(true)}
@@ -419,7 +423,7 @@ export default function ReportsTab() {
 
       {monthlyReportMode === "overview" ? (
         <Fragment>
-      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div ref={reportStats} className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <ActivityStat label="Total expenses" value={currency.format(monthlyReportTotal)} tone="coral" />
         <ActivityStat label="Average/day" value={currency.format(monthlyReportTotal / Math.max(monthlyReportDays, 1))} sub={`${monthlyReportActiveDays} active days`} tone="ink" />
         <ActivityStat label="Budget remaining" value={currency.format(Math.max(monthlyReportBudgetTotal - monthlyReportTotal, 0))} sub={`${currency.format(monthlyReportBudgetTotal)} planned`} tone={monthlyReportBudgetTotal >= monthlyReportTotal ? "moss" : "coral"} />

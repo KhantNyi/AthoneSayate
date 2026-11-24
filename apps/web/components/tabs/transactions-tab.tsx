@@ -13,6 +13,7 @@ import { useApp } from "../app-context";
 import { CategoryIcon } from "../category-icon";
 import { MonthCalendar } from "../month-calendar";
 import { haptic, leaveThen, useFreshIds } from "../motion";
+import { SwipeRow } from "../swipe-row";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function TransactionEditor({ transaction }: { transaction: Transaction }) {
@@ -220,7 +221,15 @@ export default function TransactionsTab() {
           const account = accounts.find((item) => item.id === tx.accountId);
           const isEditing = editingTransactionId === tx.id;
           return (
-            <article key={tx.id} data-row data-fresh={isFresh(tx.id) || undefined} className={`tx-row rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
+            <SwipeRow
+              key={tx.id}
+              fresh={isFresh(tx.id)}
+              disabled={isEditing}
+              className={`tx-row rounded-lg border ${isEditing ? "border-river/25" : "border-ink/10"}`}
+              faceClassName={`p-3 ${isEditing ? "bg-river/5" : "bg-white"}`}
+              onEdit={() => startEditingTransaction(tx)}
+              onDelete={() => void deleteTransaction(tx.id)}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</p>
@@ -250,7 +259,7 @@ export default function TransactionsTab() {
                 </span>
               </div>
               )}
-            </article>
+            </SwipeRow>
           );
         })}
       </div>

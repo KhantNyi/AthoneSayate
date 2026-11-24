@@ -543,18 +543,24 @@
 /* Screen changes (View Transitions). The page slides the way the navigation
    reads while fixed chrome holds still. Names exist only during a screen
    change so other transitions keep the chrome under their own backdrops. */
-html[data-vt^="nav"] .app-shell .ios-tabbar { view-transition-name: app-dock; }
-html[data-vt^="nav"] .app-shell > aside { view-transition-name: app-sidebar; }
-html[data-vt^="nav"] .app-shell .liquid-fab { view-transition-name: app-fab; }
+/* Month changes need this too: the sliding month scope is its own layer and
+   would otherwise paint over the fixed chrome. */
+html:is([data-vt^="nav"], [data-vt^="month"]) .app-shell .ios-tabbar { view-transition-name: app-dock; }
+html:is([data-vt^="nav"], [data-vt^="month"]) .app-shell > aside { view-transition-name: app-sidebar; }
+html:is([data-vt^="nav"], [data-vt^="month"]) .app-shell .liquid-fab { view-transition-name: app-fab; }
+html[data-vt^="month"] .app-shell .scroll-titlebar { view-transition-name: app-titlebar; }
 ::view-transition-group(app-dock),
 ::view-transition-group(app-sidebar),
 ::view-transition-group(app-fab),
+::view-transition-group(app-titlebar),
 ::view-transition-new(app-dock),
 ::view-transition-new(app-sidebar),
-::view-transition-new(app-fab) { animation: none; }
+::view-transition-new(app-fab),
+::view-transition-new(app-titlebar) { animation: none; }
 ::view-transition-old(app-dock),
 ::view-transition-old(app-sidebar),
-::view-transition-old(app-fab) { display: none; }
+::view-transition-old(app-fab),
+::view-transition-old(app-titlebar) { display: none; }
 
 html[data-vt^="nav"]::view-transition-old(root),
 html[data-vt^="nav"]::view-transition-new(root) { mix-blend-mode: normal; }
@@ -650,3 +656,90 @@ html[data-vt^="subu"]::view-transition-group(root) { animation-duration: 420ms; 
 /* Keep the scrollbar's space when a sheet locks scrolling, so the page behind
    doesn't shift sideways (and a transition's before/after frames line up). */
 html { scrollbar-gutter: stable; }
+
+/* ---------- Swipe rows ---------- */
+
+/* The face slides; vertical drags still scroll the page. */
+.app-shell .swipe-face { touch-action: pan-y; }
+.app-shell .swipe-actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  width: 0;
+  overflow: hidden;
+}
+.app-shell .swipe-row[data-swipe="closed"] .swipe-actions { visibility: hidden; }
+.app-shell .swipe-actions > button {
+  display: grid;
+  flex: 0 0 76px;
+  place-content: center;
+  justify-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(var(--paper));
+  transition: flex-basis 220ms var(--ease-ios);
+  scale: 1;
+}
+.app-shell .swipe-actions > .swipe-edit { background: rgb(var(--ink) / 0.55); }
+.app-shell .swipe-actions > .swipe-delete { flex-grow: 1; background: rgb(var(--coral)); }
+/* Past the full-swipe point, Delete takes the whole strip: letting go deletes. */
+.app-shell .swipe-row[data-armed="true"] .swipe-edit { flex-basis: 0; overflow: hidden; }
+
+/* ---------- Coin into Su Bu ---------- */
+
+.coin-flight {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+  will-change: transform;
+}
+.coin-flight-y { position: absolute; left: 0; top: 0; display: block; will-change: transform; }
+.coin-face {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #D69600;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, #FFE27A, #FFC400 55%);
+  box-shadow: 0 6px 16px rgb(214 150 0 / 0.35);
+}
+/* The flying coin stands in for Su Bu's own falling one. */
+.celebration [data-coin-flight] .mascot .mascot-drop { display: none; }
+/* After the gulp, the streak flame flares. */
+.celebration .flame-flare {
+  transform-origin: 50% 90%;
+  animation: flame-flare 700ms var(--ease-spring) 820ms both;
+}
+@keyframes flame-flare {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.55) rotate(-6deg); filter: drop-shadow(0 0 6px rgb(var(--amber) / 0.7)); }
+  70% { transform: scale(0.92) rotate(4deg); }
+}
+
+/* ---------- Month changes ---------- */
+
+/* The scope (dashboard body, calendar days or report figures) slides toward
+   the chosen month; motion.ts names it only while the change runs. */
+::view-transition-old(month-scope),
+::view-transition-new(month-scope) { mix-blend-mode: normal; }
+::view-transition-group(month-scope) { animation-duration: 340ms; animation-timing-function: var(--ease-glide); }
+html[data-vt="month-forward"]::view-transition-old(month-scope) { animation: vt-out-start 180ms cubic-bezier(0.4, 0, 1, 1) both; }
+html[data-vt="month-forward"]::view-transition-new(month-scope) { animation: vt-in-end 340ms var(--ease-glide) both; }
+html[data-vt="month-back"]::view-transition-old(month-scope) { animation: vt-out-end 180ms cubic-bezier(0.4, 0, 1, 1) both; }
+html[data-vt="month-back"]::view-transition-new(month-scope) { animation: vt-in-start 340ms var(--ease-glide) both; }
+/* Su Bu's card doesn't depend on the month: it holds still inside the sliding dashboard. */
+html[data-vt^="month"] .companion-hero { view-transition-name: subu-still; }
+::view-transition-group(subu-still),
+::view-transition-new(subu-still) { animation: none; }
+::view-transition-old(subu-still) { display: none; }
+.app-shell .calendar-days { touch-action: pan-y; }

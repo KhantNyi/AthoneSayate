@@ -1,11 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonths, endOfWeek, format, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek, subMonths } from "date-fns";
 import { currency } from "@athonesayate/shared/metrics";
 import { buildCalendarGrid, type CalendarDaySummary } from "@/lib/calendar-utils";
 import { compactCurrency } from "@/lib/helpers";
 import type { UiTranslations } from "@/lib/i18n";
+import { haptic, slideMonth } from "./motion";
 
 export function MonthCalendar({
   month,
@@ -28,6 +30,12 @@ export function MonthCalendar({
   onDateSelect: (date: string) => void;
   onClearDate: () => void;
 }) {
+  const grid = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const goTo = (next: Date) => slideMonth(month, next, () => onMonthChange(next), grid.current);
+  const previousMonth = () => goTo(startOfMonth(subMonths(month, 1)));
+  const nextMonth = () => goTo(startOfMonth(addMonths(month, 1)));
   const days = buildCalendarGrid(month);
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const maxDailyExpense = days.reduce((max, day) => {
@@ -50,12 +58,12 @@ export function MonthCalendar({
           </p>
         </div>
         <div className="inline-flex flex-wrap items-center gap-1">
-          <button type="button" onClick={() => onMonthChange(startOfMonth(subMonths(month, 1)))} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Previous month">
+          <button type="button" onClick={previousMonth} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Previous month">
             <ChevronLeft size={17} className="absolute text-ink/55" />
             ‹
           </button>
           <span className="min-w-28 text-center text-sm font-semibold">{format(month, "MMM yyyy")}</span>
-          <button type="button" onClick={() => onMonthChange(startOfMonth(addMonths(month, 1)))} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Next month">
+          <button type="button" onClick={nextMonth} className="relative grid size-9 place-items-center rounded-lg border border-ink/10 text-transparent transition hover:bg-river/10 hover:text-transparent" aria-label="Next month">
             <ChevronRight size={17} className="absolute text-ink/55" />
             ›
           </button>
@@ -78,7 +86,41 @@ export function MonthCalendar({
           <span key={weekday} className="py-1">{weekday}</span>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      {/* Swipe sideways across the days to change month; vertical drags still scroll. */}
+      <div
+        ref={grid}
+        className="calendar-days grid grid-cols-7 gap-1"
+        onPointerDown={(event) => {
+          suppressClick.current = false;
+          if (event.pointerType === "mouse") return;
+          swipe.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+        }}
+        onPointerMove={(event) => {
+          const start = swipe.current;
+          if (!start || start.id !== event.pointerId) return;
+          if (Math.abs(event.clientX - start.x) > 10) start.moved = true;
+        }}
+        onPointerUp={(event) => {
+          const start = swipe.current;
+          swipe.current = null;
+          if (!start || start.id !== event.pointerId) return;
+          const dx = event.clientX - start.x;
+          const dy = event.clientY - start.y;
+          if (start.moved) suppressClick.current = true;
+          if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+          haptic("tap");
+          if (dx < 0) nextMonth();
+          else previousMonth();
+        }}
+        onPointerCancel={() => { swipe.current = null; }}
+        onClickCapture={(event) => {
+          // The lift at the end of a swipe is not a tap on a day.
+          if (!suppressClick.current) return;
+          suppressClick.current = false;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const summary = summaries[key];

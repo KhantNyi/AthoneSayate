@@ -2,13 +2,13 @@
 
 import { Award, BookOpen, CalendarCheck, CalendarDays, Check, ChevronRight, Coins, Crown, Flame, Lock, Plus, Receipt, Star, Trophy, X, Zap, type LucideIcon } from "lucide-react";
 import { parseISO } from "date-fns";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { currency } from "@athonesayate/shared/metrics";
 import { companionTranslations } from "@/lib/i18n";
 import { ACTIVITY_WEEKS, buildCompanionState, type AchievementId, type CompanionMood, type CompanionState, type Quest } from "@/lib/quests";
 import { useApp } from "./app-context";
 import { Modal } from "./modal";
-import { runViewTransition } from "./motion";
+import { prefersReducedMotion, runViewTransition, takeCoinOrigin } from "./motion";
 
 const POT = "#E8744F";
 const POT_DARK = "#C9573A";
@@ -523,6 +523,9 @@ function Confetti({ spread = 1 }: { spread?: number }) {
 type Milestone = { key: number } & ({ kind: "level"; level: number } | { kind: "achievement"; id: AchievementId });
 
 const BANNER_MS = 2400;
+const COIN_FLIGHT_MS = 640;
+/** Rendered diameter of the flying coin, before it shrinks into the slot. */
+const COIN_PX = 22;
 const MILESTONE_MS = 3800;
 
 /**
@@ -535,9 +538,17 @@ export function Celebration() {
   const state = useCompanion();
   const [visibleFor, setVisibleFor] = useState(0);
   const [milestone, setMilestone] = useState<Milestone | null>(null);
+  /** Where this save's coin takes off from (the save button), if it gets a flight. */
+  const [flight, setFlight] = useState<{ x: number; y: number } | null>(null);
+  const anchor = useRef<HTMLDivElement>(null);
+  const banner = useRef<HTMLDivElement>(null);
+  const slot = useRef<HTMLSpanElement>(null);
+  const coin = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (celebration === 0) return;
+    const origin = takeCoinOrigin();
+    setFlight(origin && !prefersReducedMotion() ? origin : null);
     setVisibleFor(celebration);
     const timeout = window.setTimeout(() => setVisibleFor(0), BANNER_MS);
     return () => window.clearTimeout(timeout);
@@ -569,6 +580,62 @@ export function Celebration() {
     return () => window.clearTimeout(timeout);
   }, [milestone]);
 
+  // The coin flies from the save button into Su Bu's slot. It lives in the top
+  // layer (a manual popover) so it stays above the sheet that is still closing.
+  useLayoutEffect(() => {
+    const from = flight;
+    const element = coin.current;
+    const wrapper = anchor.current;
+    const card = banner.current;
+    const mascot = slot.current;
+    if (!from || !element || !wrapper || !card || !mascot || visibleFor === 0) return;
+    // The banner is mid-entrance (scaled and lifted), so aim at its resting
+    // layout box: the untransformed wrapper plus Su Bu's offset within it.
+    const rest = wrapper.getBoundingClientRect();
+    const live = card.getBoundingClientRect();
+    const spot = mascot.getBoundingClientRect();
+    const scale = live.width / (card.offsetWidth || live.width) || 1;
+    const size = mascot.offsetWidth || 52;
+    const unit = size / 120;
+    // Su Bu's coin slot (viewBox 60, 22).
+    const to = {
+      x: rest.left + (spot.left - live.left) / scale + 60 * unit,
+      y: rest.top + (spot.top - live.top) / scale + 22 * unit
+    };
+    // Rise just above the slot, then drop in. The banner sits near the top of
+    // the screen, so the arc is capped to stay on screen.
+    const peak = Math.max(to.y - 44, 6);
+    const landed = (20.5 * unit) / COIN_PX;
+    try {
+      element.showPopover();
+    } catch {
+      return;
+    }
+    const across = element.animate(
+      [{ transform: `translateX(${from.x}px)` }, { transform: `translateX(${to.x}px)` }],
+      { duration: COIN_FLIGHT_MS, easing: "cubic-bezier(0.35, 0, 0.65, 1)", fill: "forwards" }
+    );
+    element.firstElementChild?.animate(
+      [
+        { transform: `translateY(${from.y}px) scale(1) rotate(0deg)`, opacity: 1, easing: "cubic-bezier(0.2, 0.75, 0.4, 1)" },
+        { transform: `translateY(${peak}px) scale(0.7) rotate(260deg)`, opacity: 1, offset: 0.66, easing: "cubic-bezier(0.55, 0, 0.85, 0.45)" },
+        { transform: `translateY(${to.y}px) scale(${landed}) rotate(320deg)`, opacity: 1, offset: 0.9 },
+        // Sinks into the slot as Su Bu gulps.
+        { transform: `translateY(${to.y + 5}px) scale(${landed * 0.8}) rotate(330deg)`, opacity: 0 }
+      ],
+      { duration: COIN_FLIGHT_MS, fill: "forwards" }
+    );
+    const land = () => {
+      try {
+        element.hidePopover();
+      } catch {
+        // Already gone with the banner.
+      }
+    };
+    across.finished.then(land, land);
+    return () => across.cancel();
+  }, [flight, visibleFor]);
+
   if (milestone) {
     const Icon = milestone.kind === "level" ? Star : ACHIEVEMENT_ICON[milestone.id];
     return (
@@ -597,19 +664,28 @@ export function Celebration() {
 
   return (
     <div key={visibleFor} className="celebration pointer-events-none fixed inset-x-0 z-[80] flex justify-center px-3" aria-hidden>
-      <div className="relative">
+      {/* With a flight, the flying coin replaces Su Bu's own falling one; his gulp
+          (which waits ~half a second) lines up with it sinking into the slot. */}
+      <div ref={anchor} className="relative" data-coin-flight={flight ? "" : undefined}>
         <Confetti />
-        <div className="celebration-banner flex items-center gap-3 py-2 pl-2 pr-5">
-          <Mascot mood="proud" size={52} reaction="coin" />
+        <div ref={banner} className="celebration-banner flex items-center gap-3 py-2 pl-2 pr-5">
+          <span ref={slot} className="inline-grid">
+            <Mascot mood="proud" size={52} reaction="coin" />
+          </span>
           <div>
             <p className="text-base font-semibold leading-tight text-ink">{c.celebrate}</p>
             <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-amber">
-              <Flame size={15} strokeWidth={2.8} />
+              <Flame size={15} strokeWidth={2.8} className="flame-flare" />
               <span className="tnum">{state.streak}</span> {c.streakDays}
             </p>
           </div>
         </div>
       </div>
+      {flight ? (
+        <div ref={coin} popover="manual" className="coin-flight">
+          <span className="coin-flight-y"><span className="coin-face" /></span>
+        </div>
+      ) : null}
     </div>
   );
 }

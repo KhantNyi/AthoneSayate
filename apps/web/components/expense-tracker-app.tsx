@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { Modal } from "./modal";
 import { createPopupMotion, GlassLight, GlassNav, useAnimatedPresence } from "./glass-motion";
 import { PwaExperience } from "./pwa-experience";
+import { slideMonth } from "./motion";
 import { ArrowLeft, CheckCircle2, CircleAlert, CloudOff, LogIn, LogOut, Plus, RefreshCw, Settings, X } from "lucide-react";
 import { currency } from "@athonesayate/shared/metrics";
 import { AppProvider } from "./app-context";
@@ -127,6 +128,10 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
       desktop.removeEventListener("change", resize);
     };
   }, [menuOpen, setMenuOpen]);
+
+  // Month-dependent dashboard content slides toward the chosen month; Su Bu's card holds still.
+  const slideDashboardMonth = (month: Date) =>
+    slideMonth(dashboardStatsMonth, month, () => changeDashboardMonth(month), document.getElementById("dashboard"));
 
   const inPlan = activeNavKey === "plan";
   const title = inPlan ? t.plan : t[tabs[activeTab].label];
@@ -329,7 +334,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
             </div>
             {activeTab === "dashboard" ? (
               <div className="hidden w-72 sm:block lg:w-80">
-                <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
+                <DashboardMonthControl month={dashboardStatsMonth} onChange={slideDashboardMonth} />
               </div>
             ) : null}
             <div className="flex shrink-0 items-center gap-2">
@@ -390,7 +395,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
 
           {activeTab === "dashboard" ? (
             <div className="mb-4 grid gap-3 sm:hidden">
-              <DashboardMonthControl month={dashboardStatsMonth} onChange={changeDashboardMonth} />
+              <DashboardMonthControl month={dashboardStatsMonth} onChange={slideDashboardMonth} />
               <div className="grid grid-cols-2 gap-2">
                 <ActivityStat label={t.safeToSpendDay} value={currency.format(dailyAllowance)} tone="river" />
                 <ActivityStat label={t.savingsRate} value={`${currentMonthTotals.savingsRate.toFixed(1)}%`} tone="moss" />

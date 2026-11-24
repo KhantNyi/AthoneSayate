@@ -16,9 +16,11 @@ export const prefersReducedMotion = () =>
  * Names a screen change for CSS. The kind lands on `<html data-vt>` while the
  * transition runs, so each kind styles its own `::view-transition-*` pseudos.
  */
-export type TransitionKind = "nav-forward" | "nav-back" | "subu-open" | "subu-close";
+export type TransitionKind = "nav-forward" | "nav-back" | "subu-open" | "subu-close" | "month-forward" | "month-back";
 
 let running: ViewTransition | null = null;
+/** Which transition last named each scope, so a skipped one can't strip a newer one's name. */
+const scopeOwner = new WeakMap<HTMLElement, ViewTransition>();
 
 /** The kind of transition being captured right now, if any. */
 export const activeTransition = () =>
@@ -27,8 +29,12 @@ export const activeTransition = () =>
 /**
  * Applies a React state change inside a same-document View Transition. The
  * update is flushed synchronously so the browser snapshots the finished DOM.
+ *
+ * `scope` names one element `month-scope` for the duration, so a month change
+ * slides only the content that depends on the month. It must be the same DOM
+ * node before and after the update.
  */
-export function runViewTransition(update: () => void, kind: TransitionKind): Promise<void> {
+export function runViewTransition(update: () => void, kind: TransitionKind, scope?: Element | null): Promise<void> {
   if (typeof document === "undefined" || !document.startViewTransition || prefersReducedMotion()) {
     update();
     return Promise.resolve();
@@ -37,9 +43,16 @@ export function runViewTransition(update: () => void, kind: TransitionKind): Pro
   running?.skipTransition();
   const root = document.documentElement;
   root.dataset.vt = kind;
+  const named = scope instanceof HTMLElement ? scope : null;
+  if (named) named.style.viewTransitionName = "month-scope";
   const transition = document.startViewTransition(() => flushSync(update));
   running = transition;
+  if (named) scopeOwner.set(named, transition);
   const clear = () => {
+    if (named && scopeOwner.get(named) === transition) {
+      named.style.viewTransitionName = "";
+      scopeOwner.delete(named);
+    }
     if (running !== transition) return;
     running = null;
     delete root.dataset.vt;
@@ -65,7 +78,7 @@ export function haptic(kind: keyof typeof PATTERNS = "tap") {
  * Plays a row's exit (slide aside, then fold its space away) before the
  * caller removes it from state, so the list closes the gap smoothly.
  */
-export function leaveThen(element: Element | null, remove: () => void) {
+export function leaveThen(element: Element | null, remove: () => void, restored?: () => void) {
   if (!(element instanceof HTMLElement) || prefersReducedMotion()) {
     remove();
     return;
@@ -98,6 +111,7 @@ export function leaveThen(element: Element | null, remove: () => void) {
       element.style.overflow = "";
       element.style.pointerEvents = "";
       delete element.dataset.leaving;
+      restored?.();
     }, 400);
   };
   animation.finished.then(finish, finish);
@@ -126,4 +140,29 @@ export function useFreshIds(ids: readonly string[]) {
     const at = seen.get(id) ?? 0;
     return at > 0 && now - at < FRESH_FOR_MS;
   };
+}
+
+/** A month change as a slide: later months come in from the end, earlier from the start. */
+export function slideMonth(from: Date, to: Date, update: () => void, scope?: Element | null) {
+  const step = to.getFullYear() * 12 + to.getMonth() - (from.getFullYear() * 12 + from.getMonth());
+  if (step === 0) {
+    update();
+    return;
+  }
+  void runViewTransition(update, step > 0 ? "month-forward" : "month-back", scope);
+}
+
+/* Where the coin for the next save celebration takes off from: the save
+   button's centre, captured at submit time because the sheet closes before
+   the celebration renders. Read once. */
+let coinOrigin: { x: number; y: number } | null = null;
+
+export function launchCoinFrom(origin: { x: number; y: number } | null) {
+  coinOrigin = origin;
+}
+
+export function takeCoinOrigin() {
+  const origin = coinOrigin;
+  coinOrigin = null;
+  return origin;
 }

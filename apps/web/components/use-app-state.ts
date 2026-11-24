@@ -80,7 +80,7 @@ import {
   type ValidationResult
 } from "@/lib/validation";
 import { navItems, planTabs, type NavKey, type TabKey } from "./nav";
-import { haptic, runViewTransition } from "./motion";
+import { haptic, launchCoinFrom, runViewTransition } from "./motion";
 import { applyReportDrilldown, createReportExpenseMatcher, NO_SUBCATEGORY, type ReportDrilldownTarget, type ReportFilterKey, type ReportFilters } from "@/lib/report-utils";
 
 type LastRecurringPayment = {
@@ -898,8 +898,10 @@ export function useAppState() {
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
     changeMonthlyReportMonth(month);
+    // Ready if the user switches to Compare, but a category link opens on the overview.
     setMonthlyCompareMonth(subMonths(month, 1));
-    setMonthlyReportMode("compare");
+    setMonthlyReportMode("overview");
+    setMonthlyReportSelectedDate("");
     setMonthlyReportCategoryId(categoryId);
     setMonthlyReportSubcategoryId("all");
     setMonthlyReportAccountId("all");
@@ -974,9 +976,14 @@ export function useAppState() {
 
   async function handleQuickAdd(event: FormEvent<HTMLFormElement>) {
     const savedType = type;
+    // Measured now: the sheet is gone by the time the celebration renders.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter ?? event.currentTarget.querySelector<HTMLElement>('[type="submit"]');
+    const box = submitter?.getBoundingClientRect();
+    const coinOrigin = box && box.width > 0 ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
     const saved = await handleSubmit(event);
 
     if (saved) {
+      launchCoinFrom(coinOrigin);
       setQuickAddOpen(false);
       haptic("success");
       setCelebration((count) => count + 1);
