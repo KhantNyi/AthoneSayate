@@ -187,6 +187,7 @@ export function MonthField({
 export function AnimatedNumber({ value, format: formatValue }: { value: number; format: (value: number) => string }) {
   const [display, setDisplay] = useState(value);
   const previousValue = useRef(value);
+  const figure = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const from = previousValue.current;
@@ -196,6 +197,12 @@ export function AnimatedNumber({ value, format: formatValue }: { value: number; 
       setDisplay(value);
       return;
     }
+
+    // A small lift draws the eye to the figure that just changed.
+    figure.current?.animate(
+      [{ transform: "none" }, { transform: "translateY(-2px) scale(1.05)", offset: 0.35 }, { transform: "none" }],
+      { duration: 620, easing: "cubic-bezier(0.34, 1.36, 0.44, 1)" }
+    );
 
     const duration = 750;
     const start = performance.now();
@@ -214,7 +221,7 @@ export function AnimatedNumber({ value, format: formatValue }: { value: number; 
     return () => cancelAnimationFrame(frame);
   }, [value]);
 
-  return <span className="tnum">{formatValue(display)}</span>;
+  return <span ref={figure} className="tnum inline-block origin-left">{formatValue(display)}</span>;
 }
 
 export function MetricCard({

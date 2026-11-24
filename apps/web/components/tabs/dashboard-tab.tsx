@@ -104,7 +104,7 @@ export default function DashboardTab() {
                   <XAxis dataKey="day" tickLine={false} axisLine={false} />
                   <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => compactCurrency(Number(value))} width={46} />
                   <Tooltip formatter={(value) => preciseCurrency.format(Number(value))} {...chart.tooltip} />
-                  <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#liquidSpentGradient)" strokeWidth={3} />
+                  <Area type="monotone" dataKey="spent" stroke={chart.expense} fill="url(#liquidSpentGradient)" strokeWidth={3} animationDuration={700} animationEasing="ease-out" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -131,7 +131,8 @@ export default function DashboardTab() {
             <div className="relative h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie innerRadius={48} outerRadius={74} paddingAngle={3} data={categoryMixRows} dataKey="spent" nameKey="name" stroke="rgb(var(--surface) / 0.72)" strokeWidth={2}>
+                  <Pie innerRadius={48} outerRadius={74} paddingAngle={3} data={categoryMixRows} dataKey="spent" nameKey="name" stroke="rgb(var(--surface) / 0.72)" strokeWidth={2}
+                    animationBegin={60} animationDuration={700} animationEasing="ease-out">
                     {categoryMixRows.map((entry) => (
                       <Cell key={entry.id} fill={entry.color} />
                     ))}

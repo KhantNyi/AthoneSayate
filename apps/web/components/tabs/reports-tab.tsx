@@ -50,7 +50,8 @@ function ReportDayDot({ cx, cy, payload, color, onSelect }: {
   );
 }
 
-function ReportTrendBar({ x, y, width, height, payload, color, selectedMonthKey, onSelect }: {
+function ReportTrendBar({ x, y, width, height, payload, index = 0, color, selectedMonthKey, onSelect }: {
+  index?: number;
   x?: number | string;
   y?: number | string;
   width?: number | string;
@@ -72,8 +73,11 @@ function ReportTrendBar({ x, y, width, height, payload, color, selectedMonthKey,
       <desc id={`report-month-${payload.monthKey}-amount`}>{preciseCurrency.format(payload.expenses)} expenses</desc>
       <rect x={Number(x)} y={Number(y) - (barHeight === 0 ? 12 : 0)} width={Number(width)} height={Math.max(barHeight, 12)} rx={6}
         fill="transparent" className="group-focus-visible:stroke-river group-focus-visible:stroke-2" />
+      {/* Recharts' own animation stays off so these targets are clickable at once;
+          the visible bar grows in with CSS instead. */}
       <rect x={Number(x)} y={Number(y)} width={Number(width)} height={barHeight} rx={6} fill={color}
-        className={`group-hover:opacity-75 ${selected ? "fill-river" : ""}`} />
+        style={{ animationDelay: `${index * 45}ms` }}
+        className={`report-bar-fill group-hover:opacity-75 ${selected ? "fill-river" : ""}`} />
     </g>
   );
 }
@@ -428,7 +432,8 @@ export default function ReportsTab() {
             <h3 className="min-w-0 text-sm font-semibold uppercase text-ink/55">Daily expenses</h3>
             <span className="shrink-0 text-xs font-semibold text-ink/45">{format(monthlyReportMonth, "MMM yyyy")}</span>
           </div>
-          <div className="h-56 min-w-0 sm:h-64">
+          {/* Keyed by month so each month's line draws in afresh. */}
+          <div key={format(monthlyReportMonth, "yyyy-MM")} className="chart-reveal h-56 min-w-0 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyReportDaily} margin={{ bottom: 4, left: -18, right: 12, top: 16 }}
                 onClick={(state) => {

@@ -8,6 +8,7 @@ import { companionTranslations } from "@/lib/i18n";
 import { ACTIVITY_WEEKS, buildCompanionState, type AchievementId, type CompanionMood, type CompanionState, type Quest } from "@/lib/quests";
 import { useApp } from "./app-context";
 import { Modal } from "./modal";
+import { runViewTransition } from "./motion";
 
 const POT = "#E8744F";
 const POT_DARK = "#C9573A";
@@ -238,13 +239,13 @@ export function CompanionCard() {
         : undefined;
 
   return (
-    <section className="liquid-panel companion-card min-w-0 p-4 sm:p-5" aria-label={c.name}>
+    <section className="liquid-panel companion-card companion-hero min-w-0 p-4 sm:p-5" aria-label={c.name} data-profile-open={profileOpen || undefined}>
       <div className="grid gap-5 lg:grid-cols-2 lg:gap-8">
         <div className="grid content-start gap-4">
           <button
             type="button"
             onPointerDown={() => play("hop")}
-            onClick={() => setProfileOpen(true)}
+            onClick={() => runViewTransition(() => setProfileOpen(true), "subu-open")}
             aria-label={c.openProfile}
             aria-haspopup="dialog"
             className="companion-open group -m-2 flex items-center gap-3 rounded-2xl p-2 text-left"
@@ -319,7 +320,13 @@ export function CompanionCard() {
           ) : null}
         </div>
       </div>
-      <CompanionProfile open={profileOpen} onClose={() => setProfileOpen(false)} state={state} />
+      <CompanionProfile
+        open={profileOpen}
+        // A swipe has already carried the sheet most of the way down; let it finish
+        // falling rather than morphing back into the card.
+        onClose={(reason) => (reason === "drag" ? setProfileOpen(false) : runViewTransition(() => setProfileOpen(false), "subu-close"))}
+        state={state}
+      />
     </section>
   );
 }
@@ -336,7 +343,7 @@ const ACHIEVEMENT_ICON: Record<AchievementId, LucideIcon> = {
 };
 
 /** Expanded view of the companion: lifetime stats, recent activity and achievements. */
-function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: () => void; state: CompanionState }) {
+function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: (reason?: "drag") => void; state: CompanionState }) {
   const { language } = useApp();
   const c = companionTranslations[language];
   const locale = language === "my" ? "my" : "en";
@@ -368,7 +375,7 @@ function CompanionProfile({ open, onClose, state }: { open: boolean; onClose: ()
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onClose()}
             aria-label={c.close}
             className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-lg text-ink/60 transition hover:bg-ink/5 hover:text-ink"
           >

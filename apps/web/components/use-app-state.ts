@@ -80,6 +80,7 @@ import {
   type ValidationResult
 } from "@/lib/validation";
 import { navItems, planTabs, type NavKey, type TabKey } from "./nav";
+import { haptic, runViewTransition } from "./motion";
 import { applyReportDrilldown, createReportExpenseMatcher, NO_SUBCATEGORY, type ReportDrilldownTarget, type ReportFilterKey, type ReportFilters } from "@/lib/report-utils";
 
 type LastRecurringPayment = {
@@ -94,6 +95,10 @@ type ActionAlert = { message: string; fix?: RequirementFix };
 
 /** Forms whose field-level requirements are shown only after a failed attempt. */
 type FormKey = "transaction" | "recurring" | "goal" | "category" | "subcategory" | "budget";
+
+/** Where each screen sits in the navigation, for picking a slide direction. */
+const SCREEN_ORDER: TabKey[] = ["dashboard", "transactions", ...planTabs, "reports", "settings"];
+const screenOrder = (tab: TabKey) => SCREEN_ORDER.indexOf(tab);
 
 export function useAppState() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -852,18 +857,35 @@ export function useAppState() {
     setSelectedDashboardDate("");
   }
 
+  /**
+   * Screens slide the way the navigation reads: toward later destinations
+   * forward, toward earlier ones back. Staying put needs no transition.
+   */
+  function moveTo(tab: TabKey, direction: "forward" | "back" | "auto", apply: () => void) {
+    const update = () => {
+      apply();
+      // Closing transient surfaces here keeps them in the outgoing snapshot,
+      // so they leave with the old screen instead of vanishing first.
+      setMenuOpen(false);
+      setQuickAddOpen(false);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    };
+    if (tab === activeTab) {
+      update();
+      return Promise.resolve();
+    }
+    const resolved = direction === "auto" ? (screenOrder(tab) > screenOrder(activeTab) ? "forward" : "back") : direction;
+    return runViewTransition(update, resolved === "forward" ? "nav-forward" : "nav-back");
+  }
+
   /** Follow a link from inside a screen. The current screen stays reachable through `goBack`. */
   function chooseTab(tab: TabKey) {
-    setTabHistory((history) => history[history.length - 1] === tab ? history : [...history, tab]);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    return moveTo(tab, "forward", () => setTabHistory((history) => history[history.length - 1] === tab ? history : [...history, tab]));
   }
 
   /** Jump straight to a screen from the navigation. Nothing to go back to afterwards. */
   function navigateTab(tab: TabKey) {
-    setTabHistory([tab]);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    moveTo(tab, "auto", () => setTabHistory([tab]));
   }
 
   function openNav(key: NavKey) {
@@ -871,9 +893,7 @@ export function useAppState() {
   }
 
   function goBack() {
-    setTabHistory((history) => history.length > 1 ? history.slice(0, -1) : history);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    moveTo(backTab ?? activeTab, "back", () => setTabHistory((history) => history.length > 1 ? history.slice(0, -1) : history));
   }
 
   function openMonthlyCategoryReport(categoryId: string, month: Date) {
@@ -885,8 +905,9 @@ export function useAppState() {
     setMonthlyReportAccountId("all");
     setMonthlyReportRecurringFilter("all");
     setMonthlyReportQuery("");
-    chooseTab("reports");
-    window.requestAnimationFrame(() => document.getElementById("reports")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    void chooseTab("reports").then(() => {
+      window.requestAnimationFrame(() => document.getElementById("reports")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    });
   }
 
   function clearMonthlyReportFilters() {
@@ -957,6 +978,7 @@ export function useAppState() {
 
     if (saved) {
       setQuickAddOpen(false);
+      haptic("success");
       setCelebration((count) => count + 1);
       setDataNotice(savedType === "income" ? "Income recorded." : "Expense recorded.");
     }

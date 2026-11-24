@@ -201,8 +201,8 @@ export function QuickAddSheet() {
           show={showIssues}
           className="mb-3"
           onFix={(tab) => {
+            // Navigation closes the sheet as part of the screen change.
             chooseTab(tab);
-            setQuickAddOpen(false);
           }}
         />
 

@@ -295,6 +295,10 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
         ) : null}
 
         <section className="app-content min-w-0 px-3 pb-10 pt-3 sm:px-5 sm:pt-5 lg:px-7 xl:px-8">
+          {/* Fades in as the large title scrolls away, where scroll-driven animations exist. */}
+          <div className="scroll-titlebar" aria-hidden="true">
+            <span className="truncate">{title}</span>
+          </div>
           {demoMode ? (
             <div className="mb-3 flex items-center gap-2 rounded-xl border border-river/25 bg-river/5 py-1.5 pl-3 pr-1.5 text-xs">
               <span className="shrink-0 font-semibold text-river">Demo</span>
@@ -321,7 +325,7 @@ export function ExpenseTrackerApp({ session, onRequestAuth }: ExpenseTrackerAppP
                   {t[tabs[backTab].label]}
                 </button>
               ) : null}
-              <h1 className="truncate font-display text-2xl text-ink sm:text-3xl">{title}</h1>
+              <h1 className="page-title truncate font-display text-2xl text-ink sm:text-3xl">{title}</h1>
             </div>
             {activeTab === "dashboard" ? (
               <div className="hidden w-72 sm:block lg:w-80">

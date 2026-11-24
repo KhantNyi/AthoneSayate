@@ -520,3 +520,133 @@
 .app-shell .liquid-control button[aria-pressed="true"].bg-river { background: rgb(var(--ink)); color: rgb(var(--paper)); }
 /* A smaller add button covers less of the list on phones. */
 @media (max-width: 1279px) { .app-shell .liquid-fab { width: 3.5rem; height: 3.5rem; } }
+
+/* ---------- Gestures, screen transitions and list motion ---------- */
+
+/* Bottom sheets can be swiped down to close; the grabber says so. */
+@media (max-width: 639px) {
+  .app-shell .glass-dialog:not(.glass-dialog-centered) > .liquid-sheet { position: relative; }
+  .app-shell .glass-dialog:not(.glass-dialog-centered) > .liquid-sheet::after {
+    content: "";
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    width: 36px;
+    height: 5px;
+    margin-left: -18px;
+    border-radius: 999px;
+    background: rgb(var(--ink) / 0.2);
+    pointer-events: none;
+  }
+}
+
+/* Screen changes (View Transitions). The page slides the way the navigation
+   reads while fixed chrome holds still. Names exist only during a screen
+   change so other transitions keep the chrome under their own backdrops. */
+html[data-vt^="nav"] .app-shell .ios-tabbar { view-transition-name: app-dock; }
+html[data-vt^="nav"] .app-shell > aside { view-transition-name: app-sidebar; }
+html[data-vt^="nav"] .app-shell .liquid-fab { view-transition-name: app-fab; }
+::view-transition-group(app-dock),
+::view-transition-group(app-sidebar),
+::view-transition-group(app-fab),
+::view-transition-new(app-dock),
+::view-transition-new(app-sidebar),
+::view-transition-new(app-fab) { animation: none; }
+::view-transition-old(app-dock),
+::view-transition-old(app-sidebar),
+::view-transition-old(app-fab) { display: none; }
+
+html[data-vt^="nav"]::view-transition-old(root),
+html[data-vt^="nav"]::view-transition-new(root) { mix-blend-mode: normal; }
+html[data-vt="nav-forward"]::view-transition-old(root) { animation: vt-out-start 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+html[data-vt="nav-forward"]::view-transition-new(root) { animation: vt-in-end 360ms var(--ease-glide) both; }
+html[data-vt="nav-back"]::view-transition-old(root) { animation: vt-out-end 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+html[data-vt="nav-back"]::view-transition-new(root) { animation: vt-in-start 360ms var(--ease-glide) both; }
+@keyframes vt-out-start { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes vt-out-end { to { opacity: 0; transform: translateX(28px); } }
+@keyframes vt-in-end { from { opacity: 0; transform: translateX(28px); } }
+@keyframes vt-in-start { from { opacity: 0; transform: translateX(-28px); } }
+/* Where screen changes animate natively, the fallback fade would double up. */
+@supports (view-transition-name: none) {
+  .app-shell .animate-tab-in { animation: none; }
+}
+
+/* Su Bu's card grows into his profile sheet and shrinks back into place. */
+html[data-vt^="subu"] .companion-hero:not([data-profile-open]) { view-transition-name: subu-card; }
+html[data-vt^="subu"] .companion-profile { view-transition-name: subu-card; }
+html[data-vt^="subu"] .companion-hero:not([data-profile-open]) .companion-open .mascot { view-transition-name: subu-mascot; }
+html[data-vt^="subu"] .companion-profile .mascot-poke .mascot { view-transition-name: subu-mascot; }
+html[data-vt^="subu"]::view-transition-group(root) { animation-duration: 420ms; }
+::view-transition-group(subu-card) {
+  overflow: clip;
+  border-radius: 1.25rem;
+  animation-duration: 440ms;
+  animation-timing-function: var(--ease-ios);
+}
+::view-transition-group(subu-mascot) { animation-duration: 440ms; animation-timing-function: var(--ease-ios); }
+::view-transition-old(subu-card) { animation-duration: 220ms; }
+
+/* Lists: new rows arrive with a glint, removed rows fold away (motion.ts). */
+.app-shell article.tx-row[data-fresh] { animation: row-in 460ms var(--ease-glide) both, row-glint 1400ms ease-out; }
+.app-shell tr.tx-row[data-fresh] > td { animation: row-flash 1400ms ease-out; }
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes row-glint { from { box-shadow: 0 0 0 1px rgb(var(--sun) / 0.7), 0 0 18px rgb(var(--sun) / 0.25); } }
+@keyframes row-flash { from { background-color: rgb(var(--sun) / 0.16); } }
+
+/* Charts draw in. Report charts keep Recharts' animation off so their click
+   targets are live immediately; only the visible marks move. */
+.app-shell .report-bar-fill {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bar-grow 560ms var(--ease-glide) backwards;
+  transition: fill 200ms ease, opacity 140ms ease;
+}
+@keyframes bar-grow { from { transform: scaleY(0); } }
+.app-shell .chart-reveal .recharts-area { animation: chart-wipe 760ms var(--ease-glide) backwards; }
+@keyframes chart-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* Large title gives way to a compact bar as the page scrolls (where
+   scroll-driven animations exist; elsewhere the title just scrolls). */
+.scroll-titlebar { display: none; }
+@supports (animation-timeline: scroll()) {
+  @media (max-width: 1279px) {
+    .app-shell .scroll-titlebar {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 25;
+      display: flex;
+      justify-content: center;
+      padding: calc(env(safe-area-inset-top) + 0.75rem) 4rem 0.75rem;
+      border-bottom: 1px solid var(--hairline);
+      background: rgb(var(--paper) / 0.94);
+      color: rgb(var(--ink));
+      font-size: 0.95rem;
+      font-weight: 600;
+      pointer-events: none;
+      /* Hidden at rest: a page too short to scroll (or locked under a sheet)
+         has an inactive scroll timeline, which would otherwise show the bar. */
+      opacity: 0;
+      animation: titlebar-in linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 56px 104px;
+    }
+    .app-shell .page-title {
+      transform-origin: 0 50%;
+      animation: title-recede linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 72px;
+    }
+  }
+}
+@keyframes titlebar-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes title-recede { to { opacity: 0.25; transform: scale(0.94); } }
+
+/* Keep the scrollbar's space when a sheet locks scrolling, so the page behind
+   doesn't shift sideways (and a transition's before/after frames line up). */
+html { scrollbar-gutter: stable; }

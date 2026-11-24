@@ -12,6 +12,7 @@ import { MascotEmpty } from "../companion";
 import { useApp } from "../app-context";
 import { CategoryIcon } from "../category-icon";
 import { MonthCalendar } from "../month-calendar";
+import { haptic, leaveThen, useFreshIds } from "../motion";
 import { FormAlert, INVALID_FIELD, Panel } from "../ui";
 
 function TransactionEditor({ transaction }: { transaction: Transaction }) {
@@ -105,8 +106,14 @@ export default function TransactionsTab() {
     setVisibleMonth,
     selectedTransactionDate,
     setSelectedTransactionDate,
-    transactionCalendarDays
+    transactionCalendarDays,
+    transactions
   } = useApp();
+  const isFresh = useFreshIds(transactions.map((tx) => tx.id));
+  const remove = (trigger: HTMLElement, id: string) => {
+    haptic("tap");
+    leaveThen(trigger.closest("[data-row]"), () => void deleteTransaction(id));
+  };
 
   const [visibleCount, setVisibleCount] = useState(50);
   useEffect(() => {
@@ -213,7 +220,7 @@ export default function TransactionsTab() {
           const account = accounts.find((item) => item.id === tx.accountId);
           const isEditing = editingTransactionId === tx.id;
           return (
-            <article key={tx.id} className={`rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
+            <article key={tx.id} data-row data-fresh={isFresh(tx.id) || undefined} className={`tx-row rounded-lg border p-3 ${isEditing ? "border-river/25 bg-river/5" : "border-ink/10 bg-white"}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{categoryLabel(category?.name)}{subcategory ? ` / ${subcategory.name}` : ""}</p>
@@ -237,7 +244,7 @@ export default function TransactionsTab() {
                   <button aria-label="Edit transaction" onClick={() => startEditingTransaction(tx)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
                     <Pencil size={16} />
                   </button>
-                  <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                  <button aria-label="Delete transaction" onClick={(event) => remove(event.currentTarget, tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
                     <Trash2 size={16} />
                   </button>
                 </span>
@@ -268,7 +275,7 @@ export default function TransactionsTab() {
               const isEditing = editingTransactionId === tx.id;
               return (
                 <Fragment key={tx.id}>
-                  <tr className={`group ${isEditing ? "bg-river/5" : ""}`}>
+                  <tr data-row data-fresh={isFresh(tx.id) || undefined} className={`tx-row group ${isEditing ? "bg-river/5" : ""}`}>
                     <td className="border-b border-ink/5 py-3 text-ink/65">{format(parseISO(tx.occurredOn), "MMM d")}</td>
                     <td className="border-b border-ink/5 py-3">
                       <span className="inline-flex items-center gap-2">
@@ -287,7 +294,7 @@ export default function TransactionsTab() {
                         <button aria-label="Edit transaction" onClick={() => startEditingTransaction(tx)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-river/10 hover:text-river">
                           <Pencil size={16} />
                         </button>
-                        <button aria-label="Delete transaction" onClick={() => deleteTransaction(tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
+                        <button aria-label="Delete transaction" onClick={(event) => remove(event.currentTarget, tx.id)} className="inline-grid size-9 place-items-center rounded-lg text-ink/45 transition hover:bg-coral/10 hover:text-coral">
                           <Trash2 size={16} />
                         </button>
                       </span>
